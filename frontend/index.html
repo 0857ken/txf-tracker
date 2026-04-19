@@ -1,0 +1,787 @@
+<!DOCTYPE html>
+<html lang="zh-TW">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>台指期追蹤系統</title>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/Chart.js/4.4.1/chart.umd.min.js"></script>
+<style>
+  @import url('https://fonts.googleapis.com/css2?family=DM+Mono:wght@400;500&family=Noto+Sans+TC:wght@300;400;500;700&display=swap');
+
+  :root {
+    --bg:       #0b0f14;
+    --bg2:      #131920;
+    --bg3:      #1a2230;
+    --border:   #1e2d3d;
+    --text:     #c8d8e8;
+    --muted:    #4a6070;
+    --green:    #00e5a0;
+    --red:      #ff4757;
+    --yellow:   #ffd32a;
+    --blue:     #3d9eff;
+    --orange:   #ff8c42;
+    --mono:     'DM Mono', monospace;
+    --sans:     'Noto Sans TC', sans-serif;
+  }
+
+  * { box-sizing: border-box; margin: 0; padding: 0; }
+
+  body {
+    background: var(--bg);
+    color: var(--text);
+    font-family: var(--sans);
+    font-size: 14px;
+    min-height: 100vh;
+  }
+
+  /* ── HEADER ── */
+  header {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    padding: 14px 28px;
+    border-bottom: 1px solid var(--border);
+    background: var(--bg2);
+    position: sticky; top: 0; z-index: 100;
+  }
+  .logo {
+    font-family: var(--mono);
+    font-size: 13px;
+    color: var(--blue);
+    letter-spacing: 2px;
+    text-transform: uppercase;
+  }
+  .header-status {
+    display: flex; align-items: center; gap: 8px;
+    font-size: 12px; color: var(--muted);
+    font-family: var(--mono);
+  }
+  .pulse {
+    width: 7px; height: 7px; border-radius: 50%;
+    background: var(--green);
+    animation: pulse 2s infinite;
+  }
+  @keyframes pulse { 0%,100%{opacity:1} 50%{opacity:.3} }
+
+  /* ── LAYOUT ── */
+  main { max-width: 1400px; margin: 0 auto; padding: 24px 28px; }
+
+  /* ── ALERT BANNER ── */
+  .alert-banner {
+    display: none;
+    background: linear-gradient(90deg, rgba(255,71,87,.15), rgba(255,71,87,.05));
+    border: 1px solid rgba(255,71,87,.4);
+    border-left: 3px solid var(--red);
+    border-radius: 6px;
+    padding: 12px 18px;
+    margin-bottom: 20px;
+    font-size: 13px;
+    color: var(--red);
+    font-family: var(--mono);
+  }
+  .alert-banner.show { display: flex; align-items: center; gap: 10px; }
+
+  /* ── GRID TOP ── */
+  .top-grid {
+    display: grid;
+    grid-template-columns: 1fr 1fr 1fr 1.2fr;
+    gap: 14px;
+    margin-bottom: 20px;
+  }
+
+  /* ── CARD ── */
+  .card {
+    background: var(--bg2);
+    border: 1px solid var(--border);
+    border-radius: 10px;
+    padding: 18px 20px;
+  }
+  .card-label {
+    font-size: 11px;
+    color: var(--muted);
+    letter-spacing: 1.5px;
+    text-transform: uppercase;
+    font-family: var(--mono);
+    margin-bottom: 8px;
+  }
+  .card-value {
+    font-family: var(--mono);
+    font-size: 28px;
+    font-weight: 500;
+    line-height: 1;
+  }
+  .card-sub {
+    font-size: 12px;
+    color: var(--muted);
+    margin-top: 6px;
+    font-family: var(--mono);
+  }
+  .green  { color: var(--green); }
+  .red    { color: var(--red); }
+  .yellow { color: var(--yellow); }
+  .blue   { color: var(--blue); }
+  .orange { color: var(--orange); }
+
+  /* ── MA STATE CARD ── */
+  .state-card {
+    background: var(--bg2);
+    border: 1px solid var(--border);
+    border-radius: 10px;
+    padding: 18px 20px;
+    display: flex;
+    flex-direction: column;
+    justify-content: space-between;
+  }
+  .state-badge {
+    display: inline-flex;
+    align-items: center;
+    gap: 8px;
+    padding: 4px 10px;
+    border-radius: 4px;
+    font-family: var(--mono);
+    font-size: 11px;
+    font-weight: 500;
+    letter-spacing: 1px;
+    margin-bottom: 8px;
+  }
+  .state-badge.green  { background: rgba(0,229,160,.12); color: var(--green); border: 1px solid rgba(0,229,160,.3); }
+  .state-badge.red    { background: rgba(255,71,87,.12);  color: var(--red);   border: 1px solid rgba(255,71,87,.3); }
+  .state-badge.yellow { background: rgba(255,211,42,.12); color: var(--yellow);border: 1px solid rgba(255,211,42,.3); }
+  .state-badge.lime   { background: rgba(100,255,100,.12);color: #7fff7f;      border: 1px solid rgba(100,255,100,.3); }
+
+  .state-mode {
+    font-size: 18px;
+    font-weight: 700;
+    margin: 6px 0 4px;
+  }
+  .state-leverage {
+    font-family: var(--mono);
+    font-size: 12px;
+    color: var(--muted);
+  }
+
+  /* ── MIDDLE GRID ── */
+  .mid-grid {
+    display: grid;
+    grid-template-columns: 1.8fr 1fr;
+    gap: 14px;
+    margin-bottom: 20px;
+  }
+
+  /* ── CHART ── */
+  .chart-wrap {
+    position: relative;
+    height: 240px;
+  }
+
+  /* ── MA TABLE ── */
+  .ma-table { width: 100%; border-collapse: collapse; margin-top: 8px; }
+  .ma-table th, .ma-table td {
+    padding: 8px 12px;
+    text-align: left;
+    font-family: var(--mono);
+    font-size: 12px;
+    border-bottom: 1px solid var(--border);
+  }
+  .ma-table th { color: var(--muted); font-weight: 400; }
+  .ma-table td.num { text-align: right; }
+  .ma-table tr:last-child td { border-bottom: none; }
+
+  /* ── BOTTOM GRID ── */
+  .bot-grid {
+    display: grid;
+    grid-template-columns: 1.4fr 1fr;
+    gap: 14px;
+    margin-bottom: 20px;
+  }
+
+  /* ── POSITIONS TABLE ── */
+  .pos-table { width: 100%; border-collapse: collapse; }
+  .pos-table th, .pos-table td {
+    padding: 10px 12px;
+    text-align: left;
+    font-size: 12px;
+    border-bottom: 1px solid var(--border);
+  }
+  .pos-table th {
+    color: var(--muted);
+    font-family: var(--mono);
+    font-weight: 400;
+    font-size: 11px;
+    letter-spacing: 1px;
+    text-transform: uppercase;
+  }
+  .pos-table td.mono { font-family: var(--mono); }
+  .pos-table tr:last-child td { border-bottom: none; }
+  .pos-table tr:hover td { background: rgba(255,255,255,.02); }
+
+  /* ── CHECKLIST ── */
+  .checklist-item {
+    display: flex;
+    align-items: center;
+    gap: 10px;
+    padding: 12px 0;
+    border-bottom: 1px solid var(--border);
+    font-size: 13px;
+  }
+  .checklist-item:last-child { border-bottom: none; }
+  .check-icon {
+    width: 20px; height: 20px;
+    border-radius: 50%;
+    display: flex; align-items: center; justify-content: center;
+    font-size: 10px;
+    flex-shrink: 0;
+  }
+  .check-ok   { background: rgba(0,229,160,.15); color: var(--green); }
+  .check-warn { background: rgba(255,211,42,.15); color: var(--yellow); }
+  .check-bad  { background: rgba(255,71,87,.15);  color: var(--red); }
+
+  /* ── ADONG BOX ── */
+  .adong-box {
+    background: var(--bg3);
+    border: 1px solid var(--border);
+    border-radius: 8px;
+    padding: 14px 16px;
+    margin-top: 12px;
+    font-family: var(--mono);
+    font-size: 13px;
+  }
+  .adong-label { font-size: 10px; color: var(--muted); letter-spacing: 1.5px; margin-bottom: 6px; }
+
+  /* ── FORMS ── */
+  .form-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 10px; }
+  .form-group { display: flex; flex-direction: column; gap: 5px; }
+  .form-group label { font-size: 11px; color: var(--muted); font-family: var(--mono); letter-spacing: 1px; }
+  .form-group input, .form-group select {
+    background: var(--bg3);
+    border: 1px solid var(--border);
+    border-radius: 6px;
+    padding: 8px 10px;
+    color: var(--text);
+    font-family: var(--mono);
+    font-size: 13px;
+    outline: none;
+    transition: border-color .2s;
+  }
+  .form-group input:focus, .form-group select:focus { border-color: var(--blue); }
+  .btn {
+    background: var(--blue);
+    color: #fff;
+    border: none;
+    border-radius: 6px;
+    padding: 9px 18px;
+    font-family: var(--mono);
+    font-size: 12px;
+    cursor: pointer;
+    transition: opacity .2s;
+    width: 100%;
+    margin-top: 12px;
+  }
+  .btn:hover { opacity: .85; }
+  .btn-danger { background: var(--red); }
+  .btn-sm { padding: 4px 10px; font-size: 11px; width: auto; margin: 0; border-radius: 4px; }
+
+  /* ── PRICE OVERRIDE ── */
+  .override-strip {
+    display: flex; align-items: center; gap: 8px;
+    padding: 10px 14px;
+    background: var(--bg3);
+    border: 1px solid var(--border);
+    border-radius: 8px;
+    margin-top: 12px;
+  }
+  .override-strip input {
+    flex: 1;
+    background: transparent;
+    border: none;
+    color: var(--text);
+    font-family: var(--mono);
+    font-size: 14px;
+    outline: none;
+  }
+  .override-strip label { font-size: 11px; color: var(--muted); font-family: var(--mono); white-space: nowrap; }
+
+  /* ── SECTION TITLE ── */
+  .section-title {
+    font-size: 11px;
+    color: var(--muted);
+    letter-spacing: 2px;
+    text-transform: uppercase;
+    font-family: var(--mono);
+    margin-bottom: 14px;
+  }
+
+  /* ── FLOOR INDICATOR ── */
+  .floor-bar {
+    background: var(--bg3);
+    border-radius: 6px;
+    height: 8px;
+    margin-top: 6px;
+    overflow: hidden;
+    position: relative;
+  }
+  .floor-fill {
+    height: 100%;
+    background: linear-gradient(90deg, var(--red), var(--orange), var(--green));
+    transition: width .6s ease;
+  }
+
+  /* ── REFRESH BTN ── */
+  .refresh-btn {
+    background: transparent;
+    border: 1px solid var(--border);
+    border-radius: 6px;
+    color: var(--muted);
+    padding: 6px 12px;
+    font-family: var(--mono);
+    font-size: 11px;
+    cursor: pointer;
+    display: flex; align-items: center; gap: 6px;
+    transition: all .2s;
+  }
+  .refresh-btn:hover { border-color: var(--blue); color: var(--blue); }
+  .spinning { animation: spin .8s linear infinite; }
+  @keyframes spin { to { transform: rotate(360deg); } }
+
+  .source-tag {
+    font-family: var(--mono);
+    font-size: 10px;
+    color: var(--muted);
+    padding: 2px 6px;
+    border: 1px solid var(--border);
+    border-radius: 4px;
+  }
+</style>
+</head>
+<body>
+
+<header>
+  <div class="logo">TXF TRACKER · 微台期追蹤</div>
+  <div class="header-status">
+    <div class="pulse" id="pulse-dot"></div>
+    <span id="last-update">連線中...</span>
+    <button class="refresh-btn" onclick="loadDashboard()">
+      <span id="refresh-icon">↻</span> 刷新
+    </button>
+  </div>
+</header>
+
+<main>
+
+  <!-- 硬底線警報 -->
+  <div class="alert-banner" id="floor-alert">
+    ⚠ 警告：現價距離撤退牆 (35,800) 不足 300 點！請評估是否執行絕對撤退計劃
+  </div>
+  <div class="alert-banner" id="nuke-alert" style="border-left-color:#ff0000">
+    🚨 緊急：現價已觸及或跌破 35,800 硬底線！依計劃全數清倉！
+  </div>
+
+  <!-- TOP CARDS -->
+  <div class="top-grid">
+    <!-- 現價 -->
+    <div class="card">
+      <div class="card-label">台加指數 現價</div>
+      <div class="card-value" id="cur-price">—</div>
+      <div class="card-sub" id="cur-source">—</div>
+      <!-- 人工校對 -->
+      <div class="override-strip">
+        <label>手動校對</label>
+        <input type="number" id="override-input" placeholder="輸入今日收盤價">
+        <button class="btn btn-sm" onclick="submitOverride()">覆蓋</button>
+      </div>
+    </div>
+
+    <!-- 損益 -->
+    <div class="card">
+      <div class="card-label">未實現損益</div>
+      <div class="card-value" id="total-pnl">—</div>
+      <div class="card-sub" id="pnl-detail">—</div>
+      <!-- 距底線 -->
+      <div style="margin-top:10px">
+        <div style="display:flex;justify-content:space-between;font-size:11px;color:var(--muted);font-family:var(--mono);margin-bottom:4px">
+          <span>距撤退牆</span><span id="floor-dist">—</span>
+        </div>
+        <div class="floor-bar"><div class="floor-fill" id="floor-fill" style="width:50%"></div></div>
+        <div style="font-size:10px;color:var(--muted);font-family:var(--mono);margin-top:3px">硬底線 35,800</div>
+      </div>
+    </div>
+
+    <!-- 部位 -->
+    <div class="card">
+      <div class="card-label">目前持倉口數</div>
+      <div class="card-value blue" id="total-lots">—</div>
+      <div class="card-sub" id="lots-sub">—</div>
+    </div>
+
+    <!-- 均線狀態 -->
+    <div class="state-card" id="state-card">
+      <div>
+        <div class="card-label">均線狀態</div>
+        <div class="state-badge" id="state-badge">—</div>
+        <div class="state-mode" id="state-mode">—</div>
+        <div class="state-leverage" id="state-leverage">建議槓桿：— 倍</div>
+      </div>
+      <div class="adong-box">
+        <div class="adong-label">阿東式訊號</div>
+        <div id="adong-signal">載入中...</div>
+      </div>
+    </div>
+  </div>
+
+  <!-- MIDDLE: 走勢圖 + 均線明細 -->
+  <div class="mid-grid">
+    <div class="card">
+      <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:14px">
+        <div class="section-title" style="margin:0">近 30 日收盤走勢</div>
+        <span class="source-tag" id="chart-source">Yahoo Finance</span>
+      </div>
+      <div class="chart-wrap">
+        <canvas id="priceChart"></canvas>
+      </div>
+    </div>
+
+    <div class="card">
+      <div class="section-title">均線明細 ＆ 校對</div>
+      <table class="ma-table">
+        <thead>
+          <tr><th>均線</th><th>自動抓取</th><th>狀態</th></tr>
+        </thead>
+        <tbody id="ma-tbody">
+          <tr><td>5日</td><td class="num">—</td><td>—</td></tr>
+          <tr><td>20日 (月線)</td><td class="num">—</td><td>—</td></tr>
+          <tr><td>60日 (季線)</td><td class="num">—</td><td>—</td></tr>
+        </tbody>
+      </table>
+      <div style="margin-top: 14px; padding-top: 14px; border-top: 1px solid var(--border);">
+        <div class="section-title">每日紀律清單</div>
+        <div id="checklist-wrap">
+          <div style="color:var(--muted);font-size:12px">載入中...</div>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <!-- BOTTOM: 部位明細 + 新增部位 -->
+  <div class="bot-grid">
+    <div class="card">
+      <div class="section-title">部位明細</div>
+      <table class="pos-table">
+        <thead>
+          <tr>
+            <th>日期</th><th>種類</th><th>口數</th>
+            <th>進場點</th><th>損益(元)</th><th>備注</th><th></th>
+          </tr>
+        </thead>
+        <tbody id="pos-tbody">
+          <tr><td colspan="7" style="color:var(--muted);text-align:center;padding:20px">載入中...</td></tr>
+        </tbody>
+      </table>
+    </div>
+
+    <div class="card">
+      <div class="section-title">新增交易紀錄</div>
+      <div class="form-grid">
+        <div class="form-group">
+          <label>日期</label>
+          <input type="date" id="f-date" value="">
+        </div>
+        <div class="form-group">
+          <label>種類</label>
+          <select id="f-type">
+            <option value="MXF">微台 (MXF)</option>
+            <option value="TXF">小台 (TXF)</option>
+          </select>
+        </div>
+        <div class="form-group">
+          <label>口數</label>
+          <input type="number" id="f-lots" value="1" min="1">
+        </div>
+        <div class="form-group">
+          <label>進場點位</label>
+          <input type="number" id="f-price" placeholder="37281">
+        </div>
+      </div>
+      <div class="form-group" style="margin-top:10px">
+        <label>備注</label>
+        <input type="text" id="f-note" placeholder="例：阿東式加碼 / 多頭排列加碼">
+      </div>
+      <button class="btn" onclick="addPosition()">＋ 新增部位</button>
+
+      <!-- 每日日誌 -->
+      <div style="margin-top:20px;padding-top:16px;border-top:1px solid var(--border)">
+        <div class="section-title">儲存今日操作日誌</div>
+        <div class="form-group">
+          <label>今日備注</label>
+          <input type="text" id="log-note" placeholder="例：收盤跌破5日線，已減碼至2口">
+        </div>
+        <button class="btn" style="background:var(--bg3);border:1px solid var(--border);color:var(--text);margin-top:8px" onclick="saveLog()">儲存日誌</button>
+      </div>
+    </div>
+  </div>
+
+</main>
+
+<script>
+// ── CONFIG ───────────────────────────────────────────────────────────────────
+const API = 'http://localhost:8000';
+let chart = null;
+let dashData = null;
+
+// ── INIT ─────────────────────────────────────────────────────────────────────
+document.addEventListener('DOMContentLoaded', () => {
+  document.getElementById('f-date').value = new Date().toISOString().split('T')[0];
+  loadDashboard();
+  setInterval(loadDashboard, 60000); // 每分鐘自動刷新
+});
+
+// ── LOAD DASHBOARD ───────────────────────────────────────────────────────────
+async function loadDashboard() {
+  const icon = document.getElementById('refresh-icon');
+  icon.classList.add('spinning');
+
+  try {
+    const res = await fetch(`${API}/api/dashboard`);
+    if (!res.ok) throw new Error('API 錯誤');
+    dashData = await res.json();
+    renderDashboard(dashData);
+    document.getElementById('last-update').textContent =
+      '更新：' + new Date().toLocaleTimeString('zh-TW');
+  } catch(e) {
+    document.getElementById('last-update').textContent = '⚠ 無法連線後端';
+    renderOffline();
+  } finally {
+    icon.classList.remove('spinning');
+  }
+}
+
+// ── RENDER ───────────────────────────────────────────────────────────────────
+function renderDashboard(d) {
+  const { market, ma_state, positions, total_pnl_twd, hard_floor, adong_signal, checklist } = d;
+
+  // 現價
+  const price = market.current_price;
+  const overrideTag = market.overridden ? ' ✎' : '';
+  document.getElementById('cur-price').textContent = price.toLocaleString() + overrideTag;
+  document.getElementById('cur-source').textContent = market.data_source + ' · ' + market.fetched_at.substring(11,16);
+
+  // 損益
+  const pnlEl = document.getElementById('total-pnl');
+  const pnlSign = total_pnl_twd >= 0 ? '+' : '';
+  pnlEl.textContent = pnlSign + total_pnl_twd.toLocaleString() + ' 元';
+  pnlEl.className = 'card-value ' + (total_pnl_twd >= 0 ? 'green' : 'red');
+  document.getElementById('pnl-detail').textContent =
+    positions.length > 0 ? `${positions[0].point_diff} 點差 × ${positions[0].lots}口 × 50元` : '—';
+
+  // 距底線
+  const distToFloor = price - hard_floor;
+  const maxSafe = 5000; // 5000點視為安全
+  const barPct = Math.max(0, Math.min(100, (distToFloor / maxSafe) * 100));
+  document.getElementById('floor-dist').textContent = distToFloor.toLocaleString() + ' 點';
+  document.getElementById('floor-fill').style.width = barPct + '%';
+
+  // 警報
+  document.getElementById('floor-alert').className = 'alert-banner' + (checklist.near_floor && !checklist.at_floor ? ' show' : '');
+  document.getElementById('nuke-alert').className = 'alert-banner' + (checklist.at_floor ? ' show' : '');
+
+  // 口數
+  const openPos = positions.filter(p => p.status === 'open');
+  const totalLots = openPos.reduce((s, p) => s + p.lots, 0);
+  document.getElementById('total-lots').textContent = totalLots + ' 口';
+  document.getElementById('lots-sub').textContent = '微台 × ' + totalLots + ' 口（各 50元/點）';
+
+  // 均線狀態
+  const s = ma_state;
+  const badge = document.getElementById('state-badge');
+  badge.textContent = s.state;
+  badge.className = 'state-badge ' + s.color;
+  document.getElementById('state-mode').textContent = s.mode;
+  document.getElementById('state-mode').className = 'state-mode ' + s.color;
+  document.getElementById('state-leverage').textContent =
+    `建議槓桿：${s.leverage_min}–${s.leverage_max}倍 ／ ${s.lots_suggest}`;
+
+  // 阿東式訊號
+  const ad = adong_signal;
+  const adEl = document.getElementById('adong-signal');
+  const adColor = ad.candle === 'green' ? 'var(--green)' : 'var(--red)';
+  adEl.innerHTML = `<span style="color:${adColor};font-weight:500">${ad.candle === 'green' ? '● 紅K' : '● 黑K'}</span>　${ad.action}`;
+
+  // 均線明細
+  const maRows = [
+    { label: '5日線', val: market.ma5 },
+    { label: '20日 (月線)', val: market.ma20 },
+    { label: '60日 (季線)', val: market.ma60 },
+  ];
+  const tbody = document.getElementById('ma-tbody');
+  tbody.innerHTML = maRows.map(r => {
+    const above = price > r.val;
+    const status = above
+      ? `<span style="color:var(--green)">▲ 現價在上</span>`
+      : `<span style="color:var(--red)">▼ 現價在下</span>`;
+    return `<tr>
+      <td>${r.label}</td>
+      <td class="num mono">${r.val.toLocaleString()}</td>
+      <td>${status}</td>
+    </tr>`;
+  }).join('');
+
+  // 每日紀律清單
+  const clItems = [
+    {
+      ok: !checklist.below_ma5,
+      ok_text: '現價在5日線之上 — 續抱',
+      bad_text: '收盤跌破5日線 → 立刻縮減至0.6倍（2口）'
+    },
+    {
+      ok: !checklist.near_floor,
+      ok_text: `距撤退牆 ${distToFloor} 點 — 安全`,
+      bad_text: `距撤退牆僅剩 ${distToFloor} 點 → 警戒！評估全清`
+    },
+    {
+      ok: true,
+      ok_text: '均線排列：' + s.state + ' — 依 ' + s.mode + ' 操作',
+      neutral: true
+    }
+  ];
+  document.getElementById('checklist-wrap').innerHTML = clItems.map(item => {
+    const cls = item.neutral ? 'check-ok' : (item.ok ? 'check-ok' : 'check-bad');
+    const icon = item.ok ? '✓' : '!';
+    const text = item.ok ? item.ok_text : item.bad_text;
+    return `<div class="checklist-item">
+      <div class="check-icon ${cls}">${icon}</div>
+      <div>${text}</div>
+    </div>`;
+  }).join('');
+
+  // 部位明細
+  const posTbody = document.getElementById('pos-tbody');
+  if (positions.length === 0) {
+    posTbody.innerHTML = '<tr><td colspan="7" style="color:var(--muted);text-align:center;padding:20px">目前無持倉</td></tr>';
+  } else {
+    posTbody.innerHTML = positions.map(p => {
+      const pnlColor = p.pnl_twd >= 0 ? 'green' : 'red';
+      const pnlSign  = p.pnl_twd >= 0 ? '+' : '';
+      return `<tr>
+        <td class="mono">${p.date}</td>
+        <td><span class="source-tag">${p.type}</span></td>
+        <td class="mono">${p.lots}</td>
+        <td class="mono">${p.entry_price.toLocaleString()}</td>
+        <td class="mono ${pnlColor}">${pnlSign}${p.pnl_twd.toLocaleString()}</td>
+        <td style="color:var(--muted);font-size:11px">${p.note || '—'}</td>
+        <td><button class="btn btn-danger btn-sm" onclick="closePos(${p.id})">平倉</button></td>
+      </tr>`;
+    }).join('');
+  }
+
+  // 走勢圖
+  renderChart(market.chart_data, market.ma5, market.ma20);
+}
+
+// ── CHART ────────────────────────────────────────────────────────────────────
+function renderChart(chartData, ma5, ma20) {
+  const labels = chartData.map(d => d.date.substring(5));
+  const closes = chartData.map(d => d.close);
+  const ma5Line  = closes.map(() => ma5);
+  const ma20Line = closes.map(() => ma20);
+  const floorLine = closes.map(() => 35800);
+
+  const ctx = document.getElementById('priceChart').getContext('2d');
+  if (chart) chart.destroy();
+
+  chart = new Chart(ctx, {
+    type: 'line',
+    data: {
+      labels,
+      datasets: [
+        {
+          label: '收盤', data: closes,
+          borderColor: '#3d9eff', borderWidth: 1.5,
+          pointRadius: 2, pointBackgroundColor: '#3d9eff',
+          tension: 0.3, fill: false
+        },
+        {
+          label: '5日均', data: ma5Line,
+          borderColor: '#00e5a0', borderWidth: 1, borderDash: [4,3],
+          pointRadius: 0, tension: 0
+        },
+        {
+          label: '20日均', data: ma20Line,
+          borderColor: '#ffd32a', borderWidth: 1, borderDash: [4,3],
+          pointRadius: 0, tension: 0
+        },
+        {
+          label: '硬底線 35800', data: floorLine,
+          borderColor: 'rgba(255,71,87,.6)', borderWidth: 1, borderDash: [2,4],
+          pointRadius: 0, tension: 0
+        }
+      ]
+    },
+    options: {
+      responsive: true, maintainAspectRatio: false,
+      plugins: {
+        legend: { labels: { color: '#4a6070', font: { family: 'DM Mono', size: 10 }, boxWidth: 20 } },
+        tooltip: { mode: 'index', intersect: false }
+      },
+      scales: {
+        x: { ticks: { color: '#4a6070', font: { family: 'DM Mono', size: 10 } }, grid: { color: '#1e2d3d' } },
+        y: { ticks: { color: '#4a6070', font: { family: 'DM Mono', size: 10 } }, grid: { color: '#1e2d3d' } }
+      }
+    }
+  });
+}
+
+// ── OFFLINE (無後端) ─────────────────────────────────────────────────────────
+function renderOffline() {
+  document.getElementById('cur-price').textContent = '— 離線';
+  document.getElementById('cur-price').className = 'card-value red';
+  document.getElementById('last-update').textContent = '⚠ 後端未啟動';
+}
+
+// ── ACTIONS ──────────────────────────────────────────────────────────────────
+async function addPosition() {
+  const body = {
+    date: document.getElementById('f-date').value,
+    type: document.getElementById('f-type').value,
+    lots: parseInt(document.getElementById('f-lots').value),
+    entry_price: parseFloat(document.getElementById('f-price').value),
+    note: document.getElementById('f-note').value
+  };
+  if (!body.entry_price || !body.lots) return alert('請輸入口數和進場點位');
+  await fetch(`${API}/api/positions`, { method:'POST', headers:{'Content-Type':'application/json'}, body: JSON.stringify(body) });
+  loadDashboard();
+}
+
+async function closePos(id) {
+  if (!confirm('確定要平倉這筆部位？')) return;
+  await fetch(`${API}/api/positions/${id}`, { method:'DELETE' });
+  loadDashboard();
+}
+
+async function submitOverride() {
+  const price = parseFloat(document.getElementById('override-input').value);
+  if (!price) return alert('請輸入校對價格');
+  const today = new Date().toISOString().split('T')[0];
+  await fetch(`${API}/api/price-override`, {
+    method:'POST', headers:{'Content-Type':'application/json'},
+    body: JSON.stringify({ date: today, price })
+  });
+  loadDashboard();
+}
+
+async function saveLog() {
+  if (!dashData) return;
+  const { market, positions } = dashData;
+  const totalLots = positions.reduce((s, p) => s + p.lots, 0);
+  const body = {
+    date: new Date().toISOString().split('T')[0],
+    close_price: market.current_price,
+    ma5: market.ma5, ma20: market.ma20, ma60: market.ma60,
+    lots: totalLots,
+    note: document.getElementById('log-note').value
+  };
+  await fetch(`${API}/api/daily-log`, { method:'POST', headers:{'Content-Type':'application/json'}, body: JSON.stringify(body) });
+  alert('日誌已儲存');
+  document.getElementById('log-note').value = '';
+}
+</script>
+</body>
+</html>
