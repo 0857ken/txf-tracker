@@ -96,9 +96,11 @@ def dashboard():
         price = ov["price"]
         market["current_price"] = price
         market["overridden"] = True
-    ma_state = classify(price,market["ma5"],market["ma20"],market["ma60"])
-    rows = conn.execute("SELECT * FROM positions WHERE status='open'").fetchall()
+        rows = conn.execute("SELECT * FROM positions WHERE status='open'").fetchall()
     conn.close()
+    avg_cost = sum(dict(r)["entry_price"]*dict(r)["lots"] for r in rows) / max(sum(dict(r)["lots"] for r in rows), 1) if rows else HARD_FLOOR+100
+    dynamic_floor = round(avg_cost - 100, 0)
+    ma_state = classify(price,market["ma5"],market["ma20"],market["ma60"])
     positions = []
     total_pnl = 0
     for p in rows:
