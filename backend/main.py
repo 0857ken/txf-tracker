@@ -108,8 +108,12 @@ def dashboard():
         positions.append({**p, **info})
     chart = market["chart_data"]
     candle = "green" if len(chart)>=2 and chart[-1]["close"]>=chart[-2]["close"] else "red"
+    dist = price - HARD_FLOOR
+    if dist <= 300 and dist > 0:
+        send_telegram(f"⚠️ 台指期警戒！\n現價 {price}，距硬底線 {HARD_FLOOR} 僅剩 {dist} 點！")
+    if price <= HARD_FLOOR:
+        send_telegram(f"🚨 緊急！台指期跌破硬底線！\n現價 {price} ≤ {HARD_FLOOR}，依計劃全數清倉！")
     return {"market":market,"ma_state":ma_state,"positions":positions,"total_pnl_twd":round(total_pnl,0),"hard_floor":HARD_FLOOR,"adong_signal":{"candle":candle,"action":"今日收紅 → 留倉" if candle=="green" else "今日收黑 → 當日加碼單出清"},"checklist":{"below_ma5":price<market["ma5"],"near_floor":price<(HARD_FLOOR+300),"at_floor":price<=HARD_FLOOR}}
-
 @app.get("/api/positions")
 def get_positions():
     conn = get_db()
