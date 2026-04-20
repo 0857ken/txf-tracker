@@ -12,7 +12,7 @@ app = FastAPI(title="台指期追蹤系統", version="1.0.0")
 app.add_middleware(CORSMiddleware, allow_origins=["*"], allow_methods=["*"], allow_headers=["*"])
 
 DB_PATH = os.environ.get("DB_PATH", "txf.db")
-HARD_FLOOR = 35800
+HARD_FLOOR = 35800  # 備用，實際由持倉計算
 MICRO_POINT_VALUE =10
 
 def get_db():
