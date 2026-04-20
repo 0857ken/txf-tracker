@@ -66,7 +66,7 @@ def fetch_price():
         ma60 = sum(closes[-60:])/min(60,len(closes))
         chart = [{"date":d,"close":round(c,0)} for d,c in zip(dates[-30:],closes[-30:])]
         return {"current_price":round(price,0),"ma5":round(ma5,0),"ma20":round(ma20,0),"ma60":round(ma60,0),"data_source":"Yahoo Finance (台指期 TW=F) " 
-","fetched_at":datetime.now().isoformat(),"chart_data":chart,"overridden":False}
+,"fetched_at":datetime.now().isoformat(),"chart_data":chart,"overridden":False}
     except Exception as e:
         raise HTTPException(status_code=503, detail=f"報價抓取失敗：{str(e)}")
 
