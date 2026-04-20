@@ -13,7 +13,7 @@ app.add_middleware(CORSMiddleware, allow_origins=["*"], allow_methods=["*"], all
 
 DB_PATH = os.environ.get("DB_PATH", "txf.db")
 HARD_FLOOR = 35800
-MICRO_POINT_VALUE = 10
+MICRO_POINT_VALUE =10
 
 def get_db():
     conn = sqlite3.connect(DB_PATH)
