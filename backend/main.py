@@ -48,7 +48,7 @@ init_db()
 
 def fetch_price():
     try:
-        url = "https://query2.finance.yahoo.com/v8/finance/chart/TW%3DF?interval=1d&range=90d"
+        url = "https://query2.finance.yahoo.com/v8/finance/chart/%5ETWII?interval=1d&range=90d"
 
         headers = {"User-Agent":"Mozilla/5.0","Accept":"application/json"}
         req = urllib.request.Request(url, headers=headers)
