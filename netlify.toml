@@ -1,3 +1,7 @@
 [build]
   publish = "frontend"
-  command = ""
+  command = "echo 'frontend only'"
+
+[build.environment]
+  NETLIFY_USE_YARN = "false"
+  PYTHON_VERSION = "3.11"
