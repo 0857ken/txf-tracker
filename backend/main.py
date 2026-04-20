@@ -13,7 +13,7 @@ app.add_middleware(CORSMiddleware, allow_origins=["*"], allow_methods=["*"], all
 
 DB_PATH = os.environ.get("DB_PATH", "txf.db")
 HARD_FLOOR = 35800
-MICRO_POINT_VALUE = 50
+MICRO_POINT_VALUE = 10
 
 def get_db():
     conn = sqlite3.connect(DB_PATH)
@@ -48,7 +48,8 @@ init_db()
 
 def fetch_price():
     try:
-        url = "https://query2.finance.yahoo.com/v8/finance/chart/%5ETWII?interval=1d&range=90d"
+        url = "https://query2.finance.yahoo.com/v8/finance/chart/TW%3DF?interval=1d&range=90d
+
         headers = {"User-Agent":"Mozilla/5.0","Accept":"application/json"}
         req = urllib.request.Request(url, headers=headers)
         with urllib.request.urlopen(req, timeout=15) as r:
@@ -64,7 +65,8 @@ def fetch_price():
         ma20 = sum(closes[-20:])/min(20,len(closes))
         ma60 = sum(closes[-60:])/min(60,len(closes))
         chart = [{"date":d,"close":round(c,0)} for d,c in zip(dates[-30:],closes[-30:])]
-        return {"current_price":round(price,0),"ma5":round(ma5,0),"ma20":round(ma20,0),"ma60":round(ma60,0),"data_source":"Yahoo Finance (^TWII)","fetched_at":datetime.now().isoformat(),"chart_data":chart,"overridden":False}
+        return {"current_price":round(price,0),"ma5":round(ma5,0),"ma20":round(ma20,0),"ma60":round(ma60,0),"data_source":"Yahoo Finance (台指期 TW=F)
+","fetched_at":datetime.now().isoformat(),"chart_data":chart,"overridden":False}
     except Exception as e:
         raise HTTPException(status_code=503, detail=f"報價抓取失敗：{str(e)}")
 
