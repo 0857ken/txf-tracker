@@ -166,3 +166,123 @@ def get_logs():
     rows = [dict(r) for r in conn.execute("SELECT * FROM daily_logs ORDER BY date DESC").fetchall()]
     conn.close()
     return rows
+
+# ── 股票追蹤 ──────────────────────────────────────────────────────────────────
+TELEGRAM_TOKEN = os.environ.get("TELEGRAM_TOKEN", "")
+TELEGRAM_CHAT_ID = os.environ.get("TELEGRAM_CHAT_ID", "")
+
+def send_telegram(msg: str):
+    if not TELEGRAM_TOKEN or not TELEGRAM_CHAT_ID:
+        return
+    try:
+        url = f"https://api.telegram.org/bot{TELEGRAM_TOKEN}/sendMessage"
+        data = json.dumps({"chat_id": TELEGRAM_CHAT_ID, "text": msg, "parse_mode": "HTML"}).encode()
+        req = urllib.request.Request(url, data=data, headers={"Content-Type": "application/json"})
+        urllib.request.urlopen(req, timeout=10)
+    except:
+        pass
+
+def init_stock_db():
+    conn = get_db()
+    conn.executescript("""
+        CREATE TABLE IF NOT EXISTS stock_positions (
+            id INTEGER PRIMARY KEY AUTOINCREMENT,
+            symbol TEXT, name TEXT, shares INTEGER,
+            cost_price REAL, alert_high REAL, alert_low REAL,
+            status TEXT DEFAULT 'active'
+        );
+        CREATE TABLE IF NOT EXISTS alert_log (
+            id INTEGER PRIMARY KEY AUTOINCREMENT,
+            symbol TEXT, alert_type TEXT, price REAL,
+            triggered_at TEXT
+        );
+    """)
+    conn.commit()
+    conn.close()
+
+init_stock_db()
+
+def fetch_stock_price(symbol: str):
+    try:
+        tw_symbol = symbol + ".TW" if not symbol.endswith(".TW") else symbol
+        url = f"https://query2.finance.yahoo.com/v8/finance/chart/{tw_symbol}?interval=1d&range=5d"
+        headers = {"User-Agent": "Mozilla/5.0", "Accept": "application/json"}
+        req = urllib.request.Request(url, headers=headers)
+        with urllib.request.urlopen(req, timeout=10) as r:
+            data = json.loads(r.read())
+        result = data["chart"]["result"][0]
+        closes = [c for c in result["indicators"]["quote"][0]["close"] if c is not None]
+        meta = result["meta"]
+        price = meta.get("regularMarketPrice") or closes[-1]
+        name = meta.get("longName") or meta.get("shortName") or symbol
+        return {"price": round(price, 2), "name": name, "symbol": symbol}
+    except:
+        return {"price": None, "name": symbol, "symbol": symbol}
+
+@app.get("/api/stocks")
+def get_stocks():
+    conn = get_db()
+    rows = [dict(r) for r in conn.execute("SELECT * FROM stock_positions WHERE status='active'").fetchall()]
+    conn.close()
+    results = []
+    for s in rows:
+        info = fetch_stock_price(s["symbol"])
+        price = info["price"]
+        pnl = None
+        pnl_pct = None
+        if price and s["cost_price"]:
+            pnl = round((price - s["cost_price"]) * s["shares"], 0)
+            pnl_pct = round((price - s["cost_price"]) / s["cost_price"] * 100, 2)
+        # 觸發提醒
+        if price:
+            conn2 = get_db()
+            if s["alert_high"] and price >= s["alert_high"]:
+                msg = f"🚀 <b>{s['symbol']}</b> 突破提醒！\n現價 {price} ≥ 提醒高點 {s['alert_high']}"
+                send_telegram(msg)
+                conn2.execute("INSERT INTO alert_log (symbol,alert_type,price,triggered_at) VALUES (?,?,?,?)",
+                    (s["symbol"], "high", price, datetime.now().isoformat()))
+            if s["alert_low"] and price <= s["alert_low"]:
+                msg = f"⚠️ <b>{s['symbol']}</b> 跌破提醒！\n現價 {price} ≤ 提醒低點 {s['alert_low']}"
+                send_telegram(msg)
+                conn2.execute("INSERT INTO alert_log (symbol,alert_type,price,triggered_at) VALUES (?,?,?,?)",
+                    (s["symbol"], "low", price, datetime.now().isoformat()))
+            conn2.commit()
+            conn2.close()
+        results.append({**s, "current_price": price, "name": info["name"], "pnl_twd": pnl, "pnl_pct": pnl_pct})
+    return results
+
+class StockCreate(BaseModel):
+    symbol: str
+    name: Optional[str] = ""
+    shares: int
+    cost_price: float
+    alert_high: Optional[float] = None
+    alert_low: Optional[float] = None
+
+@app.post("/api/stocks")
+def add_stock(s: StockCreate):
+    conn = get_db()
+    cur = conn.execute(
+        "INSERT INTO stock_positions (symbol,name,shares,cost_price,alert_high,alert_low,status) VALUES (?,?,?,?,?,?,'active')",
+        (s.symbol.upper(), s.name, s.shares, s.cost_price, s.alert_high, s.alert_low))
+    conn.commit()
+    row = dict(conn.execute("SELECT * FROM stock_positions WHERE id=?", (cur.lastrowid,)).fetchone())
+    conn.close()
+    return row
+
+@app.delete("/api/stocks/{stock_id}")
+def delete_stock(stock_id: int):
+    conn = get_db()
+    conn.execute("UPDATE stock_positions SET status='deleted' WHERE id=?", (stock_id,))
+    conn.commit()
+    conn.close()
+    return {"message": "已刪除"}
+
+@app.put("/api/stocks/{stock_id}/alert")
+def update_alert(stock_id: int, data: dict):
+    conn = get_db()
+    conn.execute("UPDATE stock_positions SET alert_high=?, alert_low=? WHERE id=?",
+        (data.get("alert_high"), data.get("alert_low"), stock_id))
+    conn.commit()
+    conn.close()
+    return {"message": "提醒已更新"}
