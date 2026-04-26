@@ -3,286 +3,164 @@
 <head>
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
-<title>資產總覽</title>
-<script src="https://cdnjs.cloudflare.com/ajax/libs/Chart.js/4.4.0/chart.umd.min.js"></script>
+<title>股票資產追蹤</title>
 <style>
   :root {
     --bg: #0d1b2a; --bg2: #112236; --bg3: #0a1628;
     --text: #c8d8e8; --muted: #4a6070; --border: #1e3048;
     --green: #00e5a0; --red: #ff4757; --blue: #3d9eff;
-    --yellow: #ffd32a; --orange: #ff9f43;
+    --yellow: #ffd32a;
     --sans: 'DM Sans', sans-serif; --mono: 'DM Mono', monospace;
   }
   * { box-sizing: border-box; margin: 0; padding: 0; }
-  body { background: var(--bg); color: var(--text); font-family: var(--sans); font-size: 14px; min-height: 100vh; }
-  header { display: flex; align-items: center; justify-content: space-between; padding: 14px 28px; border-bottom: 1px solid var(--border); background: var(--bg2); position: sticky; top: 0; z-index: 100; }
-  .logo { font-family: var(--mono); font-size: 13px; color: var(--blue); letter-spacing: 2px; text-transform: uppercase; }
+  body { background: var(--bg); color: var(--text); font-family: var(--sans); font-size: 14px; }
+  header { display: flex; justify-content: space-between; align-items: center; padding: 14px 28px; border-bottom: 1px solid var(--border); background: var(--bg2); }
+  .logo { font-family: var(--mono); font-size: 13px; color: var(--blue); letter-spacing: 2px; }
   .nav { display: flex; gap: 16px; }
-  .nav a { font-family: var(--mono); font-size: 12px; color: var(--muted); text-decoration: none; padding: 4px 10px; border-radius: 4px; border: 1px solid transparent; }
-  .nav a.active { color: var(--blue); border-color: var(--blue); }
-  .nav a:hover { color: var(--text); }
+  .nav a { font-family: var(--mono); font-size: 12px; color: var(--muted); text-decoration: none; }
+  .nav a.active { color: var(--blue); border-bottom: 1px solid var(--blue); }
   main { max-width: 1400px; margin: 0 auto; padding: 24px 28px; }
-  .section-title { font-size: 11px; color: var(--muted); letter-spacing: 2px; text-transform: uppercase; font-family: var(--mono); margin-bottom: 14px; }
-  .card { background: var(--bg2); border: 1px solid var(--border); border-radius: 10px; padding: 18px 20px; }
-  .top-grid { display: grid; grid-template-columns: repeat(4, 1fr); gap: 14px; margin-bottom: 20px; }
-  .card-label { font-size: 11px; color: var(--muted); letter-spacing: 1.5px; text-transform: uppercase; font-family: var(--mono); margin-bottom: 8px; }
-  .card-value { font-family: var(--mono); font-size: 26px; font-weight: 500; line-height: 1; }
-  .card-sub { font-size: 12px; color: var(--muted); margin-top: 6px; font-family: var(--mono); }
-  .green { color: var(--green); } .red { color: var(--red); } .blue { color: var(--blue); } .yellow { color: var(--yellow); }
-  .mid-grid { display: grid; grid-template-columns: 1.6fr 1fr; gap: 14px; margin-bottom: 20px; }
-  .stock-table { width: 100%; border-collapse: collapse; }
-  .stock-table th, .stock-table td { padding: 10px 12px; text-align: left; font-size: 12px; border-bottom: 1px solid var(--border); }
-  .stock-table th { color: var(--muted); font-family: var(--mono); font-weight: 400; font-size: 11px; letter-spacing: 1px; text-transform: uppercase; }
-  .stock-table td.mono { font-family: var(--mono); }
-  .stock-table tr:last-child td { border-bottom: none; }
-  .stock-table tr:hover td { background: rgba(255,255,255,.02); }
-  .badge { font-family: var(--mono); font-size: 10px; padding: 2px 6px; border-radius: 4px; border: 1px solid var(--border); }
-  .form-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 10px; }
-  .form-group { display: flex; flex-direction: column; gap: 5px; }
-  .form-group label { font-size: 11px; color: var(--muted); font-family: var(--mono); letter-spacing: 1px; }
-  .form-group input { background: var(--bg3); border: 1px solid var(--border); border-radius: 6px; padding: 8px 10px; color: var(--text); font-family: var(--mono); font-size: 13px; outline: none; transition: border-color .2s; }
-  .form-group input:focus { border-color: var(--blue); }
-  .btn { background: var(--blue); color: #fff; border: none; border-radius: 6px; padding: 9px 18px; font-family: var(--mono); font-size: 12px; cursor: pointer; transition: opacity .2s; width: 100%; margin-top: 12px; }
-  .btn:hover { opacity: .85; }
-  .btn-danger { background: var(--red); }
-  .btn-sm { padding: 4px 10px; font-size: 11px; width: auto; margin: 0; border-radius: 4px; }
-  .alert-strip { display: flex; gap: 6px; align-items: center; margin-top: 6px; }
-  .alert-strip input { flex: 1; background: var(--bg3); border: 1px solid var(--border); border-radius: 4px; padding: 4px 8px; color: var(--text); font-family: var(--mono); font-size: 11px; outline: none; }
-  .alert-strip label { font-size: 10px; color: var(--muted); font-family: var(--mono); white-space: nowrap; }
-  .chart-wrap { height: 220px; position: relative; }
-  .refresh-btn { background: transparent; border: 1px solid var(--border); border-radius: 6px; color: var(--muted); padding: 6px 12px; font-family: var(--mono); font-size: 11px; cursor: pointer; display: flex; align-items: center; gap: 6px; transition: all .2s; }
-  .refresh-btn:hover { border-color: var(--blue); color: var(--blue); }
-  .spinning { animation: spin .8s linear infinite; }
-  @keyframes spin { to { transform: rotate(360deg); } }
-  .pulse { width: 7px; height: 7px; border-radius: 50%; background: var(--green); animation: pulse 2s infinite; }
-  @keyframes pulse { 0%,100%{opacity:1} 50%{opacity:.3} }
-  .tg-badge { background: rgba(61,158,255,.1); border: 1px solid rgba(61,158,255,.3); color: var(--blue); font-family: var(--mono); font-size: 10px; padding: 2px 8px; border-radius: 4px; }
+  .card { background: var(--bg2); border: 1px solid var(--border); border-radius: 10px; padding: 18px; margin-bottom: 20px; }
+  .grid-2 { display: grid; grid-template-columns: 1fr 1fr; gap: 14px; margin-bottom: 20px; }
+  .label { font-size: 11px; color: var(--muted); letter-spacing: 1px; text-transform: uppercase; margin-bottom: 8px; }
+  .value { font-family: var(--mono); font-size: 24px; font-weight: 500; }
+  .sub { font-size: 12px; color: var(--muted); margin-top: 6px; }
+  .green { color: var(--green); } .red { color: var(--red); } .blue { color: var(--blue); }
+  table { width: 100%; border-collapse: collapse; }
+  th, td { padding: 10px; text-align: left; font-size: 12px; border-bottom: 1px solid var(--border); }
+  th { color: var(--muted); font-family: var(--mono); font-size: 10px; text-transform: uppercase; }
+  input { background: var(--bg3); border: 1px solid var(--border); border-radius: 4px; padding: 6px; color: var(--text); font-family: var(--mono); font-size: 12px; }
+  button { background: rgba(61, 158, 255, 0.7); color: #fff; border: none; padding: 6px 12px; border-radius: 4px; cursor: pointer; font-size: 11px; margin: 0 2px; }
+  button.red { background: rgba(255, 71, 87, 0.7); color: #fff; }
 </style>
 </head>
 <body>
 <header>
-  <div class="logo">TXF TRACKER · 資產總覽</div>
+  <div class="logo">TXF TRACKER · 股票資產</div>
   <nav class="nav">
     <a href="index.html">微台期</a>
     <a href="stocks.html" class="active">股票資產</a>
+    <a href="assets.html">資產總覽</a>
   </nav>
-  <div style="display:flex;align-items:center;gap:10px">
-    <div class="pulse"></div>
-    <span style="font-family:var(--mono);font-size:12px;color:var(--muted)" id="last-update">連線中...</span>
-    <span class="tg-badge">🤖 Telegram 通知已啟用</span>
-    <button class="refresh-btn" onclick="loadStocks()"><span id="refresh-icon">↻</span> 刷新</button>
-  </div>
+  <button onclick="loadStocks()" style="background:var(--blue);padding:8px 16px;border-radius:6px">刷新</button>
 </header>
 
 <main>
-  <!-- 總覽卡片 -->
-  <div style="display:grid;grid-template-columns:1fr 1fr;gap:14px;margin-bottom:20px">n  <div class="card">n    <div class="card-label">200w 總資金</div>n    <div class="card-value blue">2,000,000 元</div>n  </div>n  <div class="card">n    <div class="card-label">剩餘現金</div>n    <div class="card-value green" id="remaining">—</div>n    <div class="card-sub" id="remaining-pct">—</div>n  </div>n</div>n<div class="top-grid">
+  <div class="grid-2">
     <div class="card">
-      <div class="card-label">總市值</div>
-      <div class="card-value blue" id="total-value">—</div>
-      <div class="card-sub">台幣估算</div>
+      <div class="label">200w 總資金</div>
+      <div class="value blue">2,000,000 元</div>
     </div>
     <div class="card">
-      <div class="card-label">總損益</div>
-      <div class="card-value" id="total-pnl">—</div>
-      <div class="card-sub" id="total-pnl-pct">—</div>
-    </div>
-    <div class="card">
-      <div class="card-label">持倉檔數</div>
-      <div class="card-value blue" id="total-stocks">—</div>
-      <div class="card-sub">檔股票／ETF</div>
-    </div>
-    <div class="card">
-      <div class="card-label">今日提醒</div>
-      <div class="card-value yellow" id="alert-count">—</div>
-      <div class="card-sub">次 Telegram 通知</div>
+      <div class="label">剩餘現金</div>
+      <div class="value green" id="remaining">—</div>
+      <div class="sub" id="remaining-pct">—</div>
     </div>
   </div>
 
-  <!-- 持倉表 + 新增 -->
-  <div class="mid-grid">
-    <div class="card">
-      <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:14px">
-        <div class="section-title" style="margin:0">持倉明細</div>
-      </div>
-      <table class="stock-table">
-        <thead>
-          <tr>
-            <th>代號</th><th>名稱</th><th>股數</th>
-            <th>成本</th><th>現價</th><th>損益</th><th>提醒設定</th><th></th>
-          </tr>
-        </thead>
-        <tbody id="stock-tbody">
-          <tr><td colspan="8" style="color:var(--muted);text-align:center;padding:20px">載入中...</td></tr>
-        </tbody>
-      </table>
-    </div>
+  <div class="card">
+    <div class="label">股票/ETF 持倉</div>
+    <table>
+      <thead><tr><th>代號</th><th>名稱</th><th>股數</th><th>成本價</th><th>現價</th><th>損益(%)</th><th>提醒上限</th><th>提醒下限</th><th>操作</th></tr></thead>
+      <tbody id="stock-tbody"><tr><td colspan="9">載入中...</td></tr></tbody>
+    </table>
+  </div>
 
-    <div class="card">
-      <div class="section-title">新增持倉</div>
-      <div class="form-grid">
-        <div class="form-group">
-          <label>股票代號</label>
-          <input type="text" id="f-symbol" placeholder="例：0050、2330">
-        </div>
-        <div class="form-group">
-          <label>股數（股）</label>
-          <input type="number" id="f-shares" placeholder="1000">
-        </div>
-        <div class="form-group">
-          <label>成本價（元）</label>
-          <input type="number" id="f-cost" placeholder="185.5">
-        </div>
-        <div class="form-group">
-          <label>提醒高點（突破通知）</label>
-          <input type="number" id="f-high" placeholder="選填">
-        </div>
-        <div class="form-group" style="grid-column:span 2">
-          <label>提醒低點（跌破通知）</label>
-          <input type="number" id="f-low" placeholder="選填">
-        </div>
-      </div>
-      <button class="btn" onclick="addStock()">＋ 新增持倉</button>
-
-      <div style="margin-top:20px;padding-top:16px;border-top:1px solid var(--border)">
-        <div class="section-title">關於提醒</div>
-        <div style="font-size:12px;color:var(--muted);line-height:1.8">
-          每次刷新時自動檢查價格<br>
-          突破高點或跌破低點時<br>
-          自動發送 Telegram 通知 🤖
-        </div>
-      </div>
-    </div>
+  <div class="card">
+    <div class="label">新增持倉</div>
+    <table>
+      <tr>
+        <td>代號: <input type="text" id="new-symbol" placeholder="2330" style="width:80px"></td>
+        <td>股數: <input type="number" id="new-shares" placeholder="100" style="width:80px"></td>
+        <td>成本價: <input type="number" id="new-cost" step="0.1" placeholder="600" style="width:80px"></td>
+        <td>提醒上限: <input type="number" id="new-high" step="0.1" placeholder="700" style="width:80px"></td>
+        <td>提醒下限: <input type="number" id="new-low" step="0.1" placeholder="500" style="width:80px"></td>
+        <td><button onclick="addStock()">新增</button></td>
+      </tr>
+    </table>
   </div>
 </main>
 
 <script>
 const API = 'https://txf-tracker-production.up.railway.app';
-let stockData = [];
-
-document.addEventListener('DOMContentLoaded', () => {
-  loadStocks();
-  setInterval(loadStocks, 60000);
-});
 
 async function loadStocks() {
-  const icon = document.getElementById('refresh-icon');
-  icon.classList.add('spinning');
   try {
-    const res = await fetch(`${API}/api/stocks`);
-    stockData = await res.json();
-    renderStocks(stockData);
-    document.getElementById('last-update').textContent = '更新：' + new Date().toLocaleTimeString('zh-TW');
-  } catch(e) {
-    document.getElementById('last-update').textContent = '⚠ 無法連線';
-  } finally {
-    icon.classList.remove('spinning');
+    const res = await fetch(API + '/api/stocks');
+    const stocks = await res.json();
+    
+    let totalValue = 0;
+    
+    const tbody = document.getElementById('stock-tbody');
+    if (stocks.length === 0) {
+      tbody.innerHTML = '<tr><td colspan="9" style="color:var(--muted)">尚無持倉</td></tr>';
+    } else {
+      tbody.innerHTML = stocks.map(s => {
+        const value = (s.current_price || 0) * s.shares;
+        totalValue += value;
+        const pnlColor = (s.pnl_twd || 0) >= 0 ? 'green' : 'red';
+        return `
+          <tr>
+            <td>${s.symbol}</td>
+            <td>${s.name || '—'}</td>
+            <td>${s.shares}</td>
+            <td>${s.cost_price.toLocaleString()}</td>
+            <td>${s.current_price ? s.current_price.toLocaleString() : '—'}</td>
+            <td class="${pnlColor}">${s.pnl_twd ? (s.pnl_twd >= 0 ? '+' : '') + s.pnl_twd.toLocaleString() + ' (' + s.pnl_pct + '%)' : '—'}</td>
+            <td>${s.alert_high || '—'}</td>
+            <td>${s.alert_low || '—'}</td>
+            <td><button onclick="deleteStock(${s.id})" class="red">刪除</button></td>
+          </tr>
+        `;
+      }).join('');
+    }
+    
+    const remaining = 2000000 - totalValue;
+    const remainingPct = (remaining / 2000000 * 100).toFixed(2);
+    document.getElementById('remaining').textContent = Math.round(remaining).toLocaleString() + ' 元';
+    document.getElementById('remaining-pct').textContent = remainingPct + '%';
+  } catch (e) {
+    console.error('Error:', e);
   }
-}
-
-function renderStocks(stocks) {
-  let totalValue = 0, totalPnl = 0, totalCost = 0;
-  const tbody = document.getElementById('stock-tbody');
-
-  if (stocks.length === 0) {
-    tbody.innerHTML = '<tr><td colspan="8" style="color:var(--muted);text-align:center;padding:20px">尚無持倉，請新增</td></tr>';
-  } else {
-    tbody.innerHTML = stocks.map(s => {
-      const price = s.current_price || 0;
-      const value = price * s.shares;
-      const cost = s.cost_price * s.shares;
-      totalValue += value;
-      totalCost += cost;
-      if (s.pnl_twd) totalPnl += s.pnl_twd;
-      const pnlColor = (s.pnl_twd || 0) >= 0 ? 'green' : 'red';
-      const pnlSign = (s.pnl_twd || 0) >= 0 ? '+' : '';
-      return `<tr>
-        <td class="mono"><span class="badge">${s.symbol}</span></td>
-        <td style="font-size:12px">${s.name || s.symbol}</td>
-        <td class="mono">${s.shares.toLocaleString()}</td>
-        <td class="mono">${s.cost_price.toLocaleString()}</td>
-        <td class="mono ${price >= s.cost_price ? 'green' : 'red'}">${price ? price.toLocaleString() : '—'}</td>
-        <td class="mono ${pnlColor}">${s.pnl_twd !== null ? pnlSign + s.pnl_twd.toLocaleString() : '—'}</td>
-        <td>
-          <div class="alert-strip">
-            <label>↑</label>
-            <input type="number" placeholder="高點" value="${s.alert_high || ''}" onchange="updateAlert(${s.id}, this.value, null)">
-            <label>↓</label>
-            <input type="number" placeholder="低點" value="${s.alert_low || ''}" onchange="updateAlert(${s.id}, null, this.value)">
-          </div>
-        </td>
-        <td><button class="btn btn-danger btn-sm" onclick="deleteStock(${s.id})">刪除</button></td>
-      </tr>`;
-    }).join('');
-  }
-
-  document.getElementById('total-value').textContent = totalValue ? Math.round(totalValue).toLocaleString() + ' 元' : '—';
-  const pnlEl = document.getElementById('total-pnl');
-  const pnlSign = totalPnl >= 0 ? '+' : '';
-  pnlEl.textContent = totalPnl ? pnlSign + Math.round(totalPnl).toLocaleString() + ' 元' : '—';
-  pnlEl.className = 'card-value ' + (totalPnl >= 0 ? 'green' : 'red');
-  const pnlPct = totalCost > 0 ? ((totalPnl / totalCost) * 100).toFixed(2) : 0;
-  document.getElementById('total-pnl-pct').textContent = `${pnlSign}${pnlPct}% 報酬率`;
-  document.getElementById('total-stocks').textContent = stocks.length;
-  document.getElementById('alert-count').textContent = stocks.filter(s => s.alert_high || s.alert_low).length;
 }
 
 async function addStock() {
-  const symbol = document.getElementById('f-symbol').value.trim().toUpperCase();
-  const shares = parseInt(document.getElementById('f-shares').value);
-  const cost = parseFloat(document.getElementById('f-cost').value);
-  const high = parseFloat(document.getElementById('f-high').value) || null;
-  const low = parseFloat(document.getElementById('f-low').value) || null;
+  const symbol = document.getElementById('new-symbol').value;
+  const shares = parseInt(document.getElementById('new-shares').value);
+  const cost = parseFloat(document.getElementById('new-cost').value);
+  const high = parseFloat(document.getElementById('new-high').value) || null;
+  const low = parseFloat(document.getElementById('new-low').value) || null;
+  
   if (!symbol || !shares || !cost) return alert('請填寫代號、股數和成本價');
-  await fetch(`${API}/api/stocks`, {
-    method: 'POST',
-    headers: {'Content-Type': 'application/json'},
-    body: JSON.stringify({symbol, shares, cost_price: cost, alert_high: high, alert_low: low})
-  });
-  document.getElementById('f-symbol').value = '';
-  document.getElementById('f-shares').value = '';
-  document.getElementById('f-cost').value = '';
-  document.getElementById('f-high').value = '';
-  document.getElementById('f-low').value = '';
-  loadStocks();
+  
+  try {
+    const res = await fetch(API + '/api/stocks', {
+      method: 'POST',
+      headers: {'Content-Type': 'application/json'},
+      body: JSON.stringify({symbol, shares, cost_price: cost, alert_high: high, alert_low: low})
+    });
+    if (res.ok) {
+      alert('已新增');
+      ['new-symbol','new-shares','new-cost','new-high','new-low'].forEach(id => document.getElementById(id).value = '');
+      loadStocks();
+    }
+  } catch (e) {
+    alert('新增失敗: ' + e.message);
+  }
 }
 
 async function deleteStock(id) {
-  if (!confirm('確定刪除這筆持倉？')) return;
-  await fetch(`${API}/api/stocks/${id}`, {method: 'DELETE'});
-  loadStocks();
+  if (!confirm('確定刪除？')) return;
+  try {
+    await fetch(API + '/api/stocks/' + id, {method: 'DELETE'});
+    loadStocks();
+  } catch (e) {
+    alert('刪除失敗');
+  }
 }
 
-let alertTimers = {};
-async function updateAlert(id, high, low) {
-  clearTimeout(alertTimers[id]);
-  alertTimers[id] = setTimeout(async () => {
-    const stock = stockData.find(s => s.id === id);
-    if (!stock) return;
-    await fetch(`${API}/api/stocks/${id}/alert`, {
-      method: 'PUT',
-      headers: {'Content-Type': 'application/json'},
-      body: JSON.stringify({
-        alert_high: high !== null ? parseFloat(high) || null : stock.alert_high,
-        alert_low: low !== null ? parseFloat(low) || null : stock.alert_low
-      })
-    });
-  }, 800);
-}
+loadStocks();
+setInterval(loadStocks, 60000);
 </script>
 </body>
 </html>
-<script>
-// 在 renderStocks 函數最後加
-document.addEventListener('DOMContentLoaded', function() {
-  const origRender = window.renderStocks;
-  window.renderStocks = function(stocks) {
-    origRender(stocks);
-    const totalValue = stocks.reduce((sum, s) => sum + (s.current_price * s.shares || 0), 0);
-    const remaining = 2000000 - totalValue;
-    const remainingPct = (remaining / 2000000 * 100).toFixed(2);
-    document.getElementById('remaining').textContent = remaining.toLocaleString() + ' 元';
-    document.getElementById('remaining-pct').textContent = remainingPct + '%';
-  };
-});
-</script>
