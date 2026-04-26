@@ -53,6 +53,10 @@
       <div class="label">台指期數 現價</div>
       <div class="value blue" id="price">—</div>
       <div class="sub" id="data-source">Yahoo Finance</div>
+<div style="margin-top:12px">
+<input type="number" id="override-price" placeholder="輸入今日收盤價" step="0.1" style="width:140px">
+<button onclick="overridePrice()" style="background:var(--yellow);color:#000;padding:6px 12px;border-radius:4px;border:none;cursor:pointer;font-size:11px">校對</button>
+</div>
     </div>
     <div class="card">
       <div class="label">未實現損益</div>
@@ -256,6 +260,28 @@ async function addPosition() {
     }
   } catch (e) {
     alert('新增失敗: ' + e.message);
+  }
+}
+</script>
+<script>
+async function overridePrice() {
+  const price = parseFloat(document.getElementById('override-price').value);
+  if (!price) return alert('請輸入價格');
+  
+  const today = new Date().toISOString().split('T')[0];
+  try {
+    const res = await fetch(API + '/api/price-override', {
+      method: 'POST',
+      headers: {'Content-Type': 'application/json'},
+      body: JSON.stringify({date: today, price})
+    });
+    if (res.ok) {
+      alert('已校對為 ' + price);
+      document.getElementById('override-price').value = '';
+      loadDashboard();
+    }
+  } catch (e) {
+    alert('校對失敗: ' + e.message);
   }
 }
 </script>
