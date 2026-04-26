@@ -272,3 +272,17 @@ async function updateAlert(id, high, low) {
 </script>
 </body>
 </html>
+<script>
+// 在 renderStocks 函數最後加
+document.addEventListener('DOMContentLoaded', function() {
+  const origRender = window.renderStocks;
+  window.renderStocks = function(stocks) {
+    origRender(stocks);
+    const totalValue = stocks.reduce((sum, s) => sum + (s.current_price * s.shares || 0), 0);
+    const remaining = 2000000 - totalValue;
+    const remainingPct = (remaining / 2000000 * 100).toFixed(2);
+    document.getElementById('remaining').textContent = remaining.toLocaleString() + ' 元';
+    document.getElementById('remaining-pct').textContent = remainingPct + '%';
+  };
+});
+</script>
