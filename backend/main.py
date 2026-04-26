@@ -320,6 +320,13 @@ def get_stocks():
     for s in rows:
         info = fetch_stock_price(s["symbol"])
         price = info["price"]
+        # 基金讀取手動儲存的淨值
+        if s["symbol"].startswith("FUND:"):
+            conn2 = get_db()
+            fp = conn2.execute("SELECT price FROM fund_prices WHERE stock_id=?", (s["id"],)).fetchone()
+            conn2.close()
+            if fp:
+                price = fp["price"]
         pnl = round((price - s["cost_price"]) * s["shares"], 0) if price else None
         pnl_pct = round((price - s["cost_price"]) / s["cost_price"] * 100, 2) if price else None
         if price:
