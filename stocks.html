@@ -32,6 +32,8 @@
   input { background: var(--bg3); border: 1px solid var(--border); border-radius: 4px; padding: 6px; color: var(--text); font-family: var(--mono); font-size: 12px; }
   button { background: rgba(61, 158, 255, 0.7); color: #fff; border: none; padding: 6px 12px; border-radius: 4px; cursor: pointer; font-size: 11px; margin: 0 2px; }
   button.red { background: rgba(255, 71, 87, 0.7); color: #fff; }
+  .range-btn { background: var(--bg3); color: var(--muted); border: 1px solid var(--border); padding: 4px 12px; font-size: 11px; }
+  .range-btn.active { background: var(--blue); color: #fff; border-color: var(--blue); }
 </style>
 </head>
 <body>
@@ -53,9 +55,13 @@
       <div class="sub">所有持倉合計</div>
     </div>
     <div class="card">
-      <div class="label">剩餘現金</div>
-      <div class="value green" id="remaining">—</div>
-      <div class="sub" id="remaining-pct">—</div>
+      <div class="label">歷史資產變化</div>
+      <div style="display:flex;gap:8px;margin-bottom:10px">
+        <button onclick="changeRange('day')" id="btn-day" class="range-btn">日</button>
+        <button onclick="changeRange('week')" id="btn-week" class="range-btn">週</button>
+        <button onclick="changeRange('month')" id="btn-month" class="range-btn">月</button>
+      </div>
+      <div style="height:180px;position:relative"><canvas id="history-chart"></canvas></div>
     </div>
   </div>
 
@@ -86,6 +92,7 @@
   </div>
 </main>
 
+<script src="https://cdnjs.cloudflare.com/ajax/libs/Chart.js/3.9.1/chart.min.js"></script>
 <script>
 const API = 'https://txf-tracker-production.up.railway.app';
 
@@ -169,8 +176,66 @@ async function deleteStock(id) {
   }
 }
 
+let historyChart = null;
+let currentRange = 'day';
+
+async function loadHistory() {
+  try {
+    const res = await fetch(API + '/api/snapshots');
+    const snapshots = await res.json();
+    
+    let filtered = snapshots;
+    const now = new Date();
+    if (currentRange === 'day') {
+      filtered = snapshots.slice(-7);
+    } else if (currentRange === 'week') {
+      filtered = snapshots.slice(-30);
+    } else if (currentRange === 'month') {
+      filtered = snapshots.slice(-90);
+    }
+    
+    const ctx = document.getElementById('history-chart').getContext('2d');
+    if (historyChart) historyChart.destroy();
+    historyChart = new Chart(ctx, {
+      type: 'line',
+      data: {
+        labels: filtered.map(s => s.date.slice(5)),
+        datasets: [{
+          label: '未實現損益',
+          data: filtered.map(s => s.unrealized_pnl),
+          borderColor: '#3d9eff',
+          backgroundColor: 'rgba(61, 158, 255, 0.1)',
+          fill: true,
+          tension: 0.4
+        }]
+      },
+      options: {
+        responsive: true,
+        maintainAspectRatio: false,
+        plugins: { legend: { display: false } },
+        scales: {
+          y: { ticks: { color: '#4a6070' }, grid: { color: '#1e3048' } },
+          x: { ticks: { color: '#4a6070' }, grid: { display: false } }
+        }
+      }
+    });
+  } catch (e) {
+    console.error('History error:', e);
+  }
+}
+
+function changeRange(range) {
+  currentRange = range;
+  document.querySelectorAll('.range-btn').forEach(b => b.classList.remove('active'));
+  document.getElementById('btn-' + range).classList.add('active');
+  loadHistory();
+}
+
 loadStocks();
+loadHistory();
+document.getElementById('btn-day').classList.add('active');
 setInterval(loadStocks, 60000);
+setInterval(loadHistory, 300000);
 </script>
 </body>
 </html>
