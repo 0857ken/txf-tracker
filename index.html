@@ -72,6 +72,10 @@
       <div class="label">均線狀態</div>
       <div class="value" id="ma-state" style="color:var(--yellow)">—</div>
       <div class="sub" id="ma-mode">—</div>
+<div style="margin-top:12px;padding-top:12px;border-top:1px solid var(--border);font-size:11px">
+<div style="color:var(--muted)">建議倍數：<span id="leverage" class="blue">—</span></div>
+<div style="color:var(--muted);margin-top:6px">建議口數：<span id="lots-suggest" class="green">—</span></div>
+</div>
     </div>
   </div>
 
@@ -141,6 +145,8 @@ async function loadDashboard() {
     
     document.getElementById('ma-state').textContent = data.ma_state.state;
     document.getElementById('ma-mode').textContent = data.ma_state.mode;
+document.getElementById("leverage").textContent = data.ma_state.leverage || "1.0-1.5倍";
+document.getElementById("lots-suggest").textContent = data.ma_state.lots_suggest || "3-4口微台";
     
     const total_lots = data.positions.reduce((a,p)=>a+p.lots, 0);
     document.getElementById('lots').textContent = total_lots;
