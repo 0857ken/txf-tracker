@@ -24,14 +24,15 @@ def get_db():
 
 def init_db():
     conn = get_db()
-    conn.executescript("""
+    cur = conn.cursor()
+    cur.execute("""
         CREATE TABLE IF NOT EXISTS positions (
-            id INTEGER PRIMARY KEY AUTOINCREMENT,
+            id SERIAL PRIMARY KEY,
             date TEXT, type TEXT, lots INTEGER,
-            entry_price REAL, note TEXT, status TEXT DEFAULT 'open'
+            entry_price REAL, note TEXT, status VARCHAR(20) DEFAULT 'open'
         );
         CREATE TABLE IF NOT EXISTS daily_logs (
-            id INTEGER PRIMARY KEY AUTOINCREMENT,
+            id SERIAL PRIMARY KEY,
             date TEXT, close_price REAL, ma5 REAL, ma20 REAL,
             ma60 REAL, lots INTEGER, note TEXT
         );
@@ -39,13 +40,13 @@ def init_db():
             date TEXT PRIMARY KEY, price REAL
         );
         CREATE TABLE IF NOT EXISTS pnl_snapshots (
-            id INTEGER PRIMARY KEY AUTOINCREMENT,
+            id SERIAL PRIMARY KEY,
             date TEXT UNIQUE, close_price REAL,
             total_lots INTEGER, unrealized_pnl REAL,
             avg_cost REAL, dynamic_floor REAL
         );
         CREATE TABLE IF NOT EXISTS realized_pnl (
-            id INTEGER PRIMARY KEY AUTOINCREMENT,
+            id SERIAL PRIMARY KEY,
             date TEXT, lots INTEGER, entry_price REAL,
             exit_price REAL, pnl_twd REAL, note TEXT
         );
@@ -72,7 +73,7 @@ def send_telegram(msg: str):
 def fetch_price():
     try:
         def fetch_yahoo(symbol):
-            url = f"https://query2.finance.yahoo.com/v8/finance/chart/{symbol}?interval=1d&range=90d"
+            url = f"https://query2.finance.yahoo.com/v8/finance/chart/{symbol}%sinterval=1d&range=90d"
             headers = {"User-Agent": "Mozilla/5.0"}
             req = urllib.request.Request(url, headers=headers)
             with urllib.request.urlopen(req, timeout=15) as r:
@@ -139,7 +140,7 @@ def dashboard():
     price = market["current_price"]
     today = str(datetime.now().date())
     conn = get_db()
-    ov = conn.execute("SELECT price FROM price_overrides WHERE date=?", (today,)).fetchone()
+    ov = conn.execute("SELECT price FROM price_overrides WHERE date=%s", (today,)).fetchone()
     if ov:
         price = ov["price"]
         market["current_price"] = price
@@ -200,10 +201,10 @@ class PositionCreate(BaseModel):
 @app.post("/api/positions")
 def add_position(pos: PositionCreate):
     conn = get_db()
-    cur = conn.execute("INSERT INTO positions (date,type,lots,entry_price,note,status) VALUES (?,?,?,?,?,'open')",
+    cur = conn.execute("INSERT INTO positions (date,type,lots,entry_price,note,status) VALUES (%s,%s,%s,%s,%s,'open')",
         (pos.date, pos.type, pos.lots, pos.entry_price, pos.note))
     conn.commit()
-    row = dict(conn.execute("SELECT * FROM positions WHERE id=?", (cur.lastrowid,)).fetchone())
+    row = dict(conn.execute("SELECT * FROM positions WHERE id=%s", (cur.lastrowid,)).fetchone())
     conn.close()
     return row
 
@@ -215,18 +216,18 @@ class PartialClose(BaseModel):
 @app.post("/api/positions/{pos_id}/close")
 def close_position(pos_id: int, data: PartialClose):
     conn = get_db()
-    pos = conn.execute("SELECT * FROM positions WHERE id=?", (pos_id,)).fetchone()
+    pos = conn.execute("SELECT * FROM positions WHERE id=%s", (pos_id,)).fetchone()
     if not pos:
         raise HTTPException(404, "找不到部位")
     pos = dict(pos)
     remaining = pos["lots"] - data.lots
     pnl = (data.exit_price - pos["entry_price"]) * MICRO_POINT_VALUE * data.lots
-    conn.execute("INSERT INTO realized_pnl (date,lots,entry_price,exit_price,pnl_twd,note) VALUES (?,?,?,?,?,?)",
+    conn.execute("INSERT INTO realized_pnl (date,lots,entry_price,exit_price,pnl_twd,note) VALUES (%s,%s,%s,%s,%s,%s)",
         (str(datetime.now().date()), data.lots, pos["entry_price"], data.exit_price, round(pnl, 0), data.note))
     if remaining <= 0:
-        conn.execute("UPDATE positions SET status='closed' WHERE id=?", (pos_id,))
+        conn.execute("UPDATE positions SET status='closed' WHERE id=%s", (pos_id,))
     else:
-        conn.execute("UPDATE positions SET lots=? WHERE id=?", (remaining, pos_id))
+        conn.execute("UPDATE positions SET lots=%s WHERE id=%s", (remaining, pos_id))
     conn.commit()
     conn.close()
     return {"message": f"已平倉 {data.lots} 口，剩餘 {max(remaining, 0)} 口，損益 {round(pnl, 0)} 元"}
@@ -234,7 +235,7 @@ def close_position(pos_id: int, data: PartialClose):
 @app.delete("/api/positions/{pos_id}")
 def delete_position(pos_id: int):
     conn = get_db()
-    conn.execute("UPDATE positions SET status='closed' WHERE id=?", (pos_id,))
+    conn.execute("UPDATE positions SET status='closed' WHERE id=%s", (pos_id,))
     conn.commit()
     conn.close()
     return {"message": "已平倉"}
@@ -242,7 +243,7 @@ def delete_position(pos_id: int):
 @app.post("/api/price-override")
 def override_price(data: dict):
     conn = get_db()
-    conn.execute("INSERT OR REPLACE INTO price_overrides (date,price) VALUES (?,?)", (data.get('date'), data.get('price')))
+    conn.execute("INSERT OR REPLACE INTO price_overrides (date,price) VALUES (%s,%s)", (data.get('date'), data.get('price')))
     conn.commit()
     conn.close()
     return {"message": f"已覆蓋 {data.get('date')} 的價格為 {data.get('price')}"}
@@ -259,7 +260,7 @@ def save_snapshot():
     dynamic_floor = round(avg_cost - 100, 0) if open_positions else HARD_FLOOR
     total_pnl = sum((price - p["entry_price"]) * MICRO_POINT_VALUE * p["lots"] for p in open_positions)
     today = str(datetime.now().date())
-    conn.execute("INSERT OR REPLACE INTO pnl_snapshots (date,close_price,total_lots,unrealized_pnl,avg_cost,dynamic_floor) VALUES (?,?,?,?,?,?)",
+    conn.execute("INSERT OR REPLACE INTO pnl_snapshots (date,close_price,total_lots,unrealized_pnl,avg_cost,dynamic_floor) VALUES (%s,%s,%s,%s,%s,%s)",
         (today, price, total_lots, round(total_pnl, 0), round(avg_cost, 0), dynamic_floor))
     conn.commit()
     conn.close()
@@ -282,10 +283,10 @@ def get_realized_pnl():
 def init_stock_db():
     conn = get_db()
     conn.execute("""CREATE TABLE IF NOT EXISTS stock_positions (
-        id INTEGER PRIMARY KEY AUTOINCREMENT,
+        id SERIAL PRIMARY KEY,
         symbol TEXT, name TEXT, shares REAL,
         cost_price REAL, alert_high REAL, alert_low REAL,
-        status TEXT DEFAULT 'active'
+        status VARCHAR(20) DEFAULT 'active'
     )""")
     conn.commit()
     conn.close()
@@ -298,7 +299,7 @@ def fetch_stock_price(symbol: str):
         return {"price": None, "name": symbol.replace("FUND:", "")}
     try:
         tw_symbol = symbol + ".TW" if not symbol.endswith(".TW") else symbol
-        url = f"https://query2.finance.yahoo.com/v8/finance/chart/{tw_symbol}?interval=1d&range=5d"
+        url = f"https://query2.finance.yahoo.com/v8/finance/chart/{tw_symbol}%sinterval=1d&range=5d"
         headers = {"User-Agent": "Mozilla/5.0"}
         req = urllib.request.Request(url, headers=headers)
         with urllib.request.urlopen(req, timeout=10) as r:
@@ -323,7 +324,7 @@ def get_stocks():
         # 基金讀取手動儲存的淨值
         if s["symbol"].startswith("FUND:"):
             conn2 = get_db()
-            fp = conn2.execute("SELECT price FROM fund_prices WHERE stock_id=?", (s["id"],)).fetchone()
+            fp = conn2.execute("SELECT price FROM fund_prices WHERE stock_id=%s", (s["id"],)).fetchone()
             conn2.close()
             if fp:
                 price = fp["price"]
@@ -347,17 +348,17 @@ class StockCreate(BaseModel):
 @app.post("/api/stocks")
 def add_stock(s: StockCreate):
     conn = get_db()
-    cur = conn.execute("INSERT INTO stock_positions (symbol,name,shares,cost_price,alert_high,alert_low,status) VALUES (?,?,?,?,?,?,'active')",
+    cur = conn.execute("INSERT INTO stock_positions (symbol,name,shares,cost_price,alert_high,alert_low,status) VALUES (%s,%s,%s,%s,%s,%s,'active')",
         (s.symbol.upper(), s.symbol, s.shares, s.cost_price, s.alert_high, s.alert_low))
     conn.commit()
-    row = dict(conn.execute("SELECT * FROM stock_positions WHERE id=?", (cur.lastrowid,)).fetchone())
+    row = dict(conn.execute("SELECT * FROM stock_positions WHERE id=%s", (cur.lastrowid,)).fetchone())
     conn.close()
     return row
 
 @app.delete("/api/stocks/{stock_id}")
 def delete_stock(stock_id: int):
     conn = get_db()
-    conn.execute("UPDATE stock_positions SET status='deleted' WHERE id=?", (stock_id,))
+    conn.execute("UPDATE stock_positions SET status='deleted' WHERE id=%s", (stock_id,))
     conn.commit()
     conn.close()
     return {"message": "已刪除"}
@@ -365,7 +366,7 @@ def delete_stock(stock_id: int):
 @app.put("/api/stocks/{stock_id}/alert")
 def update_stock_alert(stock_id: int, alert_high: Optional[float] = None, alert_low: Optional[float] = None):
     conn = get_db()
-    conn.execute("UPDATE stock_positions SET alert_high=?, alert_low=? WHERE id=?", (alert_high, alert_low, stock_id))
+    conn.execute("UPDATE stock_positions SET alert_high=%s, alert_low=%s WHERE id=%s", (alert_high, alert_low, stock_id))
     conn.commit()
     conn.close()
     return {"message": "提醒已更新"}
@@ -373,10 +374,10 @@ def update_stock_alert(stock_id: int, alert_high: Optional[float] = None, alert_
 @app.patch("/api/positions/{pos_id}")
 def update_position(pos_id: int, data: dict):
     conn = get_db()
-    conn.execute("UPDATE positions SET lots=?, entry_price=? WHERE id=?", 
+    conn.execute("UPDATE positions SET lots=%s, entry_price=%s WHERE id=%s", 
         (data.get('lots'), data.get('entry_price'), pos_id))
     conn.commit()
-    row = dict(conn.execute("SELECT * FROM positions WHERE id=?", (pos_id,)).fetchone())
+    row = dict(conn.execute("SELECT * FROM positions WHERE id=%s", (pos_id,)).fetchone())
     conn.close()
     return row
 
