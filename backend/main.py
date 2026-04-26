@@ -293,6 +293,9 @@ def init_stock_db():
 init_stock_db()
 
 def fetch_stock_price(symbol: str):
+    # 基金不抓 Yahoo，用儲存的淨值
+    if symbol.startswith("FUND:"):
+        return {"price": None, "name": symbol.replace("FUND:", "")}
     try:
         tw_symbol = symbol + ".TW" if not symbol.endswith(".TW") else symbol
         url = f"https://query2.finance.yahoo.com/v8/finance/chart/{tw_symbol}?interval=1d&range=5d"
