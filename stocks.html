@@ -48,8 +48,9 @@
 <main>
   <div class="grid-2">
     <div class="card">
-      <div class="label">200w 總資金</div>
-      <div class="value blue">2,000,000 元</div>
+      <div class="label">總市值</div>
+      <div class="value blue" id="total-value">—</div>
+      <div class="sub">所有持倉合計</div>
     </div>
     <div class="card">
       <div class="label">剩餘現金</div>
@@ -121,6 +122,7 @@ async function loadStocks() {
     
     const remaining = 2000000 - totalValue;
     const remainingPct = (remaining / 2000000 * 100).toFixed(2);
+    document.getElementById('total-value').textContent = Math.round(totalValue).toLocaleString() + ' 元';
     document.getElementById('remaining').textContent = Math.round(remaining).toLocaleString() + ' 元';
     document.getElementById('remaining-pct').textContent = remainingPct + '%';
   } catch (e) {
