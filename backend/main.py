@@ -361,10 +361,12 @@ def update_stock_alert(stock_id: int, alert_high: Optional[float] = None, alert_
     return {"message": "提醒已更新"}
 
 @app.patch("/api/positions/{pos_id}")
-def update_position(pos_id: int, lots: int, entry_price: float):
+def update_position(pos_id: int, data: dict):
     conn = get_db()
-    conn.execute("UPDATE positions SET lots=?, entry_price=? WHERE id=?", (lots, entry_price, pos_id))
+    conn.execute("UPDATE positions SET lots=?, entry_price=? WHERE id=?", 
+        (data.get('lots'), data.get('entry_price'), pos_id))
     conn.commit()
     row = dict(conn.execute("SELECT * FROM positions WHERE id=?", (pos_id,)).fetchone())
     conn.close()
     return row
+
