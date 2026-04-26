@@ -63,6 +63,9 @@
       <div class="label">未實現損益</div>
       <div class="value" id="pnl">—</div>
       <div class="sub" id="pnl-sub">—</div>
+      <div style="margin-top:10px;padding-top:10px;border-top:1px solid var(--border);font-size:11px;color:var(--muted)">
+        最後防線：<span id="hard-floor" class="red" style="font-family:var(--mono)">—</span>
+      </div>
     </div>
     <div class="card">
       <div class="label">目前持倉口數</div>
@@ -134,9 +137,9 @@
       • 突破前高 → 順勢加碼1口</div>
       
       <div style="margin-bottom:12px"><strong style="color:var(--red)">🚨 停損規則</strong><br>
-      • 動態硬底線 = 平均成本 - 100點<br>
-      • 跌破硬底線 → 全數清倉，不留情<br>
-      • 距硬底線 ≤ 300點 → 警戒，準備出場</div>
+      • 動態最後防線 = 平均成本 - 100點<br>
+      • 跌破最後防線 → 全數清倉，不留情<br>
+      • 距最後防線 ≤ 300點 → 警戒，準備出場</div>
       
       <div style="margin-bottom:12px"><strong style="color:var(--yellow)">⚠️ 風控原則</strong><br>
       • 單筆最大虧損不超過總資金 5%<br>
