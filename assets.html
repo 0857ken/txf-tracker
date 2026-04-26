@@ -1,0 +1,192 @@
+<!DOCTYPE html>
+<html lang="zh-TW">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>200w 資產總覽</title>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/Chart.js/3.9.1/chart.min.js"></script>
+<style>
+  :root {
+    --bg: #0d1b2a; --bg2: #112236; --bg3: #0a1628;
+    --text: #c8d8e8; --muted: #4a6070; --border: #1e3048;
+    --green: #00e5a0; --red: #ff4757; --blue: #3d9eff;
+    --yellow: #ffd32a; --sans: 'DM Sans', sans-serif; --mono: 'DM Mono', monospace;
+  }
+  * { box-sizing: border-box; margin: 0; padding: 0; }
+  body { background: var(--bg); color: var(--text); font-family: var(--sans); }
+  header { display: flex; justify-content: space-between; align-items: center; padding: 14px 28px; border-bottom: 1px solid var(--border); background: var(--bg2); }
+  .logo { font-family: var(--mono); font-size: 13px; color: var(--blue); letter-spacing: 2px; }
+  .nav { display: flex; gap: 16px; }
+  .nav a { font-family: var(--mono); font-size: 12px; color: var(--muted); text-decoration: none; }
+  .nav a.active { color: var(--blue); border-bottom: 1px solid var(--blue); }
+  main { max-width: 1400px; margin: 0 auto; padding: 24px 28px; }
+  .grid-4 { display: grid; grid-template-columns: repeat(4, 1fr); gap: 14px; margin-bottom: 20px; }
+  .card { background: var(--bg2); border: 1px solid var(--border); border-radius: 10px; padding: 18px; }
+  .label { font-size: 11px; color: var(--muted); letter-spacing: 1px; text-transform: uppercase; margin-bottom: 8px; }
+  .value { font-family: var(--mono); font-size: 24px; font-weight: 500; }
+  .sub { font-size: 12px; color: var(--muted); margin-top: 6px; }
+  .green { color: var(--green); } .red { color: var(--red); } .blue { color: var(--blue); }
+  .grid-2 { display: grid; grid-template-columns: 1fr 1fr; gap: 14px; margin-bottom: 20px; }
+  table { width: 100%; border-collapse: collapse; }
+  th, td { padding: 10px; text-align: left; font-size: 12px; border-bottom: 1px solid var(--border); }
+  th { color: var(--muted); font-family: var(--mono); font-size: 10px; }
+  .pie-wrapper { height: 300px; position: relative; }
+  input { background: var(--bg3); border: 1px solid var(--border); border-radius: 6px; padding: 8px; color: var(--text); font-family: var(--mono); font-size: 12px; }
+  button { background: var(--blue); color: #fff; border: none; padding: 8px 16px; border-radius: 6px; cursor: pointer; margin-top: 10px; }
+</style>
+</head>
+<body>
+<header>
+  <div class="logo">TXF TRACKER · 200w 資產總覽</div>
+  <nav class="nav">
+    <a href="index.html">微台期</a>
+    <a href="stocks.html">股票資產</a>
+    <a href="assets.html" class="active">資產總覽</a>
+  </nav>
+</header>
+
+<main>
+  <div class="grid-4">
+    <div class="card">
+      <div class="label">總資金</div>
+      <div class="value blue">2,000,000 元</div>
+    </div>
+    <div class="card">
+      <div class="label">總市值</div>
+      <div class="value blue" id="total-value">—</div>
+      <div class="sub">台幣估算</div>
+    </div>
+    <div class="card">
+      <div class="label">總損益</div>
+      <div class="value" id="total-pnl">—</div>
+      <div class="sub" id="total-pct">—</div>
+    </div>
+    <div class="card">
+      <div class="label">現金水位</div>
+      <div class="value green" id="cash">—</div>
+      <div class="sub" id="cash-pct">—</div>
+    </div>
+  </div>
+
+  <div class="grid-2">
+    <div class="card">
+      <div class="label">資產配置</div>
+      <div class="pie-wrapper"><canvas id="pie"></canvas></div>
+    </div>
+    <div class="card">
+      <div class="label">快速新增資產</div>
+      <table>
+        <tr><th>類別</th><th>金額</th></tr>
+        <tr>
+          <td><input type="text" id="asset-type" placeholder="台股/ETF/基金/加密"></td>
+          <td><input type="number" id="asset-value" placeholder="10000" style="width:100%"></td>
+        </tr>
+      </table>
+      <button onclick="addAsset()">新增</button>
+      <div style="margin-top:20px;padding-top:20px;border-top:1px solid var(--border)">
+        <div class="label">資產明細</div>
+        <table id="asset-table">
+          <tr><th>類別</th><th>金額</th><th>佔比</th><th></th></tr>
+        </table>
+      </div>
+    </div>
+  </div>
+</main>
+
+<script>
+const API = 'https://txf-tracker-production.up.railway.app';
+let assets = JSON.parse(localStorage.getItem('assets')) || [];
+let pieChart = null;
+
+function calculateAssets() {
+  const txfLots = 3;
+  const txfPrice = 38932;
+  const txfMargin = txfLots * 50000;
+  
+  let totalValue = txfMargin;
+  let totalCost = txfLots * 37281 * 10;
+  
+  assets.forEach(a => totalValue += a.value);
+  
+  const cash = 2000000 - totalValue;
+  const totalMarketValue = totalValue;
+  const pnl = totalValue - totalCost - txfMargin;
+  const pnlPct = ((pnl / totalCost) * 100).toFixed(2);
+  
+  document.getElementById('total-value').textContent = Math.round(totalMarketValue).toLocaleString() + ' 元';
+  const pnlEl = document.getElementById('total-pnl');
+  pnlEl.className = 'value ' + (pnl >= 0 ? 'green' : 'red');
+  pnlEl.textContent = (pnl >= 0 ? '+' : '') + Math.round(pnl).toLocaleString() + ' 元';
+  document.getElementById('total-pct').textContent = (pnl >= 0 ? '+' : '') + pnlPct + '%';
+  
+  document.getElementById('cash').textContent = Math.round(cash).toLocaleString() + ' 元';
+  document.getElementById('cash-pct').textContent = ((cash / 2000000) * 100).toFixed(2) + '%';
+  
+  renderPie(totalMarketValue, cash);
+  renderAssetTable();
+}
+
+function renderPie(marketValue, cash) {
+  const ctx = document.getElementById('pie').getContext('2d');
+  if (pieChart) pieChart.destroy();
+  
+  const data = [marketValue, cash];
+  const labels = ['投資資產', '現金'];
+  const colors = ['#3d9eff', '#00e5a0'];
+  
+  pieChart = new Chart(ctx, {
+    type: 'doughnut',
+    data: {
+      labels: labels,
+      datasets: [{
+        data: data,
+        backgroundColor: colors,
+        borderColor: '#112236',
+        borderWidth: 2
+      }]
+    },
+    options: {
+      responsive: true,
+      maintainAspectRatio: false,
+      plugins: {
+        legend: { labels: { color: '#c8d8e8', font: { family: 'DM Sans' } } }
+      }
+    }
+  });
+}
+
+function renderAssetTable() {
+  const table = document.getElementById('asset-table');
+  const totalValue = 2000000 - assets.reduce((s,a)=>s+a.value,0);
+  
+  table.innerHTML = '<tr><th>類別</th><th>金額</th><th>佔比</th><th></th></tr>' +
+    assets.map((a,i) => `<tr>
+      <td>${a.type}</td>
+      <td>${a.value.toLocaleString()}</td>
+      <td>${((a.value/2000000)*100).toFixed(1)}%</td>
+      <td><button onclick="deleteAsset(${i})" style="background:var(--red);padding:4px 8px;font-size:11px">刪</button></td>
+    </tr>`).join('');
+}
+
+function addAsset() {
+  const type = document.getElementById('asset-type').value;
+  const value = parseInt(document.getElementById('asset-value').value);
+  if (!type || !value) return alert('請填寫類別和金額');
+  
+  assets.push({type, value});
+  localStorage.setItem('assets', JSON.stringify(assets));
+  document.getElementById('asset-type').value = '';
+  document.getElementById('asset-value').value = '';
+  calculateAssets();
+}
+
+function deleteAsset(i) {
+  assets.splice(i, 1);
+  localStorage.setItem('assets', JSON.stringify(assets));
+  calculateAssets();
+}
+
+calculateAssets();
+</script>
+</body>
+</html>
