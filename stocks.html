@@ -3,7 +3,7 @@
 <head>
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
-<title>股票資產追蹤</title>
+<title>資產總覽追蹤</title>
 <style>
   :root {
     --bg: #0d1b2a; --bg2: #112236; --bg3: #0a1628;
@@ -36,11 +36,11 @@
 </head>
 <body>
 <header>
-  <div class="logo">TXF TRACKER · 股票資產</div>
+  <div class="logo">TXF TRACKER · 資產總覽</div>
   <nav class="nav">
     <a href="index.html">微台期</a>
-    <a href="stocks.html" class="active">股票資產</a>
-    <a href="assets.html">資產總覽</a>
+    <a href="stocks.html" class="active">資產總覽</a>
+    <a href="assets.html">200萬計畫</a>
   </nav>
   <button onclick="loadStocks()" style="background:var(--blue);padding:8px 16px;border-radius:6px">刷新</button>
 </header>
@@ -59,7 +59,7 @@
   </div>
 
   <div class="card">
-    <div class="label">股票/ETF 持倉</div>
+    <div class="label">資產明細</div>
     <table>
       <thead><tr><th>代號</th><th>名稱</th><th>股數</th><th>成本價</th><th>現價</th><th>損益(%)</th><th>提醒上限</th><th>提醒下限</th><th>操作</th></tr></thead>
       <tbody id="stock-tbody"><tr><td colspan="9">載入中...</td></tr></tbody>
