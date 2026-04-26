@@ -30,6 +30,10 @@
   table { width: 100%; border-collapse: collapse; }
   th, td { padding: 10px; text-align: left; font-size: 12px; border-bottom: 1px solid var(--border); }
   th { color: var(--muted); font-family: var(--mono); font-size: 10px; text-transform: uppercase; }
+  input { background: var(--bg3); border: 1px solid var(--border); border-radius: 4px; padding: 6px; color: var(--text); font-family: var(--mono); font-size: 12px; width: 80px; }
+  button { background: var(--blue); color: #fff; border: none; padding: 6px 12px; border-radius: 4px; cursor: pointer; font-size: 11px; margin: 0 2px; }
+  button.red { background: var(--red); }
+  .chart-wrap { height: 220px; position: relative; }
 </style>
 </head>
 <body>
@@ -37,11 +41,10 @@
   <div class="logo">TXF TRACKER · 微台期追蹤</div>
   <nav class="nav">
     <a href="index.html" class="active">微台期</a>
-    <a href="stocks.html">股票資產</a>n    <a href="assets.html">資產總覽</a>
+    <a href="stocks.html">股票資產</a>
+    <a href="assets.html">資產總覽</a>
   </nav>
-  <div style="display:flex;gap:10px">
-    <button onclick="loadDashboard()" style="background:#3d9eff;color:#fff;border:none;padding:8px 16px;border-radius:6px;font-family:var(--mono);cursor:pointer">刷新</button>
-  </div>
+  <button onclick="loadDashboard()" style="background:var(--blue);color:#fff;border:none;padding:8px 16px;border-radius:6px;font-family:var(--mono);cursor:pointer">刷新</button>
 </header>
 
 <main>
@@ -71,7 +74,7 @@
   <div class="grid-2">
     <div class="card">
       <div class="label">近 30 日收盤走勢</div>
-      <div style="height:220px;position:relative"><canvas id="chart"></canvas></div>
+      <div class="chart-wrap"><canvas id="chart"></canvas></div>
     </div>
     <div class="card">
       <div class="label">均線明細 & 狀態</div>
@@ -87,8 +90,8 @@
   <div class="card">
     <div class="label">部位明細</div>
     <table>
-      <thead><tr><th>日期</th><th>種類</th><th>口數</th><th>進場點</th><th>現價損益(元)</th><th>備註</th></tr></thead>
-      <tbody id="pos-tbody"><tr><td colspan="6">載入中...</td></tr></tbody>
+      <thead><tr><th>日期</th><th>種類</th><th>口數</th><th>成本價</th><th>現價損益(元)</th><th>備註</th><th>操作</th></tr></thead>
+      <tbody id="pos-tbody"><tr><td colspan="7">載入中...</td></tr></tbody>
     </table>
   </div>
 </main>
@@ -97,6 +100,7 @@
 <script>
 const API = 'https://txf-tracker-production.up.railway.app';
 let chart = null;
+let currentPositions = [];
 
 async function loadDashboard() {
   try {
@@ -123,12 +127,19 @@ async function loadDashboard() {
     document.getElementById('lots').textContent = total_lots;
     document.getElementById('lots-sub').textContent = data.positions.length + ' 筆部位';
     
+    currentPositions = data.positions;
     const tbody = document.getElementById('pos-tbody');
-    tbody.innerHTML = data.positions.map(p => `
+    tbody.innerHTML = data.positions.map((p, i) => `
       <tr>
-        <td>${p.date}</td><td>${p.type}</td><td>${p.lots}</td><td>${p.entry_price.toLocaleString()}</td>
+        <td>${p.date}</td><td>${p.type}</td>
+        <td><input type="number" id="lots-${i}" value="${p.lots}" style="width:60px"></td>
+        <td><input type="number" id="cost-${i}" value="${p.entry_price}" step="0.1" style="width:80px"></td>
         <td class="${p.pnl_twd >= 0 ? 'green' : 'red'}">${(p.pnl_twd >= 0 ? '+' : '') + p.pnl_twd.toLocaleString()}</td>
         <td>${p.note}</td>
+        <td>
+          <button onclick="updatePos(${p.id}, ${i})">保存</button>
+          <button onclick="deletePos(${p.id})" class="red">刪除</button>
+        </td>
       </tr>
     `).join('');
     
@@ -136,6 +147,37 @@ async function loadDashboard() {
   } catch (e) {
     console.error('Error:', e);
     document.getElementById('price').textContent = '連線失敗';
+  }
+}
+
+async function updatePos(posId, idx) {
+  const lots = parseInt(document.getElementById(`lots-${idx}`).value);
+  const cost = parseFloat(document.getElementById(`cost-${idx}`).value);
+  
+  if (!lots || !cost) return alert('請填寫口數和成本價');
+  
+  try {
+    const res = await fetch(`${API}/api/positions/${posId}`, {
+      method: 'PATCH',
+      headers: {'Content-Type': 'application/json'},
+      body: JSON.stringify({lots, entry_price: cost})
+    });
+    if (res.ok) {
+      alert('已保存');
+      loadDashboard();
+    }
+  } catch (e) {
+    alert('保存失敗: ' + e.message);
+  }
+}
+
+async function deletePos(posId) {
+  if (!confirm('確定刪除？')) return;
+  try {
+    await fetch(`${API}/api/positions/${posId}`, {method: 'DELETE'});
+    loadDashboard();
+  } catch (e) {
+    alert('刪除失敗');
   }
 }
 
