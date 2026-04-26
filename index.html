@@ -94,6 +94,21 @@
       <tbody id="pos-tbody"><tr><td colspan="7">載入中...</td></tr></tbody>
     </table>
   </div>
+<div class="card">
+<div class="label">新增部位</div>
+<table>
+<tr>
+<td>日期: <input type="date" id="new-date"></td>
+<td>種類: <input type="text" id="new-type" placeholder="MXF"></td>
+<td>口數: <input type="number" id="new-lots" placeholder="1"></td>
+</tr>
+<tr>
+<td>成本價: <input type="number" id="new-cost" step="0.1" placeholder="37281"></td>
+<td>備註: <input type="text" id="new-note" placeholder="備註"></td>
+<td><button onclick="addPosition()">新增</button></td>
+</tr>
+</table>
+</div>
 </main>
 
 <script src="https://cdnjs.cloudflare.com/ajax/libs/Chart.js/3.9.1/chart.min.js"></script>
@@ -214,3 +229,33 @@ setInterval(loadDashboard, 60000);
 </script>
 </body>
 </html>
+<script>
+async function addPosition() {
+  const date = document.getElementById('new-date').value;
+  const type = document.getElementById('new-type').value;
+  const lots = parseInt(document.getElementById('new-lots').value);
+  const cost = parseFloat(document.getElementById('new-cost').value);
+  const note = document.getElementById('new-note').value;
+  
+  if (!date || !type || !lots || !cost) return alert('請填寫所有欄位');
+  
+  try {
+    const res = await fetch(API + '/api/positions', {
+      method: 'POST',
+      headers: {'Content-Type': 'application/json'},
+      body: JSON.stringify({date, type, lots, entry_price: cost, note})
+    });
+    if (res.ok) {
+      alert('已新增');
+      document.getElementById('new-date').value = '';
+      document.getElementById('new-type').value = '';
+      document.getElementById('new-lots').value = '';
+      document.getElementById('new-cost').value = '';
+      document.getElementById('new-note').value = '';
+      loadDashboard();
+    }
+  } catch (e) {
+    alert('新增失敗: ' + e.message);
+  }
+}
+</script>
