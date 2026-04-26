@@ -240,12 +240,12 @@ def delete_position(pos_id: int):
     return {"message": "已平倉"}
 
 @app.post("/api/price-override")
-def override_price(date: str, price: float):
+def override_price(data: dict):
     conn = get_db()
-    conn.execute("INSERT OR REPLACE INTO price_overrides (date,price) VALUES (?,?)", (date, price))
+    conn.execute("INSERT OR REPLACE INTO price_overrides (date,price) VALUES (?,?)", (data.get('date'), data.get('price')))
     conn.commit()
     conn.close()
-    return {"message": f"已覆蓋 {date} 的價格為 {price}"}
+    return {"message": f"已覆蓋 {data.get('date')} 的價格為 {data.get('price')}"}
 
 @app.post("/api/snapshot")
 def save_snapshot():
