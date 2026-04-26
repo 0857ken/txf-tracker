@@ -283,7 +283,7 @@ def init_stock_db():
     conn = get_db()
     conn.execute("""CREATE TABLE IF NOT EXISTS stock_positions (
         id INTEGER PRIMARY KEY AUTOINCREMENT,
-        symbol TEXT, name TEXT, shares INTEGER,
+        symbol TEXT, name TEXT, shares REAL,
         cost_price REAL, alert_high REAL, alert_low REAL,
         status TEXT DEFAULT 'active'
     )""")
@@ -332,7 +332,7 @@ def get_stocks():
 
 class StockCreate(BaseModel):
     symbol: str
-    shares: int
+    shares: float
     cost_price: float
     alert_high: Optional[float] = None
     alert_low: Optional[float] = None
