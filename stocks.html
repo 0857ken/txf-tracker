@@ -59,7 +59,7 @@
   </div>
 
   <div class="card">
-    <div class="label">資產明細</div>
+    <div class="label">資產明細（股票/ETF/基金）</div>
     <table>
       <thead><tr><th>代號</th><th>名稱</th><th>股數</th><th>成本價</th><th>現價</th><th>損益(%)</th><th>提醒上限</th><th>提醒下限</th><th>操作</th></tr></thead>
       <tbody id="stock-tbody"><tr><td colspan="9">載入中...</td></tr></tbody>
@@ -70,9 +70,13 @@
     <div class="label">新增持倉</div>
     <table>
       <tr>
-        <td>代號: <input type="text" id="new-symbol" placeholder="2330" style="width:80px"></td>
-        <td>股數: <input type="number" id="new-shares" placeholder="100" style="width:80px"></td>
-        <td>成本價: <input type="number" id="new-cost" step="0.1" placeholder="600" style="width:80px"></td>
+        <td>類別: <select id="new-type" style="background:var(--bg3);color:var(--text);border:1px solid var(--border);padding:6px;border-radius:4px;font-family:var(--mono);font-size:12px">
+          <option value="stock">股票/ETF</option>
+          <option value="fund">基金</option>
+        </select></td>
+        <td>代號/名稱: <input type="text" id="new-symbol" placeholder="2330 或 基金名" style="width:120px"></td>
+        <td>股數/單位: <input type="number" id="new-shares" placeholder="100" style="width:80px"></td>
+        <td>成本價/淨值: <input type="number" id="new-cost" step="0.0001" placeholder="600" style="width:80px"></td>
         <td>提醒上限: <input type="number" id="new-high" step="0.1" placeholder="700" style="width:80px"></td>
         <td>提醒下限: <input type="number" id="new-low" step="0.1" placeholder="500" style="width:80px"></td>
         <td><button onclick="addStock()">新增</button></td>
@@ -125,19 +129,23 @@ async function loadStocks() {
 }
 
 async function addStock() {
+  const type = document.getElementById('new-type').value;
   const symbol = document.getElementById('new-symbol').value;
-  const shares = parseInt(document.getElementById('new-shares').value);
+  const shares = parseFloat(document.getElementById('new-shares').value);
   const cost = parseFloat(document.getElementById('new-cost').value);
   const high = parseFloat(document.getElementById('new-high').value) || null;
   const low = parseFloat(document.getElementById('new-low').value) || null;
   
   if (!symbol || !shares || !cost) return alert('請填寫代號、股數和成本價');
   
+  // 基金 prefix "FUND:" 讓後端不要去抓股價
+  const finalSymbol = type === 'fund' ? 'FUND:' + symbol : symbol;
+  
   try {
     const res = await fetch(API + '/api/stocks', {
       method: 'POST',
       headers: {'Content-Type': 'application/json'},
-      body: JSON.stringify({symbol, shares, cost_price: cost, alert_high: high, alert_low: low})
+      body: JSON.stringify({symbol: finalSymbol, shares, cost_price: cost, alert_high: high, alert_low: low})
     });
     if (res.ok) {
       alert('已新增');
