@@ -123,11 +123,14 @@ async function calculateAssets() {
   try {
     const res = await fetch(API + '/api/dashboard');
     txfData = await res.json();
+    const currentPrice = txfData.market.current_price;
     txfData.positions.forEach(p => {
-      // 微台保證金 50000/口（粗估），市值 = 保證金 + 未實現損益
-      const margin = p.lots * 50000;
-      totalCost += margin;
-      totalValue += margin + p.pnl_twd;
+      // 點價：MXF (微台) = 10元/點，TXF (小台) = 50元/點
+      const pointValue = p.type === 'TXF' ? 50 : 10;
+      const cost = p.entry_price * pointValue * p.lots;
+      const value = currentPrice * pointValue * p.lots;
+      totalCost += cost;
+      totalValue += value;
     });
   } catch (e) { console.error(e); }
   
@@ -177,9 +180,11 @@ async function renderPnlDetail() {
     const data = await res.json();
     const positions = data.positions || [];
     
+    const currentPrice = data.market.current_price;
     positions.forEach(p => {
-      const cost = p.entry_price * p.lots * 10;  // 假設微台
-      const value = p.pnl_twd + cost;
+      const pointValue = p.type === 'TXF' ? 50 : 10;
+      const cost = p.entry_price * pointValue * p.lots;
+      const value = currentPrice * pointValue * p.lots;
       const pnlPct = ((p.pnl_twd / cost) * 100).toFixed(2);
       const color = p.pnl_twd >= 0 ? 'green' : 'red';
       html += `
