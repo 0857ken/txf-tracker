@@ -91,6 +91,13 @@
       </div>
     </div>
   </div>
+  <div class="card">
+    <div class="label">總損益明細</div>
+    <table id="pnl-detail-table">
+      <thead><tr><th>項目</th><th>類別</th><th>成本</th><th>市值</th><th>損益</th><th>報酬率</th></tr></thead>
+      <tbody id="pnl-detail-tbody"><tr><td colspan="6" style="color:var(--muted)">載入中...</td></tr></tbody>
+    </table>
+  </div>
 </main>
 
 <script>
@@ -124,6 +131,82 @@ function calculateAssets() {
   
   renderPie(totalMarketValue, cash);
   renderAssetTable();
+  renderPnlDetail(txfMargin, txfPrice, txfLots);
+}
+
+async function renderPnlDetail(txfMargin, txfPrice, txfLots) {
+  const tbody = document.getElementById('pnl-detail-tbody');
+  let html = '';
+  
+  // 台指期明細
+  try {
+    const res = await fetch(API + '/api/dashboard');
+    const data = await res.json();
+    const positions = data.positions || [];
+    
+    positions.forEach(p => {
+      const cost = p.entry_price * p.lots * 10;  // 假設微台
+      const value = p.pnl_twd + cost;
+      const pnlPct = ((p.pnl_twd / cost) * 100).toFixed(2);
+      const color = p.pnl_twd >= 0 ? 'green' : 'red';
+      html += `
+        <tr>
+          <td>${p.type} ${p.note || ''}</td>
+          <td>台指期</td>
+          <td>${cost.toLocaleString()}</td>
+          <td>${value.toLocaleString()}</td>
+          <td class="${color}">${(p.pnl_twd >= 0 ? '+' : '') + p.pnl_twd.toLocaleString()}</td>
+          <td class="${color}">${(p.pnl_twd >= 0 ? '+' : '') + pnlPct}%</td>
+        </tr>
+      `;
+    });
+  } catch (e) {
+    console.error(e);
+  }
+  
+  // 股票/基金明細
+  try {
+    const res = await fetch(API + '/api/stocks');
+    const stocks = await res.json();
+    
+    stocks.forEach(s => {
+      const cost = s.cost_price * s.shares;
+      const value = (s.current_price || 0) * s.shares;
+      const pnl = s.pnl_twd || 0;
+      const pnlPct = s.pnl_pct || 0;
+      const color = pnl >= 0 ? 'green' : 'red';
+      const type = s.symbol.startsWith('FUND:') ? '基金' : '股票/ETF';
+      html += `
+        <tr>
+          <td>${s.symbol.replace('FUND:', '')} ${s.name || ''}</td>
+          <td>${type}</td>
+          <td>${cost.toLocaleString()}</td>
+          <td>${value ? Math.round(value).toLocaleString() : '—'}</td>
+          <td class="${color}">${pnl ? (pnl >= 0 ? '+' : '') + pnl.toLocaleString() : '—'}</td>
+          <td class="${color}">${pnlPct ? (pnlPct >= 0 ? '+' : '') + pnlPct + '%' : '—'}</td>
+        </tr>
+      `;
+    });
+  } catch (e) {
+    console.error(e);
+  }
+  
+  // 自訂資產
+  assets.forEach(a => {
+    html += `
+      <tr>
+        <td>${a.type}</td>
+        <td>自訂</td>
+        <td>${a.value.toLocaleString()}</td>
+        <td>${a.value.toLocaleString()}</td>
+        <td>—</td>
+        <td>—</td>
+      </tr>
+    `;
+  });
+  
+  if (!html) html = '<tr><td colspan="6" style="color:var(--muted)">尚無持倉</td></tr>';
+  tbody.innerHTML = html;
 }
 
 function renderPie(marketValue, cash) {
