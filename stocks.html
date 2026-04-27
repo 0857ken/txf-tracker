@@ -114,11 +114,39 @@ async function loadStocks() {
       });
     } catch (e) { console.error('TXF error:', e); }
     
+    // 先加台指期列
+    let txfRows = '';
+    try {
+      const txfRes = await fetch(API + '/api/dashboard');
+      const txfData = await txfRes.json();
+      const currentPrice = txfData.market.current_price;
+      txfData.positions.forEach(p => {
+        const pointValue = p.type === 'TXF' ? 50 : 10;
+        const cost = p.entry_price * pointValue * p.lots;
+        const value = currentPrice * pointValue * p.lots;
+        const pnl = p.pnl_twd;
+        const pnlPct = ((pnl / cost) * 100).toFixed(2);
+        const color = pnl >= 0 ? 'green' : 'red';
+        totalValue += value;
+        txfRows += `
+          <tr style="opacity:0.85">
+            <td>${p.type}</td>
+            <td>台指期</td>
+            <td>${p.lots} 口</td>
+            <td>${p.entry_price.toLocaleString()}</td>
+            <td>${currentPrice.toLocaleString()}</td>
+            <td class="${color}">${(pnl >= 0 ? '+' : '') + pnl.toLocaleString()} (${pnlPct}%)</td>
+            <td>—</td><td>—</td><td>—</td>
+          </tr>
+        `;
+      });
+    } catch (e) { console.error('TXF error:', e); }
+    
     const tbody = document.getElementById('stock-tbody');
-    if (stocks.length === 0) {
+    if (stocks.length === 0 && !txfRows) {
       tbody.innerHTML = '<tr><td colspan="9" style="color:var(--muted)">尚無持倉</td></tr>';
     } else {
-      tbody.innerHTML = stocks.map(s => {
+      tbody.innerHTML = txfRows + stocks.map(s => {
         const value = (s.current_price || 0) * s.shares;
         totalValue += value;
         const pnlColor = (s.pnl_twd || 0) >= 0 ? 'green' : 'red';
