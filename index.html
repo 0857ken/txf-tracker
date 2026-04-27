@@ -173,6 +173,7 @@ async function loadDashboard() {
     pnlEl.className = 'value ' + (pnl >= 0 ? 'green' : 'red');
     pnlEl.textContent = (pnl >= 0 ? '+' : '') + pnl.toLocaleString() + ' 元';
     
+    document.getElementById('hard-floor').textContent = data.hard_floor.toLocaleString();
     document.getElementById('ma5').textContent = data.market.ma5.toLocaleString();
     document.getElementById('ma20').textContent = data.market.ma20.toLocaleString();
     document.getElementById('ma60').textContent = data.market.ma60.toLocaleString();
