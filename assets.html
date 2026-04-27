@@ -120,17 +120,19 @@ async function calculateAssets() {
   let stocksData = [];
   
   // 抓台指期資料
+  let txfMarginUsed = 0;  // 期貨佔用保證金（算進現金扣除）
   try {
     const res = await fetch(API + '/api/dashboard');
     txfData = await res.json();
     const currentPrice = txfData.market.current_price;
     txfData.positions.forEach(p => {
-      // 點價：MXF (微台) = 10元/點，TXF (小台) = 50元/點
+      // 保證金：微台 30000/口、小台 135000/口
+      const margin = p.type === 'TXF' ? 135000 : 30000;
       const pointValue = p.type === 'TXF' ? 50 : 10;
-      const cost = p.entry_price * pointValue * p.lots;
-      const value = currentPrice * pointValue * p.lots;
-      totalCost += cost;
-      totalValue += value;
+      txfMarginUsed += margin * p.lots;
+      // 市值 = 保證金 + 未實現損益
+      totalCost += margin * p.lots;
+      totalValue += margin * p.lots + p.pnl_twd;
     });
   } catch (e) { console.error(e); }
   
