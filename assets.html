@@ -267,13 +267,55 @@ async function renderPnlDetail() {
   tbody.innerHTML = html;
 }
 
-function renderPie(marketValue, cash) {
+async function renderPie(marketValue, cash) {
   const ctx = document.getElementById('pie').getContext('2d');
   if (pieChart) pieChart.destroy();
   
-  const data = [marketValue, cash];
-  const labels = ['投資資產', '現金'];
-  const colors = ['#3d9eff', '#00e5a0'];
+  const labels = [];
+  const data = [];
+  const colors = [];
+  const colorPalette = ['#3d9eff', '#00e5a0', '#ffd32a', '#ff9f43', '#ff6b9d', '#a55eea', '#26d0ce', '#fd79a8', '#fdcb6e', '#6c5ce7'];
+  let colorIdx = 0;
+  
+  // 台指期每筆部位
+  try {
+    const res = await fetch(API + '/api/dashboard');
+    const txfData = await res.json();
+    const currentPrice = txfData.market.current_price;
+    txfData.positions.forEach(p => {
+      const pointValue = p.type === 'TXF' ? 50 : 10;
+      const value = currentPrice * pointValue * p.lots;
+      labels.push(`${p.type} ${p.lots}口`);
+      data.push(value);
+      colors.push(colorPalette[colorIdx++ % colorPalette.length]);
+    });
+  } catch(e) { console.error(e); }
+  
+  // 股票/基金每筆
+  try {
+    const res = await fetch(API + '/api/stocks');
+    const stocks = await res.json();
+    stocks.forEach(s => {
+      const value = (s.current_price || s.cost_price) * s.shares;
+      labels.push(s.symbol.replace('FUND:', ''));
+      data.push(value);
+      colors.push(colorPalette[colorIdx++ % colorPalette.length]);
+    });
+  } catch(e) { console.error(e); }
+  
+  // 自訂資產
+  assets.forEach(a => {
+    labels.push(a.type);
+    data.push(a.value);
+    colors.push(colorPalette[colorIdx++ % colorPalette.length]);
+  });
+  
+  // 現金
+  if (cash > 0) {
+    labels.push('現金');
+    data.push(cash);
+    colors.push('#4a6070');
+  }
   
   pieChart = new Chart(ctx, {
     type: 'doughnut',
@@ -290,7 +332,23 @@ function renderPie(marketValue, cash) {
       responsive: true,
       maintainAspectRatio: false,
       plugins: {
-        legend: { labels: { color: '#c8d8e8', font: { family: 'DM Sans' } } }
+        legend: { 
+          position: 'right',
+          labels: { 
+            color: '#c8d8e8', 
+            font: { family: 'DM Sans', size: 11 },
+            padding: 8
+          } 
+        },
+        tooltip: {
+          callbacks: {
+            label: function(ctx) {
+              const total = ctx.dataset.data.reduce((a,b)=>a+b,0);
+              const pct = ((ctx.raw / total) * 100).toFixed(1);
+              return `${ctx.label}: ${Math.round(ctx.raw).toLocaleString()} (${pct}%)`;
+            }
+          }
+        }
       }
     }
   });
