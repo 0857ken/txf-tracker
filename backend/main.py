@@ -370,3 +370,88 @@ def get_snapshots():
     cur.close()
     conn.close()
     return rows
+
+class PartialClose(BaseModel):
+    lots: float
+    exit_price: float
+    note: Optional[str] = ""
+
+@app.post("/api/positions/{pos_id}/close")
+def close_position(pos_id: int, data: PartialClose):
+    conn = get_db()
+    cur = conn.cursor()
+    cur.execute("SELECT * FROM positions WHERE id=%s", (pos_id,))
+    pos = cur.fetchone()
+    if not pos:
+        cur.close()
+        conn.close()
+        raise HTTPException(404, "找不到部位")
+    pos = dict(pos)
+    remaining = pos["lots"] - data.lots
+    pnl = (data.exit_price - pos["entry_price"]) * MICRO_POINT_VALUE * data.lots
+    cur.execute(
+        "INSERT INTO realized_pnl (date, lots, entry_price, exit_price, pnl_twd, note) VALUES (%s, %s, %s, %s, %s, %s)",
+        (str(datetime.now().date()), data.lots, pos["entry_price"], data.exit_price, round(pnl, 0), pos["type"] + " " + (data.note or ""))
+    )
+    if remaining <= 0:
+        cur.execute("UPDATE positions SET status='closed' WHERE id=%s", (pos_id,))
+    else:
+        cur.execute("UPDATE positions SET lots=%s WHERE id=%s", (remaining, pos_id))
+    conn.commit()
+    cur.close()
+    conn.close()
+    return {"message": f"已結算 {data.lots} 口，損益 {round(pnl, 0)} 元"}
+
+@app.put("/api/stocks/{stock_id}")
+def update_stock(stock_id: int, data: dict):
+    conn = get_db()
+    cur = conn.cursor()
+    cur.execute(
+        "UPDATE stock_positions SET shares=%s, cost_price=%s, alert_high=%s, alert_low=%s WHERE id=%s",
+        (data.get('shares'), data.get('cost_price'), data.get('alert_high'), data.get('alert_low'), stock_id)
+    )
+    conn.commit()
+    cur.close()
+    conn.close()
+    return {"message": "已更新"}
+
+class StockSell(BaseModel):
+    shares: float
+    exit_price: float
+    note: Optional[str] = ""
+
+@app.post("/api/stocks/{stock_id}/sell")
+def sell_stock(stock_id: int, data: StockSell):
+    conn = get_db()
+    cur = conn.cursor()
+    cur.execute("SELECT * FROM stock_positions WHERE id=%s", (stock_id,))
+    s = cur.fetchone()
+    if not s:
+        cur.close()
+        conn.close()
+        raise HTTPException(404, "找不到")
+    s = dict(s)
+    remaining = s["shares"] - data.shares
+    pnl = (data.exit_price - s["cost_price"]) * data.shares
+    cur.execute(
+        "INSERT INTO realized_pnl (date, lots, entry_price, exit_price, pnl_twd, note) VALUES (%s, %s, %s, %s, %s, %s)",
+        (str(datetime.now().date()), data.shares, s["cost_price"], data.exit_price, round(pnl, 0), s["symbol"] + " " + (data.note or ""))
+    )
+    if remaining <= 0:
+        cur.execute("UPDATE stock_positions SET status='deleted' WHERE id=%s", (stock_id,))
+    else:
+        cur.execute("UPDATE stock_positions SET shares=%s WHERE id=%s", (remaining, stock_id))
+    conn.commit()
+    cur.close()
+    conn.close()
+    return {"message": f"已結算 {data.shares}，損益 {round(pnl, 0)} 元"}
+
+@app.get("/api/realized-pnl")
+def get_realized_pnl():
+    conn = get_db()
+    cur = conn.cursor()
+    cur.execute("SELECT * FROM realized_pnl ORDER BY date DESC, id DESC")
+    rows = [dict(r) for r in cur.fetchall()]
+    cur.close()
+    conn.close()
+    return rows
