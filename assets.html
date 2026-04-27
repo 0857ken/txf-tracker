@@ -113,22 +113,47 @@ const API = 'https://txf-tracker-production.up.railway.app';
 let assets = JSON.parse(localStorage.getItem('assets')) || [];
 let pieChart = null;
 
-function calculateAssets() {
-  const txfLots = 3;
-  const txfPrice = 38932;
-  const txfMargin = txfLots * 50000;
+async function calculateAssets() {
+  let totalValue = 0;
+  let totalCost = 0;
+  let txfData = null;
+  let stocksData = [];
   
-  let totalValue = txfMargin;
-  let totalCost = txfLots * 37281 * 10;
+  // 抓台指期資料
+  try {
+    const res = await fetch(API + '/api/dashboard');
+    txfData = await res.json();
+    txfData.positions.forEach(p => {
+      // 微台保證金 50000/口（粗估），市值 = 保證金 + 未實現損益
+      const margin = p.lots * 50000;
+      totalCost += margin;
+      totalValue += margin + p.pnl_twd;
+    });
+  } catch (e) { console.error(e); }
   
-  assets.forEach(a => totalValue += a.value);
+  // 抓股票/基金資料
+  try {
+    const res = await fetch(API + '/api/stocks');
+    stocksData = await res.json();
+    stocksData.forEach(s => {
+      const cost = s.cost_price * s.shares;
+      const value = s.current_price ? s.current_price * s.shares : cost;
+      totalCost += cost;
+      totalValue += value;
+    });
+  } catch (e) { console.error(e); }
+  
+  // 自訂資產
+  assets.forEach(a => {
+    totalCost += a.value;
+    totalValue += a.value;
+  });
   
   const cash = 2000000 - totalValue;
-  const totalMarketValue = totalValue;
-  const pnl = totalValue - totalCost - txfMargin;
-  const pnlPct = ((pnl / totalCost) * 100).toFixed(2);
+  const pnl = totalValue - totalCost;
+  const pnlPct = totalCost > 0 ? ((pnl / totalCost) * 100).toFixed(2) : 0;
   
-  document.getElementById('total-value').textContent = Math.round(totalMarketValue).toLocaleString() + ' 元';
+  document.getElementById('total-value').textContent = Math.round(totalValue).toLocaleString() + ' 元';
   const pnlEl = document.getElementById('total-pnl');
   pnlEl.className = 'value ' + (pnl >= 0 ? 'green' : 'red');
   pnlEl.textContent = (pnl >= 0 ? '+' : '') + Math.round(pnl).toLocaleString() + ' 元';
@@ -137,12 +162,12 @@ function calculateAssets() {
   document.getElementById('cash').textContent = Math.round(cash).toLocaleString() + ' 元';
   document.getElementById('cash-pct').textContent = ((cash / 2000000) * 100).toFixed(2) + '%';
   
-  renderPie(totalMarketValue, cash);
+  renderPie(totalValue, cash);
   renderAssetTable();
-  renderPnlDetail(txfMargin, txfPrice, txfLots);
+  renderPnlDetail();
 }
 
-async function renderPnlDetail(txfMargin, txfPrice, txfLots) {
+async function renderPnlDetail() {
   const tbody = document.getElementById('pnl-detail-tbody');
   let html = '';
   
