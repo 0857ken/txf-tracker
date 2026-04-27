@@ -16,7 +16,14 @@ TELEGRAM_TOKEN = os.environ.get("TELEGRAM_TOKEN", "")
 TELEGRAM_CHAT_ID = os.environ.get("TELEGRAM_CHAT_ID", "")
 
 def get_db():
-    return psycopg2.connect(DATABASE_URL, cursor_factory=RealDictCursor)
+    import time
+    for i in range(5):
+        try:
+            return psycopg2.connect(DATABASE_URL, cursor_factory=RealDictCursor)
+        except Exception as e:
+            if i == 4:
+                raise
+            time.sleep(2)
 
 def init_db():
     conn = get_db()
