@@ -103,6 +103,17 @@ async function loadStocks() {
     
     let totalValue = 0;
     
+    // 加上台指期市值
+    try {
+      const txfRes = await fetch(API + '/api/dashboard');
+      const txfData = await txfRes.json();
+      const currentPrice = txfData.market.current_price;
+      txfData.positions.forEach(p => {
+        const pointValue = p.type === 'TXF' ? 50 : 10;
+        totalValue += currentPrice * pointValue * p.lots;
+      });
+    } catch (e) { console.error('TXF error:', e); }
+    
     const tbody = document.getElementById('stock-tbody');
     if (stocks.length === 0) {
       tbody.innerHTML = '<tr><td colspan="9" style="color:var(--muted)">尚無持倉</td></tr>';
