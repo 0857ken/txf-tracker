@@ -92,6 +92,14 @@
     </div>
   </div>
   <div class="card">
+    <div class="label">已實現損益（歷史結算記錄）</div>
+    <table>
+      <thead><tr><th>日期</th><th>項目</th><th>數量</th><th>成本價</th><th>結算價</th><th>損益</th></tr></thead>
+      <tbody id="realized-tbody"><tr><td colspan="6" style="color:var(--muted)">尚無結算記錄</td></tr></tbody>
+    </table>
+  </div>
+
+  <div class="card">
     <div class="label">總損益明細</div>
     <table id="pnl-detail-table">
       <thead><tr><th>項目</th><th>類別</th><th>數量</th><th>成本價</th><th>市值</th><th>損益</th><th>報酬率</th><th>操作</th></tr></thead>
@@ -273,6 +281,36 @@ function addAsset() {
   document.getElementById('asset-type').value = '';
   document.getElementById('asset-value').value = '';
   
+
+async function loadRealized() {
+  try {
+    const res = await fetch(API + '/api/realized-pnl');
+    const records = await res.json();
+    const tbody = document.getElementById('realized-tbody');
+    
+    if (records.length === 0) {
+      tbody.innerHTML = '<tr><td colspan="6" style="color:var(--muted)">尚無結算記錄</td></tr>';
+      return;
+    }
+    
+    tbody.innerHTML = records.map(r => {
+      const color = r.pnl_twd >= 0 ? 'green' : 'red';
+      return `
+        <tr>
+          <td>${r.date}</td>
+          <td>${r.note || '—'}</td>
+          <td>${r.lots}</td>
+          <td>${r.entry_price.toLocaleString()}</td>
+          <td>${r.exit_price.toLocaleString()}</td>
+          <td class="${color}">${(r.pnl_twd >= 0 ? '+' : '') + r.pnl_twd.toLocaleString()}</td>
+        </tr>
+      `;
+    }).join('');
+  } catch (e) {
+    console.error('Realized error:', e);
+  }
+}
+
 async function editPosition(id, currentLots, currentPrice) {
   const lots = prompt('輸入新的口數:', currentLots);
   if (!lots) return;
@@ -287,6 +325,7 @@ async function editPosition(id, currentLots, currentPrice) {
     });
     alert('已更新');
     calculateAssets();
+loadRealized();
   } catch (e) {
     alert('更新失敗');
   }
@@ -308,6 +347,7 @@ async function closePosition(id, maxLots) {
     const data = await res.json();
     alert(data.message);
     calculateAssets();
+    loadRealized();
   } catch (e) {
     alert('結算失敗');
   }
@@ -348,6 +388,7 @@ async function sellStock(id, maxShares, symbol) {
     const data = await res.json();
     alert(data.message);
     calculateAssets();
+    loadRealized();
   } catch (e) {
     alert('結算失敗');
   }
