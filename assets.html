@@ -360,7 +360,7 @@ async function renderPie(marketValue, cash) {
     const res = await fetch(API + '/api/dashboard');
     const txfData = await res.json();
     txfData.positions.forEach(p => {
-      const margin = p.type === 'TXF' ? 184000 : (p.type === 'MXF' ? 46000 : 11500);
+      const margin = p.type === 'TXF' ? 540000 : (p.type === 'MXF' ? 135000 : 30000);
       const value = margin * p.lots;  // 用保證金佔額算
       labels.push(`${p.type} ${p.lots}口`);
       data.push(value);
