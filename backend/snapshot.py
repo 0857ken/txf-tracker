@@ -30,8 +30,7 @@ def get_tw_now():
 def is_trading_day():
     now = get_tw_now()
     if now.weekday() >= 5:
-        print(f'⏭ {now.strftime("%Y-%m-%d")} 是週末，跳過')
-        return False
+        print(f'⚠️ {now.strftime("%Y-%m-%d")} 是週末（仍會記錄）')
     return True
 
 def fetch_yahoo(symbol):
