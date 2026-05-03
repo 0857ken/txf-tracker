@@ -10,21 +10,21 @@ from psycopg2.extras import RealDictCursor
 
 # ============ 期貨合約對照表 ============
 CONTRACT_MULTIPLIER = {
-    'TXF': 200,  # 大台
-    'MXF': 50,   # 小台
-    'TMF': 10,   # 微台
+    'TXF': 200, '大台': 200,
+    'MXF': 50,  '小台': 50,
+    'TMF': 10,  '微台': 10,
 }
 
 CONTRACT_MARGIN = {
-    'TXF': 184000,
-    'MXF': 46000,
-    'TMF': 11500,
+    'TXF': 184000, '大台': 184000,
+    'MXF': 46000,  '小台': 46000,
+    'TMF': 11500,  '微台': 11500,
 }
 
 FUTURES_FEE = {
-    'TXF': 60,
-    'MXF': 30,
-    'TMF': 15,
+    'TXF': 60, '大台': 60,
+    'MXF': 30, '小台': 30,
+    'TMF': 15, '微台': 15,
 }
 
 FUTURES_TAX_RATE = 0.00002
@@ -142,7 +142,7 @@ def init_db():
     # ============ 一次性遷移：MXF→TMF ============
     # 因為以前 MXF 是當微台用，現在改業界標準（MXF=小台、TMF=微台）
     # 把舊資料改成 TMF（微台）
-    cur.execute("UPDATE positions SET type = 'TMF' WHERE type = 'MXF' OR type IS NULL OR type = ''")
+    cur.execute("UPDATE positions SET type = 'TMF' WHERE type IN ('MXF', '微台') OR type IS NULL OR type = ''")
     
     # 加 fee 跟 tax 欄位
     cur.execute("ALTER TABLE realized_pnl ADD COLUMN IF NOT EXISTS fee REAL DEFAULT 0")
