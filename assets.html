@@ -92,7 +92,8 @@
     </div>
   </div>
   <div class="card">
-    <div class="label">已實現損益（歷史結算記錄）</div>
+    <div class="label">已實現損益（累積曲線）</div>
+    <div style="height:200px;margin-bottom:16px"><canvas id="realized-chart"></canvas></div>
     <table>
       <thead><tr><th>日期</th><th>項目</th><th>數量</th><th>成本價</th><th>結算價</th><th>損益</th></tr></thead>
       <tbody id="realized-tbody"><tr><td colspan="6" style="color:var(--muted)">尚無結算記錄</td></tr></tbody>
@@ -390,8 +391,10 @@ async function loadRealized() {
       return;
     }
     
+    // 表格（台灣紅漲綠跌）
     tbody.innerHTML = records.map(r => {
-      const color = r.pnl_twd >= 0 ? 'green' : 'red';
+      const color = r.pnl_twd >= 0 ? 'red' : 'green';
+      const sign = r.pnl_twd >= 0 ? '+' : '';
       return `
         <tr>
           <td>${r.date}</td>
@@ -399,10 +402,53 @@ async function loadRealized() {
           <td>${r.lots}</td>
           <td>${r.entry_price.toLocaleString()}</td>
           <td>${r.exit_price.toLocaleString()}</td>
-          <td class="${color}">${(r.pnl_twd >= 0 ? '+' : '') + r.pnl_twd.toLocaleString()}</td>
+          <td class="${color}">${sign}${r.pnl_twd.toLocaleString()}</td>
         </tr>
       `;
     }).join('');
+    
+    // 累積曲線圖
+    const sorted = [...records].sort((a, b) => new Date(a.date) - new Date(b.date));
+    let cumulative = 0;
+    const labels = [];
+    const dataPoints = [];
+    sorted.forEach(r => {
+      cumulative += r.pnl_twd;
+      labels.push(r.date);
+      dataPoints.push(cumulative);
+    });
+    
+    const ctx = document.getElementById('realized-chart').getContext('2d');
+    if (window.realizedChart) window.realizedChart.destroy();
+    window.realizedChart = new Chart(ctx, {
+      type: 'line',
+      data: {
+        labels: labels,
+        datasets: [{
+          label: '累積已實現損益',
+          data: dataPoints,
+          borderColor: '#d4af37',
+          backgroundColor: 'rgba(212, 175, 55, 0.1)',
+          fill: true,
+          tension: 0.3
+        }]
+      },
+      options: {
+        responsive: true,
+        maintainAspectRatio: false,
+        plugins: { legend: { labels: { color: '#c8d8e8' } } },
+        scales: {
+          x: { 
+            ticks: { autoSkip: true, maxRotation: 0, color: '#c8d8e8' },
+            grid: { color: '#2c4258' }
+          },
+          y: { 
+            ticks: { color: '#c8d8e8' },
+            grid: { color: '#2c4258' }
+          }
+        }
+      }
+    });
   } catch (e) {
     console.error('Realized error:', e);
   }
