@@ -553,9 +553,6 @@ async function sellStock(id, maxShares, symbol) {
   }
 }
 
-calculateAssets();
-}
-
 function deleteAsset(i) {
   assets.splice(i, 1);
   localStorage.setItem('assets', JSON.stringify(assets));
