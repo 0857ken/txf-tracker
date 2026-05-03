@@ -147,6 +147,12 @@ def init_db():
     # 加 fee 跟 tax 欄位
     cur.execute("ALTER TABLE realized_pnl ADD COLUMN IF NOT EXISTS fee REAL DEFAULT 0")
     cur.execute("ALTER TABLE realized_pnl ADD COLUMN IF NOT EXISTS tax REAL DEFAULT 0")
+    
+    # 擴充 pnl_snapshots 變成 Equity Curve
+    cur.execute("ALTER TABLE pnl_snapshots ADD COLUMN IF NOT EXISTS total_equity REAL")
+    cur.execute("ALTER TABLE pnl_snapshots ADD COLUMN IF NOT EXISTS cash REAL")
+    cur.execute("ALTER TABLE pnl_snapshots ADD COLUMN IF NOT EXISTS stock_value REAL")
+    cur.execute("ALTER TABLE pnl_snapshots ADD COLUMN IF NOT EXISTS realized_today REAL DEFAULT 0")
     # ============================================
     
     conn.commit()
