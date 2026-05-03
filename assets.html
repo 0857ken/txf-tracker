@@ -376,7 +376,8 @@ function addAsset() {
   localStorage.setItem('assets', JSON.stringify(assets));
   document.getElementById('asset-type').value = '';
   document.getElementById('asset-value').value = '';
-  
+  calculateAssets();
+}
 
 async function loadRealized() {
   try {
