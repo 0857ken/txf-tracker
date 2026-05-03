@@ -56,6 +56,8 @@ def take_snapshot():
     today = get_tw_now().strftime('%Y-%m-%d')
     
     twii_price = fetch_yahoo('%5ETWII')
+    # 抓台指期價（更準確算期貨損益）
+    txf_price = fetch_yahoo('TXF=F') or twii_price
     
     cur.execute("SELECT * FROM positions WHERE status='open'")
     positions = cur.fetchall()
@@ -68,9 +70,9 @@ def take_snapshot():
     for p in positions:
         ct = p.get('type') or 'TMF'
         multiplier = CONTRACT_MULTIPLIER.get(ct, 10)
-        margin = CONTRACT_MARGIN.get(ct, 11500)
+        margin = CONTRACT_MARGIN.get(ct, 30000)
         cost = p['entry_price'] * multiplier * p['lots']
-        value = (twii_price or p['entry_price']) * multiplier * p['lots']
+        value = (txf_price or p['entry_price']) * multiplier * p['lots']
         futures_market_value += value
         futures_cost += cost
         futures_margin += margin * p['lots']
