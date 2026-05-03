@@ -7,11 +7,57 @@ from typing import Optional
 import psycopg2
 from psycopg2.extras import RealDictCursor
 
+
+# ============ 期貨合約對照表 ============
+CONTRACT_MULTIPLIER = {
+    'TXF': 200,  # 大台
+    'MXF': 50,   # 小台
+    'TMF': 10,   # 微台
+}
+
+CONTRACT_MARGIN = {
+    'TXF': 184000,
+    'MXF': 46000,
+    'TMF': 11500,
+}
+
+FUTURES_FEE = {
+    'TXF': 60,
+    'MXF': 30,
+    'TMF': 15,
+}
+
+FUTURES_TAX_RATE = 0.00002
+
+def get_multiplier(t):
+    return CONTRACT_MULTIPLIER.get(t, 10)
+
+def get_margin(t):
+    return CONTRACT_MARGIN.get(t, 11500)
+
+def get_fee(t):
+    return FUTURES_FEE.get(t, 15)
+
+def calc_futures_pnl(entry_price, exit_price, lots, contract_type):
+    """計算期貨淨損益（含手續費 + 期交稅）"""
+    multiplier = get_multiplier(contract_type)
+    fee = get_fee(contract_type)
+    gross_pnl = (exit_price - entry_price) * multiplier * lots
+    total_fee = fee * 2 * lots
+    tax = (entry_price + exit_price) * multiplier * lots * FUTURES_TAX_RATE
+    net_pnl = gross_pnl - total_fee - tax
+    return {
+        'gross_pnl': gross_pnl,
+        'fee': total_fee,
+        'tax': tax,
+        'net_pnl': net_pnl
+    }
+# ========================================
+
 app = FastAPI()
 app.add_middleware(CORSMiddleware, allow_origins=["*"], allow_methods=["*"], allow_headers=["*"])
 
 DATABASE_URL = os.environ.get("DATABASE_URL")
-MICRO_POINT_VALUE = 10
 TELEGRAM_TOKEN = os.environ.get("TELEGRAM_TOKEN", "")
 TELEGRAM_CHAT_ID = os.environ.get("TELEGRAM_CHAT_ID", "")
 
@@ -90,8 +136,19 @@ def init_db():
     if cur.fetchone()['cnt'] == 0:
         cur.execute(
             "INSERT INTO positions (date, type, lots, entry_price, note, status) VALUES (%s, %s, %s, %s, %s, 'open')",
-            ('2026-04-26', 'MXF', 3, 38627, '初始建倉')
+            ('2026-04-26', 'TMF', 3, 38627, '初始建倉')
         )
+    
+    # ============ 一次性遷移：MXF→TMF ============
+    # 因為以前 MXF 是當微台用，現在改業界標準（MXF=小台、TMF=微台）
+    # 把舊資料改成 TMF（微台）
+    cur.execute("UPDATE positions SET type = 'TMF' WHERE type = 'MXF' OR type IS NULL OR type = ''")
+    
+    # 加 fee 跟 tax 欄位
+    cur.execute("ALTER TABLE realized_pnl ADD COLUMN IF NOT EXISTS fee REAL DEFAULT 0")
+    cur.execute("ALTER TABLE realized_pnl ADD COLUMN IF NOT EXISTS tax REAL DEFAULT 0")
+    # ============================================
+    
     conn.commit()
     cur.close()
     conn.close()
@@ -160,7 +217,9 @@ def dashboard():
     positions = []
     total_pnl = 0
     for p in open_positions:
-        pnl = (market["current_price"] - p["entry_price"]) * MICRO_POINT_VALUE * p["lots"]
+        contract_type = p.get("type") or "TMF"
+        multiplier = get_multiplier(contract_type)
+        pnl = (market["current_price"] - p["entry_price"]) * multiplier * p["lots"]
         total_pnl += pnl
         positions.append({**p, "pnl_twd": round(pnl, 0)})
     
@@ -388,10 +447,19 @@ def close_position(pos_id: int, data: PartialClose):
         raise HTTPException(404, "找不到部位")
     pos = dict(pos)
     remaining = pos["lots"] - data.lots
-    pnl = (data.exit_price - pos["entry_price"]) * MICRO_POINT_VALUE * data.lots
+    contract_type = pos.get("type") or "TMF"
+    pnl_result = calc_futures_pnl(
+        entry_price=pos["entry_price"],
+        exit_price=data.exit_price,
+        lots=data.lots,
+        contract_type=contract_type
+    )
+    pnl = pnl_result["net_pnl"]
+    fee = pnl_result["fee"]
+    tax = pnl_result["tax"]
     cur.execute(
-        "INSERT INTO realized_pnl (date, lots, entry_price, exit_price, pnl_twd, note) VALUES (%s, %s, %s, %s, %s, %s)",
-        (str(datetime.now().date()), data.lots, pos["entry_price"], data.exit_price, round(pnl, 0), pos["type"] + " " + (data.note or ""))
+        "INSERT INTO realized_pnl (date, lots, entry_price, exit_price, pnl_twd, fee, tax, note) VALUES (%s, %s, %s, %s, %s, %s, %s, %s)",
+        (str(datetime.now().date()), data.lots, pos["entry_price"], data.exit_price, round(pnl, 0), round(fee, 0), round(tax, 0), pos["type"] + " " + (data.note or ""))
     )
     if remaining <= 0:
         cur.execute("UPDATE positions SET status='closed' WHERE id=%s", (pos_id,))
@@ -434,8 +502,8 @@ def sell_stock(stock_id: int, data: StockSell):
     remaining = s["shares"] - data.shares
     pnl = (data.exit_price - s["cost_price"]) * data.shares
     cur.execute(
-        "INSERT INTO realized_pnl (date, lots, entry_price, exit_price, pnl_twd, note) VALUES (%s, %s, %s, %s, %s, %s)",
-        (str(datetime.now().date()), data.shares, s["cost_price"], data.exit_price, round(pnl, 0), s["symbol"] + " " + (data.note or ""))
+        "INSERT INTO realized_pnl (date, lots, entry_price, exit_price, pnl_twd, fee, tax, note) VALUES (%s, %s, %s, %s, %s, %s, %s, %s)",
+        (str(datetime.now().date()), data.shares, s["cost_price"], data.exit_price, round(pnl, 0), 0, 0, s["symbol"] + " " + (data.note or ""))
     )
     if remaining <= 0:
         cur.execute("UPDATE stock_positions SET status='deleted' WHERE id=%s", (stock_id,))
