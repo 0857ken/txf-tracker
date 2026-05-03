@@ -21,7 +21,8 @@
   .nav a.active { color: var(--blue); border-bottom: 1px solid var(--blue); }
   main { max-width: 1400px; margin: 0 auto; padding: 24px 28px; }
   .card { background: var(--bg2); border: 1px solid var(--border); border-radius: 10px; padding: 18px; margin-bottom: 20px; }
-  .grid-4 { display: grid; grid-template-columns: repeat(4, 1fr); gap: 14px; margin-bottom: 20px; }
+  .grid-5 { display: grid; grid-template-columns: repeat(5, 1fr); gap: 16px; margin-bottom: 20px; }
+.grid-4 { display: grid; grid-template-columns: repeat(4, 1fr); gap: 14px; margin-bottom: 20px; }
   .grid-2 { display: grid; grid-template-columns: 1.6fr 1fr; gap: 14px; margin-bottom: 20px; }
   .label { font-size: 11px; color: var(--muted); letter-spacing: 1px; text-transform: uppercase; margin-bottom: 8px; }
   .value { font-family: var(--mono); font-size: 24px; font-weight: 500; }
@@ -49,7 +50,7 @@
 </header>
 
 <main>
-  <div class="grid-4">
+  <div class="grid-5">
     <div class="card">
       <div class="label">台指期數 現價</div>
       <div class="value blue" id="price">—</div>
@@ -57,6 +58,14 @@
       <div style="margin-top:12px">
         <input type="number" id="override-price" placeholder="輸入今日收盤價" step="0.1" style="width:140px">
         <button onclick="overridePrice()" class="yellow">校對</button>
+      </div>
+    </div>
+    <div class="card">
+      <div class="label">期現價差</div>
+      <div class="value" id="spread">—</div>
+      <div class="sub" id="spread-status">—</div>
+      <div style="margin-top:10px;padding-top:10px;border-top:1px solid var(--border);font-size:11px;color:var(--muted)">
+        加權：<span id="twii-price" style="font-family:var(--mono)">—</span>
       </div>
     </div>
     <div class="card">
@@ -166,6 +175,27 @@ async function loadDashboard() {
     const data = await res.json();
     
     document.getElementById('price').textContent = data.market.current_price.toLocaleString();
+    
+    // 期現價差顯示（台灣紅漲綠跌）
+    const spread = data.market.spread;
+    const twiiPrice = data.market.twii_price;
+    const spreadEl = document.getElementById('spread');
+    const statusEl = document.getElementById('spread-status');
+    const twiiEl = document.getElementById('twii-price');
+    
+    if (twiiPrice) {
+      twiiEl.textContent = twiiPrice.toLocaleString();
+    }
+    
+    if (spread !== null && spread !== undefined) {
+      const sign = spread >= 0 ? '+' : '';
+      spreadEl.textContent = sign + spread.toFixed(0) + ' 點';
+      spreadEl.className = 'value ' + (spread >= 0 ? 'red' : 'green');
+      statusEl.textContent = spread >= 0 ? '正價差（看多）' : '逆價差（看空）';
+    } else {
+      spreadEl.textContent = '—';
+      statusEl.textContent = '盤後';
+    }
     document.getElementById('data-source').textContent = data.market.data_source + ' · ' + new Date().toLocaleTimeString('zh-TW');
     
     const pnl = data.total_pnl_twd;
