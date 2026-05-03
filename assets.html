@@ -421,8 +421,7 @@ async function renderPie(marketValue, cash) {
         tooltip: {
           callbacks: {
             label: function(ctx) {
-              const total = ctx.dataset.data.reduce((a,b)=>a+b,0);
-              const pct = ((ctx.raw / total) * 100).toFixed(1);
+              const pct = ((ctx.raw / 2000000) * 100).toFixed(2);
               return `${ctx.label}: ${Math.round(ctx.raw).toLocaleString()} (${pct}%)`;
             }
           }
