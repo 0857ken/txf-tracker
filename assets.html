@@ -408,23 +408,41 @@ async function loadRealized() {
 }
 
 async function editPosition(id, currentLots, currentPrice) {
-  const lots = prompt('輸入新的口數:', currentLots);
-  if (!lots) return;
-  const price = prompt('輸入新的成本價:', currentPrice);
-  if (!price) return;
+  const dialog = document.getElementById('edit-dialog');
+  const confirmBtn = document.getElementById('dialog-confirm');
+  document.getElementById('dialog-title').textContent = '編輯部位';
+  document.getElementById('dialog-amount').value = currentLots;
+  document.getElementById('dialog-price').value = currentPrice;
+  dialog.showModal();
   
-  try {
-    await fetch(API + '/api/positions/' + id, {
-      method: 'PATCH',
-      headers: {'Content-Type': 'application/json'},
-      body: JSON.stringify({lots: parseFloat(lots), entry_price: parseFloat(price)})
-    });
-    alert('已更新');
-    calculateAssets();
-loadRealized();
-  } catch (e) {
-    alert('更新失敗');
-  }
+  confirmBtn.onclick = async () => {
+    const amountVal = document.getElementById('dialog-amount').value;
+    const priceVal = document.getElementById('dialog-price').value;
+    if (amountVal === '' || priceVal === '') return;
+    
+    const newLots = parseFloat(amountVal);
+    const newPrice = parseFloat(priceVal);
+    
+    confirmBtn.disabled = true;
+    confirmBtn.textContent = '更新中...';
+    
+    try {
+      const res = await fetch(API + '/api/positions/' + id, {
+        method: 'PATCH',
+        headers: {'Content-Type': 'application/json'},
+        body: JSON.stringify({lots: newLots, entry_price: newPrice})
+      });
+      if (!res.ok) throw new Error('更新失敗');
+      dialog.close();
+      calculateAssets();
+      loadRealized();
+    } catch (e) {
+      alert('更新失敗：' + e.message);
+    } finally {
+      confirmBtn.disabled = false;
+      confirmBtn.textContent = '確認更新';
+    }
+  };
 }
 
 async function closePosition(id, maxLots) {
@@ -450,22 +468,67 @@ async function closePosition(id, maxLots) {
 }
 
 async function editStock(id, currentShares, currentPrice) {
-  const shares = prompt('輸入新的股數/單位:', currentShares);
-  if (!shares) return;
-  const cost = prompt('輸入新的成本價:', currentPrice);
-  if (!cost) return;
+  const dialog = document.getElementById('edit-dialog');
+  const confirmBtn = document.getElementById('dialog-confirm');
+  document.getElementById('dialog-title').textContent = '編輯持倉';
+  document.getElementById('dialog-amount').value = currentShares;
+  document.getElementById('dialog-price').value = currentPrice;
+  dialog.showModal();
   
-  try {
-    await fetch(API + '/api/stocks/' + id, {
-      method: 'PUT',
-      headers: {'Content-Type': 'application/json'},
-      body: JSON.stringify({shares: parseFloat(shares), cost_price: parseFloat(cost)})
-    });
-    alert('已更新');
-    calculateAssets();
-  } catch (e) {
-    alert('更新失敗');
-  }
+  confirmBtn.onclick = async () => {
+    const amountVal = document.getElementById('dialog-amount').value;
+    const priceVal = document.getElementById('dialog-price').value;
+    if (amountVal === '' || priceVal === '') return;
+    
+    const newShares = parseFloat(amountVal);
+    const newPrice = parseFloat(priceVal);
+    
+    confirmBtn.disabled = true;
+    confirmBtn.textContent = '更新中...';
+    
+    try {
+      const res = await fetch(API + '/api/stocks/' + id, {
+        method: 'PUT',
+        headers: {'Content-Type': 'application/json'},
+        body: JSON.stringify({shares: newShares, cost_price: newPrice})
+      });
+      if (!res.ok) throw new Error('更新失敗');
+      dialog.close();
+      calculateAssets();
+      loadRealized();
+    } catch (e) {
+      alert('更新失敗：' + e.message);
+    } finally {
+      confirmBtn.disabled = false;
+      confirmBtn.textContent = '確認更新';
+    }
+  };
+}
+
+// 通用刪除函數
+async function deleteItem(id, type, name) {
+  const dialog = document.getElementById('delete-dialog');
+  const confirmBtn = document.getElementById('delete-confirm-btn');
+  document.getElementById('delete-msg').textContent = `確定刪除「${name}」？此操作無法還原。`;
+  dialog.showModal();
+  
+  confirmBtn.onclick = async () => {
+    confirmBtn.disabled = true;
+    confirmBtn.textContent = '刪除中...';
+    
+    try {
+      const res = await fetch(`${API}/api/${type}/${id}`, { method: 'DELETE' });
+      if (!res.ok) throw new Error('刪除失敗');
+      dialog.close();
+      calculateAssets();
+      loadRealized();
+    } catch (e) {
+      alert('刪除失敗：' + e.message);
+    } finally {
+      confirmBtn.disabled = false;
+      confirmBtn.textContent = '確認刪除';
+    }
+  };
 }
 
 async function sellStock(id, maxShares, symbol) {
@@ -501,5 +564,33 @@ function deleteAsset(i) {
 
 calculateAssets();
 </script>
+
+<!-- 編輯彈窗 -->
+<dialog id="edit-dialog" style="background:#112236;color:#c8d8e8;border:1px solid #2c4258;border-radius:12px;padding:24px;min-width:320px;max-width:90%;box-shadow:0 10px 25px rgba(0,0,0,0.5)">
+  <h3 id="dialog-title" style="margin-top:0;font-size:1.2rem;border-bottom:1px solid #2c4258;padding-bottom:12px">編輯</h3>
+  <div style="display:flex;flex-direction:column;gap:16px;margin-top:16px">
+    <label style="font-size:0.9rem;color:#8a9eb1">數量/口數
+      <input id="dialog-amount" type="number" step="any" inputmode="decimal" autofocus style="width:100%;padding:10px;background:#0a1929;color:#fff;border:1px solid #2c4258;border-radius:6px;margin-top:4px;font-size:16px">
+    </label>
+    <label style="font-size:0.9rem;color:#8a9eb1">成本價
+      <input id="dialog-price" type="number" step="any" inputmode="decimal" style="width:100%;padding:10px;background:#0a1929;color:#fff;border:1px solid #2c4258;border-radius:6px;margin-top:4px;font-size:16px">
+    </label>
+    <div style="display:flex;gap:12px;justify-content:flex-end;margin-top:8px">
+      <button onclick="document.getElementById('edit-dialog').close()" style="background:transparent;color:#8a9eb1;border:none;cursor:pointer;padding:8px 16px">取消</button>
+      <button id="dialog-confirm" style="background:#3d9eff;color:#fff;border:none;border-radius:6px;padding:8px 20px;cursor:pointer;font-weight:bold">確認更新</button>
+    </div>
+  </div>
+</dialog>
+
+<!-- 刪除彈窗 -->
+<dialog id="delete-dialog" style="background:#112236;color:#c8d8e8;border:1px solid #ff4d4f;border-radius:12px;padding:24px;min-width:280px;max-width:90%;text-align:center;box-shadow:0 10px 25px rgba(0,0,0,0.5)">
+  <h3 style="margin-top:0;color:#ff4d4f">確認刪除？</h3>
+  <p id="delete-msg" style="font-size:0.9rem;opacity:0.8">刪除後將無法還原此筆紀錄。</p>
+  <div style="display:flex;gap:12px;justify-content:center;margin-top:20px">
+    <button onclick="document.getElementById('delete-dialog').close()" style="background:transparent;color:#8a9eb1;border:none;cursor:pointer;padding:8px 16px">取消</button>
+    <button id="delete-confirm-btn" style="background:#ff4d4f;color:#fff;border:none;border-radius:6px;padding:8px 20px;cursor:pointer;font-weight:bold">確認刪除</button>
+  </div>
+</dialog>
+
 </body>
 </html>
