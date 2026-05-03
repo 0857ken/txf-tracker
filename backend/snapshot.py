@@ -138,7 +138,7 @@ def take_snapshot():
             cash = EXCLUDED.cash,
             stock_value = EXCLUDED.stock_value,
             realized_today = EXCLUDED.realized_today
-    """, (today, twii_price, total_lots, unrealized, avg_cost, dynamic_floor,
+    """, (today, txf_price, total_lots, unrealized, avg_cost, dynamic_floor,
           total_equity, cash, stock_value, realized_today))
     conn.commit()
     cur.close()
