@@ -6,11 +6,20 @@
 <title>微台期追蹤</title>
 <style>
   :root {
-    --bg: #0d1b2a; --bg2: #112236; --bg3: #0a1628;
-    --text: #c8d8e8; --muted: #4a6070; --border: #1e3048;
-    --green: #00e5a0; --red: #ff4757; --blue: #3d9eff;
+    --bg: #0a0e1a;
+    --bg2: #141925;
+    --bg3: #1a2030;
+    --text: #e8eaed;
+    --muted: #6b7280;
+    --border: #252d3d;
+    --gold: #d4af37;
+    --gold-soft: rgba(212, 175, 55, 0.15);
+    --red: #ff3d00;
+    --green: #00c853;
+    --blue: #2196f3;
     --yellow: #ffd32a;
-    --sans: 'DM Sans', sans-serif; --mono: 'DM Mono', monospace;
+    --sans: 'DM Sans', sans-serif;
+    --mono: 'DM Mono', monospace;
   }
   * { box-sizing: border-box; margin: 0; padding: 0; }
   body { background: var(--bg); color: var(--text); font-family: var(--sans); font-size: 14px; }
@@ -200,7 +209,7 @@ async function loadDashboard() {
     
     const pnl = data.total_pnl_twd;
     const pnlEl = document.getElementById('pnl');
-    pnlEl.className = 'value ' + (pnl >= 0 ? 'green' : 'red');
+    pnlEl.className = 'value ' + (pnl >= 0 ? 'red' : 'green');
     pnlEl.textContent = (pnl >= 0 ? '+' : '') + pnl.toLocaleString() + ' 元';
     
     document.getElementById('hard-floor').textContent = data.hard_floor.toLocaleString();
@@ -223,7 +232,7 @@ async function loadDashboard() {
         <td>${p.date}</td><td>${p.type}</td>
         <td><input type="number" id="lots-${i}" value="${p.lots}" style="width:60px"></td>
         <td><input type="number" id="cost-${i}" value="${p.entry_price}" step="0.1" style="width:80px"></td>
-        <td class="${p.pnl_twd >= 0 ? 'green' : 'red'}">${(p.pnl_twd >= 0 ? '+' : '') + p.pnl_twd.toLocaleString()}</td>
+        <td class="${p.pnl_twd >= 0 ? 'red' : 'green'}">${(p.pnl_twd >= 0 ? '+' : '') + p.pnl_twd.toLocaleString()}</td>
         <td>${p.note}</td>
         <td>
           <button onclick="updatePos(${p.id}, ${i})">保存</button>

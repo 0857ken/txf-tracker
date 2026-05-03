@@ -7,10 +7,20 @@
 <script src="https://cdnjs.cloudflare.com/ajax/libs/Chart.js/3.9.1/chart.min.js"></script>
 <style>
   :root {
-    --bg: #0d1b2a; --bg2: #112236; --bg3: #0a1628;
-    --text: #c8d8e8; --muted: #4a6070; --border: #1e3048;
-    --green: #00e5a0; --red: #ff4757; --blue: #3d9eff;
-    --yellow: #ffd32a; --sans: 'DM Sans', sans-serif; --mono: 'DM Mono', monospace;
+    --bg: #0a0e1a;
+    --bg2: #141925;
+    --bg3: #1a2030;
+    --text: #e8eaed;
+    --muted: #6b7280;
+    --border: #252d3d;
+    --gold: #d4af37;
+    --gold-soft: rgba(212, 175, 55, 0.15);
+    --red: #ff3d00;
+    --green: #00c853;
+    --blue: #2196f3;
+    --yellow: #ffd32a;
+    --sans: 'DM Sans', sans-serif;
+    --mono: 'DM Mono', monospace;
   }
   * { box-sizing: border-box; margin: 0; padding: 0; }
   body { background: var(--bg); color: var(--text); font-family: var(--sans); }
@@ -167,7 +177,7 @@ async function calculateAssets() {
   
   document.getElementById('total-value').textContent = Math.round(totalValue).toLocaleString() + ' 元';
   const pnlEl = document.getElementById('total-pnl');
-  pnlEl.className = 'value ' + (pnl >= 0 ? 'green' : 'red');
+  pnlEl.className = 'value ' + (pnl >= 0 ? 'red' : 'green');
   pnlEl.textContent = (pnl >= 0 ? '+' : '') + Math.round(pnl).toLocaleString() + ' 元';
   document.getElementById('total-pct').textContent = (pnl >= 0 ? '+' : '') + pnlPct + '%';
   
@@ -195,7 +205,7 @@ async function renderPnlDetail() {
       const cost = p.entry_price * pointValue * p.lots;
       const value = currentPrice * pointValue * p.lots;
       const pnlPct = ((p.pnl_twd / cost) * 100).toFixed(2);
-      const color = p.pnl_twd >= 0 ? 'green' : 'red';
+      const color = p.pnl_twd >= 0 ? 'red' : 'green';
       html += `
         <tr>
           <td>${p.type} ${p.note || ''}</td>
@@ -226,7 +236,7 @@ async function renderPnlDetail() {
       const value = (s.current_price || 0) * s.shares;
       const pnl = s.pnl_twd || 0;
       const pnlPct = s.pnl_pct || 0;
-      const color = pnl >= 0 ? 'green' : 'red';
+      const color = pnl >= 0 ? 'red' : 'green';
       const type = s.symbol.startsWith('FUND:') ? '基金' : '股票/ETF';
       html += `
         <tr>
