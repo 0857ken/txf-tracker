@@ -507,6 +507,16 @@ def get_snapshots():
     conn.close()
     return rows
 
+@app.delete("/api/snapshots/{snap_id}")
+def delete_snapshot(snap_id: int):
+    conn = get_db()
+    cur = conn.cursor()
+    cur.execute("DELETE FROM pnl_snapshots WHERE id=%s", (snap_id,))
+    conn.commit()
+    cur.close()
+    conn.close()
+    return {"message": "已刪除"}
+
 class PartialClose(BaseModel):
     lots: float
     exit_price: float
