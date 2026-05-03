@@ -158,7 +158,7 @@ async function loadStocks() {
       tbody.innerHTML = txfRows + stocks.map(s => {
         const value = (s.current_price || 0) * s.shares;
         totalValue += value;
-        const pnlColor = (s.pnl_twd || 0) >= 0 ? 'green' : 'red';
+        const pnlColor = (s.pnl_twd || 0) >= 0 ? 'red' : 'green';
         return `
           <tr>
             <td>${s.symbol}</td>
