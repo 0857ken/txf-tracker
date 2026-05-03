@@ -355,26 +355,25 @@ async function renderPie(marketValue, cash) {
   const colorPalette = ['#3d9eff', '#00e5a0', '#ffd32a', '#ff9f43', '#ff6b9d', '#a55eea', '#26d0ce', '#fd79a8', '#fdcb6e', '#6c5ce7'];
   let colorIdx = 0;
   
-  // 台指期每筆部位
+  // 台指期每筆部位（用保證金算大小，現金+保證金+股票成本=200萬）
   try {
     const res = await fetch(API + '/api/dashboard');
     const txfData = await res.json();
-    const currentPrice = txfData.market.current_price;
     txfData.positions.forEach(p => {
-      const pointValue = p.type === 'TXF' ? 50 : 10;
-      const value = currentPrice * pointValue * p.lots;
+      const margin = p.type === 'TXF' ? 184000 : (p.type === 'MXF' ? 46000 : 11500);
+      const value = margin * p.lots;  // 用保證金佔額算
       labels.push(`${p.type} ${p.lots}口`);
       data.push(value);
       colors.push(colorPalette[colorIdx++ % colorPalette.length]);
     });
   } catch(e) { console.error(e); }
   
-  // 股票/基金每筆
+  // 股票/基金每筆（用成本算）
   try {
     const res = await fetch(API + '/api/stocks');
     const stocks = await res.json();
     stocks.forEach(s => {
-      const value = (s.current_price || s.cost_price) * s.shares;
+      const value = s.cost_price * s.shares;
       labels.push(s.symbol.replace('FUND:', ''));
       data.push(value);
       colors.push(colorPalette[colorIdx++ % colorPalette.length]);
