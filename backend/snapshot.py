@@ -94,9 +94,17 @@ def take_snapshot():
     cur.execute("SELECT COALESCE(SUM(pnl_twd), 0) AS total FROM realized_pnl WHERE date=%s", (today,))
     realized_today = float(cur.fetchone()['total'] or 0)
     
-    unrealized = (futures_market_value - futures_cost) + (stock_value - stock_cost)
-    cash = TOTAL_FUND - futures_margin - stock_cost
-    total_equity = cash + futures_market_value + stock_value
+    # 純資產 = 期貨保證金 + 期貨未實現損益 + 股票市值（不再依賴 TOTAL_FUND）
+    futures_unrealized = futures_market_value - futures_cost
+    stock_unrealized = stock_value - stock_cost
+    unrealized = futures_unrealized + stock_unrealized
+    
+    # 期貨佔用：保證金 + 未實現損益（更接近券商顯示）
+    futures_equity = futures_margin + futures_unrealized
+    
+    # 純資產 = 期貨權益 + 股票市值
+    total_equity = futures_equity + stock_value
+    cash = 0  # 不再記錄現金（資料庫保留欄位但不用）
     
     avg_cost = 0
     if total_lots > 0 and positions:
