@@ -360,9 +360,46 @@ def override_price(data: dict):
     return {"message": f"已覆蓋 {data.get('date')} 為 {data.get('price')}"}
 
 # ─────────── 股票 ───────────
+def fetch_twse_price(symbol):
+    """證交所即時報價（盤中 09:00-13:30 才有資料）"""
+    try:
+        if not (symbol.isdigit() and len(symbol) == 4):
+            return None
+        now = datetime.now()
+        tw_hour = (now.hour + 8) % 24
+        is_trading_hour = (now.weekday() < 5 and 
+                          (9 <= tw_hour <= 12 or (tw_hour == 13 and now.minute < 30)))
+        if not is_trading_hour:
+            return None
+        url = f"https://mis.twse.com.tw/stock/api/getStockInfo.jsp?ex_ch=tse_{symbol}.tw&json=1&delay=0"
+        headers = {
+            "User-Agent": "Mozilla/5.0",
+            "Referer": "https://mis.twse.com.tw/stock/fibest.jsp"
+        }
+        req = urllib.request.Request(url, headers=headers)
+        with urllib.request.urlopen(req, timeout=10) as r:
+            data = json.loads(r.read())
+        if data.get("msgArray"):
+            stock = data["msgArray"][0]
+            price = stock.get("z") or stock.get("y")
+            name = stock.get("n", symbol)
+            if price and price != "-":
+                return {"price": round(float(price), 2), "name": name}
+        return None
+    except Exception as e:
+        print(f"TWSE failed for {symbol}: {e}")
+        return None
+
 def fetch_stock_price(symbol):
     if symbol.startswith("FUND:"):
         return {"price": None, "name": symbol.replace("FUND:", "")}
+    
+    # 1. 先試證交所
+    twse_result = fetch_twse_price(symbol)
+    if twse_result:
+        return twse_result
+    
+    # 2. fallback Yahoo
     try:
         tw_symbol = symbol + ".TW" if not symbol.endswith(".TW") else symbol
         url = f"https://query2.finance.yahoo.com/v8/finance/chart/{tw_symbol}?interval=1d&range=5d"
