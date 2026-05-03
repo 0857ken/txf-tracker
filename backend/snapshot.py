@@ -126,8 +126,9 @@ def take_snapshot():
     cur.execute("""
         INSERT INTO pnl_snapshots 
             (date, close_price, total_lots, unrealized_pnl, avg_cost, dynamic_floor,
-             total_equity, cash, stock_value, realized_today)
-        VALUES (%s, %s, %s, %s, %s, %s, %s, %s, %s, %s)
+             total_equity, cash, stock_value, realized_today,
+             futures_unrealized, stock_unrealized)
+        VALUES (%s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s)
         ON CONFLICT (date) DO UPDATE SET
             close_price = EXCLUDED.close_price,
             total_lots = EXCLUDED.total_lots,
@@ -137,9 +138,12 @@ def take_snapshot():
             total_equity = EXCLUDED.total_equity,
             cash = EXCLUDED.cash,
             stock_value = EXCLUDED.stock_value,
-            realized_today = EXCLUDED.realized_today
+            realized_today = EXCLUDED.realized_today,
+            futures_unrealized = EXCLUDED.futures_unrealized,
+            stock_unrealized = EXCLUDED.stock_unrealized
     """, (today, txf_price, total_lots, unrealized, avg_cost, dynamic_floor,
-          total_equity, cash, stock_value, realized_today))
+          total_equity, cash, stock_value, realized_today,
+          futures_unrealized, stock_unrealized))
     conn.commit()
     cur.close()
     conn.close()

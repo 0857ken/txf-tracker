@@ -153,6 +153,8 @@ def init_db():
     cur.execute("ALTER TABLE pnl_snapshots ADD COLUMN IF NOT EXISTS cash REAL")
     cur.execute("ALTER TABLE pnl_snapshots ADD COLUMN IF NOT EXISTS stock_value REAL")
     cur.execute("ALTER TABLE pnl_snapshots ADD COLUMN IF NOT EXISTS realized_today REAL DEFAULT 0")
+    cur.execute("ALTER TABLE pnl_snapshots ADD COLUMN IF NOT EXISTS futures_unrealized REAL")
+    cur.execute("ALTER TABLE pnl_snapshots ADD COLUMN IF NOT EXISTS stock_unrealized REAL")
     # ============================================
     
     conn.commit()
