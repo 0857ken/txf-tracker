@@ -166,22 +166,56 @@ def send_telegram(msg):
     except:
         pass
 
+def fetch_yahoo(symbol, range_param="90d"):
+    """通用抓 Yahoo 報價"""
+    try:
+        url = f"https://query2.finance.yahoo.com/v8/finance/chart/{symbol}?interval=1d&range={range_param}"
+        req = urllib.request.Request(url, headers={"User-Agent": "Mozilla/5.0"})
+        with urllib.request.urlopen(req, timeout=15) as r:
+            data = json.loads(r.read())
+        result = data["chart"]["result"][0]
+        # 即時價格用 meta.regularMarketPrice 比較準
+        meta_price = result.get("meta", {}).get("regularMarketPrice")
+        closes = [c for c in result["indicators"]["quote"][0]["close"] if c]
+        timestamps = result["timestamp"][-len(closes):]
+        return {
+            "current_price": meta_price or closes[-1],
+            "closes": closes,
+            "timestamps": timestamps
+        }
+    except Exception as e:
+        print(f"Yahoo fetch failed for {symbol}: {e}")
+        return None
+
 def fetch_price():
-    url = "https://query2.finance.yahoo.com/v8/finance/chart/%5ETWII?interval=1d&range=90d"
-    req = urllib.request.Request(url, headers={"User-Agent": "Mozilla/5.0"})
-    with urllib.request.urlopen(req, timeout=15) as r:
-        data = json.loads(r.read())
-    result = data["chart"]["result"][0]
-    closes = [c for c in result["indicators"]["quote"][0]["close"] if c]
-    timestamps = result["timestamp"][-len(closes):]
-    price = closes[-1]
+    # 抓加權指數（現貨）
+    twii = fetch_yahoo("%5ETWII")
+    if not twii:
+        return {}
+    
+    # 抓台指期（期貨）
+    txf = fetch_yahoo("TXF=F", "5d")
+    
+    closes = twii["closes"]
+    timestamps = twii["timestamps"]
+    twii_price = twii["current_price"]
+    
+    # MA 計算（用加權指數）
     ma5 = sum(closes[-5:]) / min(5, len(closes))
     ma20 = sum(closes[-20:]) / min(20, len(closes))
     ma60 = sum(closes[-60:]) / min(60, len(closes))
     dates = [datetime.fromtimestamp(ts).strftime("%Y-%m-%d") for ts in timestamps]
     chart = [{"date": d, "close": round(c, 0)} for d, c in zip(dates[-30:], closes[-30:])]
+    
+    # 期現價差
+    txf_price = txf["current_price"] if txf else None
+    spread = round(txf_price - twii_price, 0) if txf_price else None
+    
     return {
-        "current_price": price,
+        "current_price": txf_price or twii_price,  # 主要顯示台指期，沒抓到 fallback 加權
+        "twii_price": round(twii_price, 0),
+        "txf_price": round(txf_price, 0) if txf_price else None,
+        "spread": spread,
         "ma5": round(ma5, 0),
         "ma20": round(ma20, 0),
         "ma60": round(ma60, 0),
