@@ -181,11 +181,18 @@ async function loadStocks() {
       }).join('');
     }
     
-    const remaining = 2000000 - totalValue;
-    const remainingPct = (remaining / 2000000 * 100).toFixed(2);
-    document.getElementById('total-value').textContent = Math.round(totalValue).toLocaleString() + ' 元';
-    document.getElementById('remaining').textContent = Math.round(remaining).toLocaleString() + ' 元';
-    document.getElementById('remaining-pct').textContent = remainingPct + '%';
+    // 只更新存在的元素
+    const totalEl = document.getElementById('total-value');
+    if (totalEl) totalEl.textContent = Math.round(totalValue).toLocaleString() + ' 元';
+    
+    const remainingEl = document.getElementById('remaining');
+    if (remainingEl) {
+      const remaining = 2000000 - totalValue;
+      const remainingPct = (remaining / 2000000 * 100).toFixed(2);
+      remainingEl.textContent = Math.round(remaining).toLocaleString() + ' 元';
+      const pctEl = document.getElementById('remaining-pct');
+      if (pctEl) pctEl.textContent = remainingPct + '%';
+    }
   } catch (e) {
     console.error('Error:', e);
   }
