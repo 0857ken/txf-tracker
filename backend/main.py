@@ -155,6 +155,22 @@ def init_db():
     cur.execute("ALTER TABLE pnl_snapshots ADD COLUMN IF NOT EXISTS realized_today REAL DEFAULT 0")
     cur.execute("ALTER TABLE pnl_snapshots ADD COLUMN IF NOT EXISTS futures_unrealized REAL")
     cur.execute("ALTER TABLE pnl_snapshots ADD COLUMN IF NOT EXISTS stock_unrealized REAL")
+    
+    # 通知記錄表（含冷卻判斷用）
+    cur.execute("""
+        CREATE TABLE IF NOT EXISTS notifications (
+            id SERIAL PRIMARY KEY,
+            alert_key TEXT NOT NULL,
+            alert_type TEXT,
+            symbol TEXT,
+            message TEXT,
+            sent_at TIMESTAMP DEFAULT NOW()
+        )
+    """)
+    cur.execute("CREATE INDEX IF NOT EXISTS idx_alert_key_time ON notifications(alert_key, sent_at DESC)")
+    
+    # stock_positions 加上 notify_enabled 欄位
+    cur.execute("ALTER TABLE stock_positions ADD COLUMN IF NOT EXISTS notify_enabled BOOLEAN DEFAULT TRUE")
     # ============================================
     
     conn.commit()
@@ -163,16 +179,79 @@ def init_db():
 
 init_db()
 
-def send_telegram(msg):
+# 全域通知開關（環境變數控制）
+NOTIFICATIONS_ENABLED = os.environ.get('NOTIFICATIONS_ENABLED', 'true').lower() != 'false'
+
+# 冷卻時間（分鐘）
+ALERT_COOLDOWN_MINUTES = 10
+
+def send_telegram(msg, alert_key=None, alert_type=None, symbol=None):
+    """
+    發送 Telegram 通知（含冷卻邏輯）
+    alert_key: 唯一識別這個警戒（例如 'txf_floor_break'、'stock_2330_high'）
+    冷卻：同一 alert_key 在 ALERT_COOLDOWN_MINUTES 內不重發
+    """
+    # 全域開關
+    if not NOTIFICATIONS_ENABLED:
+        return False
+    
     if not TELEGRAM_TOKEN or not TELEGRAM_CHAT_ID:
-        return
+        return False
+    
+    # 冷卻判斷
+    if alert_key:
+        try:
+            conn = get_db()
+            cur = conn.cursor()
+            cur.execute("""
+                SELECT sent_at FROM notifications 
+                WHERE alert_key=%s 
+                ORDER BY sent_at DESC LIMIT 1
+            """, (alert_key,))
+            last = cur.fetchone()
+            cur.close()
+            conn.close()
+            
+            if last:
+                from datetime import datetime, timedelta
+                last_time = last['sent_at'] if isinstance(last['sent_at'], datetime) else datetime.fromisoformat(str(last['sent_at']))
+                # 確保 timezone aware 比較
+                if last_time.tzinfo is None:
+                    cutoff = datetime.now() - timedelta(minutes=ALERT_COOLDOWN_MINUTES)
+                else:
+                    from datetime import timezone
+                    cutoff = datetime.now(timezone.utc) - timedelta(minutes=ALERT_COOLDOWN_MINUTES)
+                if last_time > cutoff:
+                    return False  # 冷卻中
+        except Exception as e:
+            print(f"冷卻檢查失敗: {e}")
+    
+    # 發送 Telegram
     try:
         url = f"https://api.telegram.org/bot{TELEGRAM_TOKEN}/sendMessage"
         data = json.dumps({"chat_id": TELEGRAM_CHAT_ID, "text": msg, "parse_mode": "HTML"}).encode()
         req = urllib.request.Request(url, data=data, headers={"Content-Type": "application/json"})
         urllib.request.urlopen(req, timeout=10)
-    except:
-        pass
+        
+        # 記錄到資料庫
+        if alert_key:
+            try:
+                conn = get_db()
+                cur = conn.cursor()
+                cur.execute("""
+                    INSERT INTO notifications (alert_key, alert_type, symbol, message)
+                    VALUES (%s, %s, %s, %s)
+                """, (alert_key, alert_type, symbol, msg))
+                conn.commit()
+                cur.close()
+                conn.close()
+            except Exception as e:
+                print(f"通知記錄失敗: {e}")
+        
+        return True
+    except Exception as e:
+        print(f"Telegram 失敗: {e}")
+        return False
 
 def fetch_yahoo(symbol, range_param="90d"):
     """通用抓 Yahoo 報價"""
@@ -268,12 +347,91 @@ def dashboard():
     avg_cost = sum(p["entry_price"]*p["lots"] for p in open_positions) / sum(p["lots"] for p in open_positions) if open_positions else 0
     hard_floor = round(avg_cost - 100, 0) if open_positions else 35800
     
-    # Telegram 提醒
-    dist = market["current_price"] - hard_floor
+    # ============ Telegram 警戒系統 ============
+    cp = market["current_price"]
+    today_str = str(datetime.now().date())
+    site_url = "https://ken0857888.github.io/txf-tracker/"
+    
+    # 1. 硬底線警戒
+    dist = cp - hard_floor
+    total_pnl_str = f"\n💰 未實現損益：{round(total_pnl):+,} 元" if total_pnl else ""
+    
     if 0 < dist <= 300:
-        send_telegram(f"⚠️ 台指期警戒！現價 {market['current_price']}，距硬底線 {hard_floor} 僅剩 {round(dist,0)} 點！")
-    if market["current_price"] <= hard_floor:
-        send_telegram(f"🚨 緊急！跌破硬底線！現價 {market['current_price']} ≤ {hard_floor}")
+        send_telegram(
+            f"⚠️ <b>台指期接近硬底線</b>\n"
+            f"現價：{cp:,.0f}\n"
+            f"硬底線：{hard_floor:,.0f}\n"
+            f"距離：僅剩 {round(dist):,} 點"
+            f"{total_pnl_str}\n"
+            f"💡 建議：注意減倉或停損\n"
+            f"🔗 {site_url}",
+            alert_key=f"txf_near_floor_{today_str}",
+            alert_type="floor_warning"
+        )
+    
+    if cp <= hard_floor:
+        send_telegram(
+            f"🚨 <b>跌破硬底線！</b>\n"
+            f"現價：{cp:,.0f}\n"
+            f"硬底線：{hard_floor:,.0f}"
+            f"{total_pnl_str}\n"
+            f"💡 建議：立即停損出場\n"
+            f"🔗 {site_url}",
+            alert_key=f"txf_floor_break_{today_str}",
+            alert_type="floor_break"
+        )
+    
+    # 2. 均線跨越警戒（±1%）
+    for ma_name, ma_value in [("5日線", market.get("ma5")), ("20日線", market.get("ma20")), ("60日線", market.get("ma60"))]:
+        if not ma_value or ma_value == 0:
+            continue
+        diff_pct = (cp - ma_value) / ma_value * 100
+        # ±1% 範圍內視為「跨越中」
+        if 0 < diff_pct < 1:
+            send_telegram(
+                f"📈 <b>台指期突破{ma_name}</b>\n"
+                f"現價：{cp:,.0f}\n"
+                f"{ma_name}：{ma_value:,.0f}\n"
+                f"乖離：+{diff_pct:.2f}%"
+                f"{total_pnl_str}\n"
+                f"💡 建議：留意是否站穩\n"
+                f"🔗 {site_url}",
+                alert_key=f"txf_break_{ma_name}_{today_str}",
+                alert_type="ma_break_up"
+            )
+        elif -1 < diff_pct < 0:
+            send_telegram(
+                f"📉 <b>台指期跌破{ma_name}</b>\n"
+                f"現價：{cp:,.0f}\n"
+                f"{ma_name}：{ma_value:,.0f}\n"
+                f"乖離：{diff_pct:.2f}%"
+                f"{total_pnl_str}\n"
+                f"💡 建議：注意是否反彈或續跌\n"
+                f"🔗 {site_url}",
+                alert_key=f"txf_break_below_{ma_name}_{today_str}",
+                alert_type="ma_break_down"
+            )
+    
+    # 3. 大幅波動警戒（單日 ±7%）
+    chart = market.get("chart_data") or []
+    if len(chart) >= 2:
+        prev_close = chart[-2]["close"]
+        if prev_close:
+            day_change_pct = (cp - prev_close) / prev_close * 100
+            if abs(day_change_pct) >= 7:
+                emoji = "🚀" if day_change_pct > 0 else "🔻"
+                action = "可能過熱，留意拉回" if day_change_pct > 0 else "可能恐慌殺盤，注意風險"
+                send_telegram(
+                    f"{emoji} <b>台指期大幅波動 {day_change_pct:+.2f}%</b>\n"
+                    f"昨收：{prev_close:,.0f}\n"
+                    f"現價：{cp:,.0f}"
+                    f"{total_pnl_str}\n"
+                    f"💡 建議：{action}\n"
+                    f"🔗 {site_url}",
+                    alert_key=f"txf_big_move_{today_str}",
+                    alert_type="big_move"
+                )
+    # ============================================
     
     return {
         "market": {
@@ -443,11 +601,58 @@ def get_stocks():
         pnl = round((price - s["cost_price"]) * s["shares"], 0) if price else None
         pnl_pct = round((price - s["cost_price"]) / s["cost_price"] * 100, 2) if price else None
         
-        if price:
+        # ============ 個股警戒 ============
+        if price and s.get("notify_enabled", True):
+            today_str = str(datetime.now().date())
+            symbol = s["symbol"]
+            display_name = symbol.replace("FUND:", "")
+            site_url = "https://ken0857888.github.io/txf-tracker/stocks.html"
+            pnl_str = f"\n💰 損益：{round(pnl):+,} 元 ({pnl_pct:+.2f}%)" if pnl is not None else ""
+            
+            # 1. 突破警戒
             if s["alert_high"] and price >= s["alert_high"]:
-                send_telegram(f"🚀 {s['symbol']} 突破！現價 {price}")
+                send_telegram(
+                    f"🚀 <b>{display_name} 突破警戒</b>\n"
+                    f"現價：{price:,.2f}\n"
+                    f"目標：{s['alert_high']:,.2f}"
+                    f"{pnl_str}\n"
+                    f"💡 建議：考慮獲利了結或加碼\n"
+                    f"🔗 {site_url}",
+                    alert_key=f"stock_{symbol}_high_{today_str}",
+                    alert_type="stock_high",
+                    symbol=symbol
+                )
+            
+            # 2. 跌破警戒
             if s["alert_low"] and price <= s["alert_low"]:
-                send_telegram(f"⚠️ {s['symbol']} 跌破！現價 {price}")
+                send_telegram(
+                    f"⚠️ <b>{display_name} 跌破警戒</b>\n"
+                    f"現價：{price:,.2f}\n"
+                    f"防線：{s['alert_low']:,.2f}"
+                    f"{pnl_str}\n"
+                    f"💡 建議：考慮停損或減倉\n"
+                    f"🔗 {site_url}",
+                    alert_key=f"stock_{symbol}_low_{today_str}",
+                    alert_type="stock_low",
+                    symbol=symbol
+                )
+            
+            # 3. 大幅波動 ±7%（用成本價當基準粗估，更精準需歷史價）
+            if s["cost_price"] and pnl_pct is not None and abs(pnl_pct) >= 7:
+                emoji = "🚀" if pnl_pct > 0 else "🔻"
+                action = "可考慮獲利出場" if pnl_pct > 0 else "可考慮停損保本"
+                send_telegram(
+                    f"{emoji} <b>{display_name} 大幅波動 {pnl_pct:+.2f}%</b>\n"
+                    f"現價：{price:,.2f}\n"
+                    f"成本：{s['cost_price']:,.2f}"
+                    f"{pnl_str}\n"
+                    f"💡 建議：{action}\n"
+                    f"🔗 {site_url}",
+                    alert_key=f"stock_{symbol}_big_move_{today_str}",
+                    alert_type="stock_big_move",
+                    symbol=symbol
+                )
+        # ====================================
         
         results.append({**s, "current_price": price, "name": info["name"], "pnl_twd": pnl, "pnl_pct": pnl_pct})
     
@@ -464,11 +669,19 @@ class StockCreate(BaseModel):
 
 @app.post("/api/stocks")
 def add_stock(s: StockCreate):
+    # C4: 沒設定警戒時，自動帶 ±10% 預設值
+    alert_high = s.alert_high
+    alert_low = s.alert_low
+    if alert_high is None and s.cost_price:
+        alert_high = round(s.cost_price * 1.10, 2)
+    if alert_low is None and s.cost_price:
+        alert_low = round(s.cost_price * 0.90, 2)
+    
     conn = get_db()
     cur = conn.cursor()
     cur.execute(
         "INSERT INTO stock_positions (symbol, name, shares, cost_price, alert_high, alert_low, status) VALUES (%s, %s, %s, %s, %s, %s, 'active') RETURNING *",
-        (s.symbol.upper(), s.symbol, s.shares, s.cost_price, s.alert_high, s.alert_low)
+        (s.symbol.upper(), s.symbol, s.shares, s.cost_price, alert_high, alert_low)
     )
     row = dict(cur.fetchone())
     conn.commit()
@@ -518,6 +731,78 @@ def delete_snapshot(snap_id: int):
     cur.close()
     conn.close()
     return {"message": "已刪除"}
+
+# ============ 通知管理 API ============
+@app.get("/api/notifications")
+def get_notifications(limit: int = 50):
+    """取得通知歷史"""
+    conn = get_db()
+    cur = conn.cursor()
+    cur.execute("""
+        SELECT * FROM notifications 
+        ORDER BY sent_at DESC 
+        LIMIT %s
+    """, (limit,))
+    rows = [dict(r) for r in cur.fetchall()]
+    cur.close()
+    conn.close()
+    # 把 datetime 轉字串
+    for r in rows:
+        if r.get('sent_at'):
+            r['sent_at'] = str(r['sent_at'])
+    return rows
+
+@app.delete("/api/notifications")
+def clear_notifications():
+    """清空通知歷史"""
+    conn = get_db()
+    cur = conn.cursor()
+    cur.execute("DELETE FROM notifications")
+    conn.commit()
+    cur.close()
+    conn.close()
+    return {"message": "已清空通知歷史"}
+
+@app.get("/api/notifications/status")
+def get_notification_status():
+    """取得通知系統狀態"""
+    return {
+        "enabled": NOTIFICATIONS_ENABLED,
+        "cooldown_minutes": ALERT_COOLDOWN_MINUTES,
+        "telegram_configured": bool(TELEGRAM_TOKEN and TELEGRAM_CHAT_ID)
+    }
+
+@app.put("/api/stocks/{stock_id}/notify")
+def toggle_stock_notify(stock_id: int, data: dict):
+    """切換個股通知開關"""
+    enabled = data.get('enabled', True)
+    conn = get_db()
+    cur = conn.cursor()
+    cur.execute(
+        "UPDATE stock_positions SET notify_enabled=%s WHERE id=%s",
+        (enabled, stock_id)
+    )
+    conn.commit()
+    cur.close()
+    conn.close()
+    return {"message": f"通知{'開啟' if enabled else '關閉'}"}
+
+@app.post("/api/notifications/test")
+def test_notification():
+    """測試通知（不受冷卻限制）"""
+    if not TELEGRAM_TOKEN or not TELEGRAM_CHAT_ID:
+        return {"success": False, "message": "Telegram 未設定"}
+    
+    try:
+        url = f"https://api.telegram.org/bot{TELEGRAM_TOKEN}/sendMessage"
+        msg = "🧪 <b>測試通知</b>\n通知系統運作正常！"
+        data = json.dumps({"chat_id": TELEGRAM_CHAT_ID, "text": msg, "parse_mode": "HTML"}).encode()
+        req = urllib.request.Request(url, data=data, headers={"Content-Type": "application/json"})
+        urllib.request.urlopen(req, timeout=10)
+        return {"success": True, "message": "已發送測試通知"}
+    except Exception as e:
+        return {"success": False, "message": str(e)}
+# ======================================
 
 class PartialClose(BaseModel):
     lots: float
