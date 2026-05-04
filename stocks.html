@@ -171,7 +171,10 @@ async function loadStocks() {
             <td class="${pnlColor}">${s.pnl_twd ? (s.pnl_twd >= 0 ? '+' : '') + s.pnl_twd.toLocaleString() + ' (' + s.pnl_pct + '%)' : '—'}</td>
             <td>${s.alert_high || '—'}</td>
             <td>${s.alert_low || '—'}</td>
-            <td><button onclick="deleteStock(${s.id})" class="red">刪除</button></td>
+            <td>
+            <button onclick="toggleNotify(${s.id}, ${s.notify_enabled !== false})" style="background:${s.notify_enabled !== false ? 'var(--green)' : 'var(--muted)'};font-size:11px;margin-right:4px" title="${s.notify_enabled !== false ? '通知已開' : '通知已關'}">${s.notify_enabled !== false ? '🔔' : '🔕'}</button>
+            <button onclick="deleteStock(${s.id})" class="red">刪除</button>
+          </td>
           </tr>
         `;
       }).join('');
