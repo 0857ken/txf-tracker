@@ -296,7 +296,7 @@ def fetch_price():
     
     # 期現價差
     txf_price = txf["current_price"] if txf else None
-    spread = round(txf_price - twii_price, 0) if txf_price else None
+    spread = round(txf_price - twii_price, 0) if (txf_price and twii_price) else None
     
     return {
         "current_price": txf_price or twii_price,  # 主要顯示台指期，沒抓到 fallback 加權
@@ -327,6 +327,10 @@ def dashboard():
     overridden = False
     if ov:
         market["current_price"] = ov["price"]
+        market["txf_price"] = ov["price"]
+        # 用校對價跟加權算價差
+        if market.get("twii_price"):
+            market["spread"] = round(ov["price"] - market["twii_price"], 0)
         overridden = True
     
     cur.execute("SELECT * FROM positions WHERE status='open'")
