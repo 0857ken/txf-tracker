@@ -172,6 +172,7 @@ async function loadStocks() {
             <td>${s.alert_high || '—'}</td>
             <td>${s.alert_low || '—'}</td>
             <td>
+            <button onclick="editStockAlert(${s.id}, ${s.shares}, ${s.cost_price}, ${s.alert_high || 'null'}, ${s.alert_low || 'null'})" style="background:var(--blue);font-size:11px;margin-right:4px">✏️ 編輯</button>
             <button onclick="toggleNotify(${s.id}, ${s.notify_enabled !== false})" style="background:${s.notify_enabled !== false ? 'var(--green)' : 'var(--muted)'};font-size:11px;margin-right:4px" title="${s.notify_enabled !== false ? '通知已開' : '通知已關'}">${s.notify_enabled !== false ? '🔔' : '🔕'}</button>
             <button onclick="deleteStock(${s.id})" class="red">刪除</button>
           </td>
@@ -232,6 +233,55 @@ async function updatePrice(id, price) {
   }
 }
 
+
+
+async function editStockAlert(id, currentShares, currentCost, currentHigh, currentLow) {
+  const dialog = document.getElementById('alert-edit-dialog');
+  const confirmBtn = document.getElementById('alert-confirm');
+  
+  document.getElementById('alert-shares').value = currentShares;
+  document.getElementById('alert-cost').value = currentCost;
+  document.getElementById('alert-high').value = currentHigh !== null ? currentHigh : '';
+  document.getElementById('alert-low').value = currentLow !== null ? currentLow : '';
+  dialog.showModal();
+  
+  confirmBtn.onclick = async () => {
+    const sharesVal = document.getElementById('alert-shares').value;
+    const costVal = document.getElementById('alert-cost').value;
+    const highVal = document.getElementById('alert-high').value;
+    const lowVal = document.getElementById('alert-low').value;
+    
+    if (sharesVal === '' || costVal === '') {
+      alert('股數跟成本價必填');
+      return;
+    }
+    
+    confirmBtn.disabled = true;
+    confirmBtn.textContent = '儲存中...';
+    
+    try {
+      const body = {
+        shares: parseFloat(sharesVal),
+        cost_price: parseFloat(costVal),
+        alert_high: highVal === '' ? null : parseFloat(highVal),
+        alert_low: lowVal === '' ? null : parseFloat(lowVal)
+      };
+      const res = await fetch(API + '/api/stocks/' + id, {
+        method: 'PUT',
+        headers: {'Content-Type': 'application/json'},
+        body: JSON.stringify(body)
+      });
+      if (!res.ok) throw new Error('儲存失敗');
+      dialog.close();
+      loadStocks();
+    } catch (e) {
+      alert('儲存失敗：' + e.message);
+    } finally {
+      confirmBtn.disabled = false;
+      confirmBtn.textContent = '儲存';
+    }
+  };
+}
 
 async function toggleNotify(id, currentlyEnabled) {
   try {
@@ -318,5 +368,29 @@ document.getElementById('btn-day').classList.add('active');
 setInterval(loadStocks, 60000);
 setInterval(loadHistory, 300000);
 </script>
+
+<!-- 編輯股票警戒對話框 -->
+<dialog id="alert-edit-dialog" style="background:#141925;color:#e8eaed;border:1px solid #252d3d;border-radius:12px;padding:24px;min-width:340px;max-width:90%;box-shadow:0 10px 25px rgba(0,0,0,0.5)">
+  <h3 style="margin-top:0;font-size:1.2rem;border-bottom:1px solid #252d3d;padding-bottom:12px;color:#d4af37">編輯股票/警戒</h3>
+  <div style="display:flex;flex-direction:column;gap:14px;margin-top:16px">
+    <label style="font-size:0.9rem;color:#6b7280">股數
+      <input id="alert-shares" type="number" step="any" inputmode="decimal" style="width:100%;padding:10px;background:#0a0e1a;color:#fff;border:1px solid #252d3d;border-radius:6px;margin-top:4px;font-size:16px">
+    </label>
+    <label style="font-size:0.9rem;color:#6b7280">成本價
+      <input id="alert-cost" type="number" step="any" inputmode="decimal" style="width:100%;padding:10px;background:#0a0e1a;color:#fff;border:1px solid #252d3d;border-radius:6px;margin-top:4px;font-size:16px">
+    </label>
+    <label style="font-size:0.9rem;color:#6b7280">警戒上限（突破通知）
+      <input id="alert-high" type="number" step="any" inputmode="decimal" placeholder="留空=不通知" style="width:100%;padding:10px;background:#0a0e1a;color:#fff;border:1px solid #252d3d;border-radius:6px;margin-top:4px;font-size:16px">
+    </label>
+    <label style="font-size:0.9rem;color:#6b7280">警戒下限（跌破通知）
+      <input id="alert-low" type="number" step="any" inputmode="decimal" placeholder="留空=不通知" style="width:100%;padding:10px;background:#0a0e1a;color:#fff;border:1px solid #252d3d;border-radius:6px;margin-top:4px;font-size:16px">
+    </label>
+    <div style="display:flex;gap:12px;justify-content:flex-end;margin-top:8px">
+      <button onclick="document.getElementById('alert-edit-dialog').close()" style="background:transparent;color:#6b7280;border:none;cursor:pointer;padding:8px 16px">取消</button>
+      <button id="alert-confirm" style="background:#d4af37;color:#0a0e1a;border:none;border-radius:6px;padding:8px 20px;cursor:pointer;font-weight:bold">儲存</button>
+    </div>
+  </div>
+</dialog>
+
 </body>
 </html>
