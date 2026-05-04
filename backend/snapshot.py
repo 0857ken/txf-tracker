@@ -57,16 +57,23 @@ def take_snapshot():
     
     twii_price = fetch_yahoo('%5ETWII')
     
-    # 先看 price_overrides 有沒有手動校對的價格（這就是真正的台指期收盤）
-    cur.execute("SELECT price FROM price_overrides WHERE date=%s ORDER BY date DESC LIMIT 1", (today,))
+    # 1. 先看今天的校對價
+    cur.execute("SELECT price FROM price_overrides WHERE date=%s", (today,))
     ov = cur.fetchone()
     if ov:
         txf_price = float(ov['price'])
-        print(f'📌 使用校對價格: {txf_price}')
+        print(f'📌 使用今日校對價格: {txf_price}')
     else:
-        # 沒校對就 fallback Yahoo（不準但有總比沒有好）
-        txf_price = fetch_yahoo('TXF=F') or twii_price
-        print(f'⚠️ 無校對價，使用 Yahoo: {txf_price}')
+        # 2. 沿用最近一次校對價（適合週末/未校對新一天）
+        cur.execute("SELECT price, date FROM price_overrides ORDER BY date DESC LIMIT 1")
+        latest = cur.fetchone()
+        if latest:
+            txf_price = float(latest['price'])
+            print(f'📌 沿用 {latest["date"]} 的校對價格: {txf_price}')
+        else:
+            # 3. 都沒有就 fallback Yahoo
+            txf_price = fetch_yahoo('TXF=F') or twii_price
+            print(f'⚠️ 無校對價，使用 Yahoo: {txf_price}')
     
     cur.execute("SELECT * FROM positions WHERE status='open'")
     positions = cur.fetchall()
