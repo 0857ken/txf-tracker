@@ -437,16 +437,17 @@ def dashboard():
                 )
     # ============================================
     
+    # spread_type 動態判斷
+    sp = market.get("spread")
+    spread_type = "正價差" if sp and sp >= 0 else ("逆價差" if sp else "—")
+    
     return {
         "market": {
             **market,
-            "twii_price": round(market["current_price"], 0),
-            "txf_price": round(market["current_price"], 0),
-            "spread": 0,
-            "spread_type": "正價差",
             "data_source": "Yahoo Finance",
             "fetched_at": datetime.now().isoformat(),
-            "overridden": overridden
+            "overridden": overridden,
+            "spread_type": spread_type
         },
         "ma_state": {
             "state": "多頭排列" if market["current_price"] > market["ma5"] else "空頭排列",
