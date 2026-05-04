@@ -229,6 +229,21 @@ async function updatePrice(id, price) {
   }
 }
 
+
+async function toggleNotify(id, currentlyEnabled) {
+  try {
+    const res = await fetch(API + '/api/stocks/' + id + '/notify', {
+      method: 'PUT',
+      headers: {'Content-Type': 'application/json'},
+      body: JSON.stringify({enabled: !currentlyEnabled})
+    });
+    if (!res.ok) throw new Error('切換失敗');
+    loadStocks();
+  } catch (e) {
+    alert('切換失敗：' + e.message);
+  }
+}
+
 async function deleteStock(id) {
   if (!confirm('確定刪除？')) return;
   try {
