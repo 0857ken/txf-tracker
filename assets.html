@@ -171,6 +171,18 @@
     </div>
   </div>
   <div class="card">
+    <div class="label">🔔 通知中心</div>
+    <div style="display:flex;gap:12px;align-items:center;flex-wrap:wrap;margin-bottom:14px">
+      <div id="notify-status" style="font-size:14px;color:var(--muted)">載入中...</div>
+      <button onclick="testNotification()" style="background:var(--blue);font-size:13px">📤 測試通知</button>
+      <button onclick="clearNotifications()" style="background:transparent;color:var(--muted);font-size:13px;border:1px solid var(--border)">清空歷史</button>
+    </div>
+    <div style="max-height:200px;overflow-y:auto;border-top:1px solid var(--border);padding-top:10px">
+      <div id="notify-list" style="font-size:13px"></div>
+    </div>
+  </div>
+
+  <div class="card">
     <div class="label">已實現損益（累積曲線）</div>
     <div style="height:200px;margin-bottom:16px"><canvas id="realized-chart"></canvas></div>
     <table class="responsive">
@@ -192,6 +204,59 @@
 const API = 'https://txf-tracker-production.up.railway.app';
 let assets = JSON.parse(localStorage.getItem('assets')) || [];
 let pieChart = null;
+
+async function loadNotifications() {
+  // 系統狀態
+  try {
+    const res = await fetch(API + '/api/notifications/status');
+    const status = await res.json();
+    const statusEl = document.getElementById('notify-status');
+    if (status.telegram_configured && status.enabled) {
+      statusEl.innerHTML = '✅ 通知系統運作中｜冷卻 ' + status.cooldown_minutes + ' 分鐘';
+      statusEl.style.color = 'var(--green)';
+    } else {
+      statusEl.innerHTML = '⚠️ 通知未啟用';
+      statusEl.style.color = 'var(--red)';
+    }
+  } catch (e) {
+    document.getElementById('notify-status').textContent = '無法連線';
+  }
+  
+  // 通知歷史
+  try {
+    const res = await fetch(API + '/api/notifications?limit=20');
+    const records = await res.json();
+    const listEl = document.getElementById('notify-list');
+    if (records.length === 0) {
+      listEl.innerHTML = '<div style="color:var(--muted);padding:8px">尚無通知記錄</div>';
+      return;
+    }
+    listEl.innerHTML = records.map(r => {
+      const time = new Date(r.sent_at).toLocaleString('zh-TW', {month:'2-digit', day:'2-digit', hour:'2-digit', minute:'2-digit'});
+      const msg = (r.message || '').replace(/<[^>]*>/g, '').substring(0, 80);
+      return `
+        <div style="padding:8px 0;border-bottom:1px solid var(--border)">
+          <div style="color:var(--muted);font-size:11px">${time}</div>
+          <div style="margin-top:2px">${msg}${msg.length >= 80 ? '...' : ''}</div>
+        </div>
+      `;
+    }).join('');
+  } catch (e) {
+    console.error('載入通知失敗', e);
+  }
+}
+
+async function testNotification() {
+  const res = await fetch(API + '/api/notifications/test', {method: 'POST'});
+  const data = await res.json();
+  alert(data.message);
+}
+
+async function clearNotifications() {
+  if (!confirm('確定清空所有通知歷史？')) return;
+  await fetch(API + '/api/notifications', {method: 'DELETE'});
+  loadNotifications();
+}
 
 async function calculateAssets() {
   let totalValue = 0;
