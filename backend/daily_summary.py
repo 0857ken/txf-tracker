@@ -92,20 +92,19 @@ def generate_summary():
     positions = cur.fetchall()
     total_pnl = 0
     total_lots = 0
-    futures_margin = 0
+    futures_value = 0
     for p in positions:
         ct = p.get('type') or 'TMF'
         m = CONTRACT_MULTIPLIER.get(ct, 10)
-        margin = CONTRACT_MARGIN.get(ct, 30000)
         pnl = (txf_close - p['entry_price']) * m * p['lots']
         total_pnl += pnl
         total_lots += p['lots']
-        futures_margin += margin * p['lots']
+        futures_value += txf_close * m * p["lots"]
     
     avg_cost = sum(p['entry_price']*p['lots'] for p in positions) / total_lots if total_lots else 0
     hard_floor = round(avg_cost - 100) if avg_cost else 0
     dist_to_floor = round(txf_close - hard_floor) if hard_floor else None
-    futures_equity = futures_margin + total_pnl
+    futures_equity = futures_value
     
     # 股票
     cur.execute("SELECT * FROM stock_positions WHERE status='active'")
@@ -170,7 +169,7 @@ def generate_summary():
     
     # 資產合計
     lines.append("📦 <b>每日資產合計</b>")
-    lines.append(f"  期貨權益：{round(futures_equity):,} 元")
+    lines.append(f"  期貨市值：{round(futures_equity):,} 元")
     lines.append(f"  股票市值：{round(stock_value):,} 元")
     lines.append(f"  <b>總市值：{round(total_value):,} 元</b>")
     lines.append(f"  佔 200 萬：<b>{total_pct:.2f}%</b>")
