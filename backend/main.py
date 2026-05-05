@@ -363,13 +363,20 @@ def dashboard():
         positions.append({**p, "pnl_twd": round(pnl, 0)})
     
     avg_cost = sum(p["entry_price"]*p["lots"] for p in open_positions) / sum(p["lots"] for p in open_positions) if open_positions else 0
-    # 從 settings 讀取獲利保護線 %
-    cur2 = conn.cursor()
-    cur2.execute("SELECT value FROM app_settings WHERE key='profit_protect_pct'")
-    pp_row = cur2.fetchone()
-    cur2.close()
-    profit_protect_pct = float(pp_row['value']) if pp_row else 1.0
-    # 硬底線改為「獲利保護線」：均價 × (1 + X%)
+    # 預設 profit_protect_pct（獨立連線讀取，不影響主流程）
+    profit_protect_pct = 1.0
+    try:
+        conn_s = get_db()
+        cur_s = conn_s.cursor()
+        cur_s.execute("SELECT value FROM app_settings WHERE key='profit_protect_pct'")
+        pp_row = cur_s.fetchone()
+        if pp_row:
+            profit_protect_pct = float(pp_row['value'])
+        cur_s.close()
+        conn_s.close()
+    except Exception as e:
+        print(f"讀取 settings 失敗: {e}")
+    # 獲利保護線：均價 × (1 + X%)
     hard_floor = round(avg_cost * (1 + profit_protect_pct/100), 0) if open_positions else 35800
     
     # ============ Telegram 警戒系統 ============
