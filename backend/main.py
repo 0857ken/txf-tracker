@@ -171,6 +171,20 @@ def init_db():
     
     # stock_positions 加上 notify_enabled 欄位
     cur.execute("ALTER TABLE stock_positions ADD COLUMN IF NOT EXISTS notify_enabled BOOLEAN DEFAULT TRUE")
+    
+    # 系統設定表（key-value）
+    cur.execute("""
+        CREATE TABLE IF NOT EXISTS app_settings (
+            key TEXT PRIMARY KEY,
+            value TEXT,
+            updated_at TIMESTAMP DEFAULT NOW()
+        )
+    """)
+    # 預設值：獲利保護線 = 均價 × 101% (即 +1%)
+    cur.execute("""
+        INSERT INTO app_settings (key, value) VALUES ('profit_protect_pct', '1.0')
+        ON CONFLICT (key) DO NOTHING
+    """)
     # ============================================
     
     conn.commit()
@@ -349,7 +363,14 @@ def dashboard():
         positions.append({**p, "pnl_twd": round(pnl, 0)})
     
     avg_cost = sum(p["entry_price"]*p["lots"] for p in open_positions) / sum(p["lots"] for p in open_positions) if open_positions else 0
-    hard_floor = round(avg_cost - 100, 0) if open_positions else 35800
+    # 從 settings 讀取獲利保護線 %
+    cur2 = conn.cursor()
+    cur2.execute("SELECT value FROM app_settings WHERE key='profit_protect_pct'")
+    pp_row = cur2.fetchone()
+    cur2.close()
+    profit_protect_pct = float(pp_row['value']) if pp_row else 1.0
+    # 硬底線改為「獲利保護線」：均價 × (1 + X%)
+    hard_floor = round(avg_cost * (1 + profit_protect_pct/100), 0) if open_positions else 35800
     
     # ============ Telegram 警戒系統 ============
     cp = market["current_price"]
@@ -791,6 +812,32 @@ def toggle_stock_notify(stock_id: int, data: dict):
     cur.close()
     conn.close()
     return {"message": f"通知{'開啟' if enabled else '關閉'}"}
+
+@app.get("/api/settings")
+def get_settings():
+    """取得系統設定"""
+    conn = get_db()
+    cur = conn.cursor()
+    cur.execute("SELECT key, value FROM app_settings")
+    settings = {r['key']: r['value'] for r in cur.fetchall()}
+    cur.close()
+    conn.close()
+    return settings
+
+@app.put("/api/settings/{key}")
+def update_setting(key: str, data: dict):
+    """更新系統設定"""
+    value = str(data.get('value', ''))
+    conn = get_db()
+    cur = conn.cursor()
+    cur.execute("""
+        INSERT INTO app_settings (key, value, updated_at) VALUES (%s, %s, NOW())
+        ON CONFLICT (key) DO UPDATE SET value=EXCLUDED.value, updated_at=NOW()
+    """, (key, value))
+    conn.commit()
+    cur.close()
+    conn.close()
+    return {"message": f"已更新 {key} = {value}"}
 
 @app.post("/api/notifications/test")
 def test_notification():
