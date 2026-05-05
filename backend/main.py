@@ -1,303 +1,608 @@
 from fastapi import FastAPI, HTTPException
 from fastapi.middleware.cors import CORSMiddleware
+from datetime import datetime, timedelta
+import urllib.request, json, os
 from pydantic import BaseModel
 from typing import Optional
-from datetime import datetime
-import urllib.request
-import json
-import sqlite3
-import os
+import psycopg2
+from psycopg2.extras import RealDictCursor
 
-app = FastAPI(title="台指期追蹤系統", version="1.0.0")
+
+# ============ 期貨合約對照表 ============
+CONTRACT_MULTIPLIER = {
+    'TXF': 200, '大台': 200,
+    'MXF': 50,  '小台': 50,
+    'TMF': 10,  '微台': 10,
+}
+
+CONTRACT_MARGIN = {
+    'TXF': 540000, '大台': 540000,
+    'MXF': 135000, '小台': 135000,
+    'TMF': 30000,  '微台': 30000,
+}
+
+FUTURES_FEE = {
+    'TXF': 60, '大台': 60,
+    'MXF': 30, '小台': 30,
+    'TMF': 15, '微台': 15,
+}
+
+FUTURES_TAX_RATE = 0.00002
+
+def get_multiplier(t):
+    return CONTRACT_MULTIPLIER.get(t, 10)
+
+def get_margin(t):
+    return CONTRACT_MARGIN.get(t, 11500)
+
+def get_fee(t):
+    return FUTURES_FEE.get(t, 15)
+
+def calc_futures_pnl(entry_price, exit_price, lots, contract_type):
+    """計算期貨淨損益（含手續費 + 期交稅）"""
+    multiplier = get_multiplier(contract_type)
+    fee = get_fee(contract_type)
+    gross_pnl = (exit_price - entry_price) * multiplier * lots
+    total_fee = fee * 2 * lots
+    tax = (entry_price + exit_price) * multiplier * lots * FUTURES_TAX_RATE
+    net_pnl = gross_pnl - total_fee - tax
+    return {
+        'gross_pnl': gross_pnl,
+        'fee': total_fee,
+        'tax': tax,
+        'net_pnl': net_pnl
+    }
+# ========================================
+
+app = FastAPI()
 app.add_middleware(CORSMiddleware, allow_origins=["*"], allow_methods=["*"], allow_headers=["*"])
 
-DB_PATH = os.environ.get("DB_PATH", "txf.db")
-HARD_FLOOR = 35800
-MICRO_POINT_VALUE = 10
+DATABASE_URL = os.environ.get("DATABASE_URL")
 TELEGRAM_TOKEN = os.environ.get("TELEGRAM_TOKEN", "")
 TELEGRAM_CHAT_ID = os.environ.get("TELEGRAM_CHAT_ID", "")
 
 def get_db():
-    conn = sqlite3.connect(DB_PATH)
-    conn.row_factory = sqlite3.Row
-    return conn
+    import time
+    for i in range(5):
+        try:
+            return psycopg2.connect(DATABASE_URL, cursor_factory=RealDictCursor)
+        except Exception as e:
+            if i == 4:
+                raise
+            time.sleep(2)
 
 def init_db():
     conn = get_db()
-    conn.executescript("""
+    cur = conn.cursor()
+    cur.execute("""
         CREATE TABLE IF NOT EXISTS positions (
-            id INTEGER PRIMARY KEY AUTOINCREMENT,
-            date TEXT, type TEXT, lots INTEGER,
-            entry_price REAL, note TEXT, status TEXT DEFAULT 'open'
-        );
-        CREATE TABLE IF NOT EXISTS daily_logs (
-            id INTEGER PRIMARY KEY AUTOINCREMENT,
-            date TEXT, close_price REAL, ma5 REAL, ma20 REAL,
-            ma60 REAL, lots INTEGER, note TEXT
-        );
-        CREATE TABLE IF NOT EXISTS price_overrides (
-            date TEXT PRIMARY KEY, price REAL
-        );
-        CREATE TABLE IF NOT EXISTS pnl_snapshots (
-            id INTEGER PRIMARY KEY AUTOINCREMENT,
-            date TEXT UNIQUE, close_price REAL,
-            total_lots INTEGER, unrealized_pnl REAL,
-            avg_cost REAL, dynamic_floor REAL
-        );
-        CREATE TABLE IF NOT EXISTS realized_pnl (
-            id INTEGER PRIMARY KEY AUTOINCREMENT,
-            date TEXT, lots INTEGER, entry_price REAL,
-            exit_price REAL, pnl_twd REAL, note TEXT
-        );
+            id SERIAL PRIMARY KEY,
+            date TEXT,
+            type TEXT,
+            lots REAL,
+            entry_price REAL,
+            note TEXT,
+            status VARCHAR(20) DEFAULT 'open'
+        )
     """)
-    cur = conn.execute("SELECT COUNT(*) FROM positions")
-    if cur.fetchone()[0] == 0:
-        conn.execute("INSERT INTO positions (date,type,lots,entry_price,note,status) VALUES ('2025-04-18','MXF',3,37281,'初始建倉','open')")
+    cur.execute("""
+        CREATE TABLE IF NOT EXISTS price_overrides (
+            date TEXT PRIMARY KEY,
+            price REAL
+        )
+    """)
+    cur.execute("""
+        CREATE TABLE IF NOT EXISTS stock_positions (
+            id SERIAL PRIMARY KEY,
+            symbol TEXT,
+            name TEXT,
+            shares REAL,
+            cost_price REAL,
+            alert_high REAL,
+            alert_low REAL,
+            status VARCHAR(20) DEFAULT 'active'
+        )
+    """)
+    cur.execute("""
+        CREATE TABLE IF NOT EXISTS fund_prices (
+            stock_id INTEGER PRIMARY KEY,
+            price REAL
+        )
+    """)
+    cur.execute("""
+        CREATE TABLE IF NOT EXISTS pnl_snapshots (
+            id SERIAL PRIMARY KEY,
+            date TEXT UNIQUE,
+            close_price REAL,
+            total_lots REAL,
+            unrealized_pnl REAL,
+            avg_cost REAL,
+            dynamic_floor REAL
+        )
+    """)
+    cur.execute("""
+        CREATE TABLE IF NOT EXISTS realized_pnl (
+            id SERIAL PRIMARY KEY,
+            date TEXT,
+            lots REAL,
+            entry_price REAL,
+            exit_price REAL,
+            pnl_twd REAL,
+            note TEXT
+        )
+    """)
+    
+    cur.execute("SELECT COUNT(*) AS cnt FROM positions")
+    if cur.fetchone()['cnt'] == 0:
+        cur.execute(
+            "INSERT INTO positions (date, type, lots, entry_price, note, status) VALUES (%s, %s, %s, %s, %s, 'open')",
+            ('2026-04-26', 'TMF', 3, 38627, '初始建倉')
+        )
+    
+    # ============ 一次性遷移：MXF→TMF ============
+    # 因為以前 MXF 是當微台用，現在改業界標準（MXF=小台、TMF=微台）
+    # 把舊資料改成 TMF（微台）
+    cur.execute("UPDATE positions SET type = 'TMF' WHERE type IN ('MXF', '微台') OR type IS NULL OR type = ''")
+    
+    # 加 fee 跟 tax 欄位
+    cur.execute("ALTER TABLE realized_pnl ADD COLUMN IF NOT EXISTS fee REAL DEFAULT 0")
+    cur.execute("ALTER TABLE realized_pnl ADD COLUMN IF NOT EXISTS tax REAL DEFAULT 0")
+    
+    # 擴充 pnl_snapshots 變成 Equity Curve
+    cur.execute("ALTER TABLE pnl_snapshots ADD COLUMN IF NOT EXISTS total_equity REAL")
+    cur.execute("ALTER TABLE pnl_snapshots ADD COLUMN IF NOT EXISTS cash REAL")
+    cur.execute("ALTER TABLE pnl_snapshots ADD COLUMN IF NOT EXISTS stock_value REAL")
+    cur.execute("ALTER TABLE pnl_snapshots ADD COLUMN IF NOT EXISTS realized_today REAL DEFAULT 0")
+    cur.execute("ALTER TABLE pnl_snapshots ADD COLUMN IF NOT EXISTS futures_unrealized REAL")
+    cur.execute("ALTER TABLE pnl_snapshots ADD COLUMN IF NOT EXISTS stock_unrealized REAL")
+    
+    # 通知記錄表（含冷卻判斷用）
+    cur.execute("""
+        CREATE TABLE IF NOT EXISTS notifications (
+            id SERIAL PRIMARY KEY,
+            alert_key TEXT NOT NULL,
+            alert_type TEXT,
+            symbol TEXT,
+            message TEXT,
+            sent_at TIMESTAMP DEFAULT NOW()
+        )
+    """)
+    cur.execute("CREATE INDEX IF NOT EXISTS idx_alert_key_time ON notifications(alert_key, sent_at DESC)")
+    
+    # stock_positions 加上 notify_enabled 欄位
+    cur.execute("ALTER TABLE stock_positions ADD COLUMN IF NOT EXISTS notify_enabled BOOLEAN DEFAULT TRUE")
+    
+    # 系統設定表（key-value）
+    cur.execute("""
+        CREATE TABLE IF NOT EXISTS app_settings (
+            key TEXT PRIMARY KEY,
+            value TEXT,
+            updated_at TIMESTAMP DEFAULT NOW()
+        )
+    """)
+    # 預設值：獲利保護線 = 均價 × 101% (即 +1%)
+    cur.execute("""
+        INSERT INTO app_settings (key, value) VALUES ('profit_protect_pct', '1.0')
+        ON CONFLICT (key) DO NOTHING
+    """)
+    # ============================================
+    
     conn.commit()
+    cur.close()
     conn.close()
 
 init_db()
 
-def send_telegram(msg: str):
+# 全域通知開關（環境變數控制）
+NOTIFICATIONS_ENABLED = os.environ.get('NOTIFICATIONS_ENABLED', 'true').lower() != 'false'
+
+# 冷卻時間（分鐘）
+ALERT_COOLDOWN_MINUTES = 10
+
+def send_telegram(msg, alert_key=None, alert_type=None, symbol=None):
+    """
+    發送 Telegram 通知（含冷卻邏輯）
+    alert_key: 唯一識別這個警戒（例如 'txf_floor_break'、'stock_2330_high'）
+    冷卻：同一 alert_key 在 ALERT_COOLDOWN_MINUTES 內不重發
+    """
+    # 全域開關
+    if not NOTIFICATIONS_ENABLED:
+        return False
+    
     if not TELEGRAM_TOKEN or not TELEGRAM_CHAT_ID:
-        return
+        return False
+    
+    # 冷卻判斷
+    if alert_key:
+        try:
+            conn = get_db()
+            cur = conn.cursor()
+            cur.execute("""
+                SELECT sent_at FROM notifications 
+                WHERE alert_key=%s 
+                ORDER BY sent_at DESC LIMIT 1
+            """, (alert_key,))
+            last = cur.fetchone()
+            cur.close()
+            conn.close()
+            
+            if last:
+                from datetime import datetime, timedelta
+                last_time = last['sent_at'] if isinstance(last['sent_at'], datetime) else datetime.fromisoformat(str(last['sent_at']))
+                # 確保 timezone aware 比較
+                if last_time.tzinfo is None:
+                    cutoff = datetime.now() - timedelta(minutes=ALERT_COOLDOWN_MINUTES)
+                else:
+                    from datetime import timezone
+                    cutoff = datetime.now(timezone.utc) - timedelta(minutes=ALERT_COOLDOWN_MINUTES)
+                if last_time > cutoff:
+                    return False  # 冷卻中
+        except Exception as e:
+            print(f"冷卻檢查失敗: {e}")
+    
+    # 發送 Telegram
     try:
         url = f"https://api.telegram.org/bot{TELEGRAM_TOKEN}/sendMessage"
         data = json.dumps({"chat_id": TELEGRAM_CHAT_ID, "text": msg, "parse_mode": "HTML"}).encode()
         req = urllib.request.Request(url, data=data, headers={"Content-Type": "application/json"})
         urllib.request.urlopen(req, timeout=10)
-    except:
-        pass
+        
+        # 記錄到資料庫
+        if alert_key:
+            try:
+                conn = get_db()
+                cur = conn.cursor()
+                cur.execute("""
+                    INSERT INTO notifications (alert_key, alert_type, symbol, message)
+                    VALUES (%s, %s, %s, %s)
+                """, (alert_key, alert_type, symbol, msg))
+                conn.commit()
+                cur.close()
+                conn.close()
+            except Exception as e:
+                print(f"通知記錄失敗: {e}")
+        
+        return True
+    except Exception as e:
+        print(f"Telegram 失敗: {e}")
+        return False
 
-def fetch_price():
+def fetch_yahoo(symbol, range_param="90d"):
+    """通用抓 Yahoo 報價"""
     try:
-        def fetch_yahoo(symbol):
-            url = f"https://query2.finance.yahoo.com/v8/finance/chart/{symbol}?interval=1d&range=90d"
-            headers = {"User-Agent": "Mozilla/5.0"}
-            req = urllib.request.Request(url, headers=headers)
-            with urllib.request.urlopen(req, timeout=15) as r:
-                return json.loads(r.read())
-
-        twii_data = fetch_yahoo("%5ETWII")
-        twii_result = twii_data["chart"]["result"][0]
-        closes_raw = twii_result["indicators"]["quote"][0]["close"]
-        timestamps = twii_result["timestamp"]
-        pairs = [(ts,c) for ts,c in zip(timestamps,closes_raw) if c is not None]
-        dates = [datetime.fromtimestamp(ts).strftime("%Y-%m-%d") for ts,_ in pairs]
-        closes = [c for _,c in pairs]
-        twii_price = closes[-1]
-        ma5 = sum(closes[-5:]) / min(5, len(closes))
-        ma20 = sum(closes[-20:]) / min(20, len(closes))
-        ma60 = sum(closes[-60:]) / min(60, len(closes))
-        chart = [{"date": d, "close": round(c, 0)} for d, c in zip(dates[-30:], closes[-30:])]
-
-        try:
-            txf_data = fetch_yahoo("TW%3DF")
-            txf_result = txf_data["chart"]["result"][0]
-            txf_closes = txf_result["indicators"]["quote"][0]["close"]
-            txf_price = round([c for c in txf_closes if c is not None][-1], 0)
-        except:
-            txf_price = round(twii_price, 0)
-
-        spread = round(txf_price - twii_price, 0)
-
+        url = f"https://query2.finance.yahoo.com/v8/finance/chart/{symbol}?interval=1d&range={range_param}"
+        req = urllib.request.Request(url, headers={"User-Agent": "Mozilla/5.0"})
+        with urllib.request.urlopen(req, timeout=15) as r:
+            data = json.loads(r.read())
+        result = data["chart"]["result"][0]
+        # 即時價格用 meta.regularMarketPrice 比較準
+        meta_price = result.get("meta", {}).get("regularMarketPrice")
+        closes = [c for c in result["indicators"]["quote"][0]["close"] if c]
+        timestamps = result["timestamp"][-len(closes):]
         return {
-            "current_price": txf_price,
-            "twii_price": round(twii_price, 0),
-            "txf_price": txf_price,
-            "spread": spread,
-            "spread_type": "正價差" if spread >= 0 else "逆價差",
-            "ma5": round(ma5, 0),
-            "ma20": round(ma20, 0),
-            "ma60": round(ma60, 0),
-            "data_source": "Yahoo Finance",
-            "fetched_at": datetime.now().isoformat(),
-            "chart_data": chart,
-            "overridden": False
+            "current_price": meta_price or closes[-1],
+            "closes": closes,
+            "timestamps": timestamps
         }
     except Exception as e:
-        raise HTTPException(status_code=503, detail=f"報價失敗: {str(e)}")
+        print(f"Yahoo fetch failed for {symbol}: {e}")
+        return None
 
-def classify(price, ma5, ma20, ma60):
-    if price > ma5 and price > ma20 and price > ma60 and ma5 > ma20:
-        return {"state": "多頭排列", "mode": "收割", "color": "green"}
-    elif price > ma5 and ma5 > ma20:
-        return {"state": "5日穿越", "mode": "進攻", "color": "lime"}
-    elif price > ma20:
-        return {"state": "均線走平", "mode": "觀察", "color": "yellow"}
-    else:
-        return {"state": "空頭排列", "mode": "防禦", "color": "red"}
-
-def calc_pnl(pos, price):
-    diff = price - pos["entry_price"]
-    pnl = diff * MICRO_POINT_VALUE * pos["lots"]
-    return {"pnl_twd": round(pnl, 0), "point_diff": round(diff, 0)}
+def fetch_price():
+    # 抓加權指數（現貨）
+    twii = fetch_yahoo("%5ETWII")
+    if not twii:
+        return {}
+    
+    # 抓台指期（期貨）
+    txf = fetch_yahoo("TXF=F", "5d")
+    
+    closes = twii["closes"]
+    timestamps = twii["timestamps"]
+    twii_price = twii["current_price"]
+    
+    # MA 計算（用加權指數）
+    ma5 = sum(closes[-5:]) / min(5, len(closes))
+    ma20 = sum(closes[-20:]) / min(20, len(closes))
+    ma60 = sum(closes[-60:]) / min(60, len(closes))
+    dates = [datetime.fromtimestamp(ts).strftime("%Y-%m-%d") for ts in timestamps]
+    chart = [{"date": d, "close": round(c, 0)} for d, c in zip(dates[-30:], closes[-30:])]
+    
+    # 期現價差
+    txf_price = txf["current_price"] if txf else None
+    spread = round(txf_price - twii_price, 0) if (txf_price and twii_price) else None
+    
+    return {
+        "current_price": txf_price or twii_price,  # 主要顯示台指期，沒抓到 fallback 加權
+        "twii_price": round(twii_price, 0),
+        "txf_price": round(txf_price, 0) if txf_price else None,
+        "spread": spread,
+        "ma5": round(ma5, 0),
+        "ma20": round(ma20, 0),
+        "ma60": round(ma60, 0),
+        "chart_data": chart
+    }
 
 @app.get("/api/dashboard")
 def dashboard():
     market = fetch_price()
-    price = market["current_price"]
-    today = str(datetime.now().date())
+    
+    # 校對價格邏輯
+    now = datetime.now()
+    today = str(now.date())
+    target_date = today
+    if now.hour < 9:
+        target_date = str((now - timedelta(days=1)).date())
+    
     conn = get_db()
-    ov = conn.execute("SELECT price FROM price_overrides WHERE date=?", (today,)).fetchone()
+    cur = conn.cursor()
+    cur.execute("SELECT price FROM price_overrides WHERE date=%s", (target_date,))
+    ov = cur.fetchone()
+    overridden = False
     if ov:
-        price = ov["price"]
-        market["current_price"] = price
-        market["overridden"] = True
-    rows = conn.execute("SELECT * FROM positions WHERE status='open'").fetchall()
+        market["current_price"] = ov["price"]
+        market["txf_price"] = ov["price"]
+        # 用校對價跟加權算價差
+        if market.get("twii_price"):
+            market["spread"] = round(ov["price"] - market["twii_price"], 0)
+        overridden = True
+    
+    cur.execute("SELECT * FROM positions WHERE status='open'")
+    rows = cur.fetchall()
     open_positions = [dict(r) for r in rows]
+    cur.close()
     conn.close()
-
-    if open_positions:
-        total_lots = sum(p["lots"] for p in open_positions)
-        avg_cost = sum(p["entry_price"] * p["lots"] for p in open_positions) / total_lots
-        dynamic_floor = round(avg_cost - 100, 0)
-    else:
-        avg_cost = 0
-        dynamic_floor = HARD_FLOOR
-
-    ma_state = classify(price, market["ma5"], market["ma20"], market["ma60"])
+    
     positions = []
     total_pnl = 0
     for p in open_positions:
-        info = calc_pnl(p, price)
-        total_pnl += info["pnl_twd"]
-        positions.append({**p, **info})
-
-    chart = market["chart_data"]
-    candle = "green" if len(chart) >= 2 and chart[-1]["close"] >= chart[-2]["close"] else "red"
-
-    dist = price - dynamic_floor
+        contract_type = p.get("type") or "TMF"
+        multiplier = get_multiplier(contract_type)
+        pnl = (market["current_price"] - p["entry_price"]) * multiplier * p["lots"]
+        total_pnl += pnl
+        positions.append({**p, "pnl_twd": round(pnl, 0)})
+    
+    avg_cost = sum(p["entry_price"]*p["lots"] for p in open_positions) / sum(p["lots"] for p in open_positions) if open_positions else 0
+    # 預設 profit_protect_pct（獨立連線讀取，不影響主流程）
+    profit_protect_pct = 1.0
+    try:
+        conn_s = get_db()
+        cur_s = conn_s.cursor()
+        cur_s.execute("SELECT value FROM app_settings WHERE key='profit_protect_pct'")
+        pp_row = cur_s.fetchone()
+        if pp_row:
+            profit_protect_pct = float(pp_row['value'])
+        cur_s.close()
+        conn_s.close()
+    except Exception as e:
+        print(f"讀取 settings 失敗: {e}")
+    # 獲利保護線：均價 × (1 + X%)
+    hard_floor = round(avg_cost * (1 + profit_protect_pct/100), 0) if open_positions else 35800
+    
+    # ============ Telegram 警戒系統 ============
+    cp = market["current_price"]
+    today_str = str(datetime.now().date())
+    site_url = "https://ken0857888.github.io/txf-tracker/"
+    
+    # 1. 成本警戒線警戒
+    dist = cp - hard_floor
+    total_pnl_str = f"\n💰 未實現損益：{round(total_pnl):+,} 元" if total_pnl else ""
+    
     if 0 < dist <= 300:
-        send_telegram(f"⚠️ 台指期警戒！現價 {price}，距硬底線 {dynamic_floor} 僅剩 {round(dist, 0)} 點！")
-    if price <= dynamic_floor:
-        send_telegram(f"🚨 緊急！台指期跌破硬底線！現價 {price} ≤ {dynamic_floor}")
-
+        send_telegram(
+            f"⚠️ <b>台指期接近成本警戒線</b>\n"
+            f"現價：{cp:,.0f}\n"
+            f"成本警戒線：{hard_floor:,.0f}\n"
+            f"距離：僅剩 {round(dist):,} 點"
+            f"{total_pnl_str}\n"
+            f"💡 建議：注意減倉或停損\n"
+            f"🔗 {site_url}",
+            alert_key=f"txf_near_floor_{today_str}",
+            alert_type="floor_warning"
+        )
+    
+    if cp <= hard_floor:
+        send_telegram(
+            f"🚨 <b>跌破成本警戒線！</b>\n"
+            f"現價：{cp:,.0f}\n"
+            f"成本警戒線：{hard_floor:,.0f}"
+            f"{total_pnl_str}\n"
+            f"💡 建議：立即停損出場\n"
+            f"🔗 {site_url}",
+            alert_key=f"txf_floor_break_{today_str}",
+            alert_type="floor_break"
+        )
+    
+    # 2. 均線跨越警戒（±1%）
+    for ma_name, ma_value in [("5日線", market.get("ma5")), ("20日線", market.get("ma20")), ("60日線", market.get("ma60"))]:
+        if not ma_value or ma_value == 0:
+            continue
+        diff_pct = (cp - ma_value) / ma_value * 100
+        # ±1% 範圍內視為「跨越中」
+        if 0 < diff_pct < 1:
+            send_telegram(
+                f"📈 <b>台指期突破{ma_name}</b>\n"
+                f"現價：{cp:,.0f}\n"
+                f"{ma_name}：{ma_value:,.0f}\n"
+                f"乖離：+{diff_pct:.2f}%"
+                f"{total_pnl_str}\n"
+                f"💡 建議：留意是否站穩\n"
+                f"🔗 {site_url}",
+                alert_key=f"txf_break_{ma_name}_{today_str}",
+                alert_type="ma_break_up"
+            )
+        elif -1 < diff_pct < 0:
+            send_telegram(
+                f"📉 <b>台指期跌破{ma_name}</b>\n"
+                f"現價：{cp:,.0f}\n"
+                f"{ma_name}：{ma_value:,.0f}\n"
+                f"乖離：{diff_pct:.2f}%"
+                f"{total_pnl_str}\n"
+                f"💡 建議：注意是否反彈或續跌\n"
+                f"🔗 {site_url}",
+                alert_key=f"txf_break_below_{ma_name}_{today_str}",
+                alert_type="ma_break_down"
+            )
+    
+    # 3. 大幅波動警戒（單日 ±7%）
+    chart = market.get("chart_data") or []
+    if len(chart) >= 2:
+        prev_close = chart[-2]["close"]
+        if prev_close:
+            day_change_pct = (cp - prev_close) / prev_close * 100
+            if abs(day_change_pct) >= 7:
+                emoji = "🚀" if day_change_pct > 0 else "🔻"
+                action = "可能過熱，留意拉回" if day_change_pct > 0 else "可能恐慌殺盤，注意風險"
+                send_telegram(
+                    f"{emoji} <b>台指期大幅波動 {day_change_pct:+.2f}%</b>\n"
+                    f"昨收：{prev_close:,.0f}\n"
+                    f"現價：{cp:,.0f}"
+                    f"{total_pnl_str}\n"
+                    f"💡 建議：{action}\n"
+                    f"🔗 {site_url}",
+                    alert_key=f"txf_big_move_{today_str}",
+                    alert_type="big_move"
+                )
+    # ============================================
+    
+    # spread_type 動態判斷
+    sp = market.get("spread")
+    spread_type = "正價差" if sp and sp >= 0 else ("逆價差" if sp else "—")
+    
     return {
-        "market": market,
-        "ma_state": ma_state,
+        "market": {
+            **market,
+            "data_source": "Yahoo Finance",
+            "fetched_at": datetime.now().isoformat(),
+            "overridden": overridden,
+            "spread_type": spread_type
+        },
+        "ma_state": {
+            "state": "多頭排列" if market["current_price"] > market["ma5"] else "空頭排列",
+            "mode": "收割" if market["current_price"] > market["ma5"] else "防禦",
+            "color": "green" if market["current_price"] > market["ma5"] else "red"
+        },
         "positions": positions,
         "total_pnl_twd": round(total_pnl, 0),
-        "hard_floor": dynamic_floor,
+        "hard_floor": hard_floor,
         "avg_cost": round(avg_cost, 0),
-        "checklist": {"below_ma5": price < market["ma5"], "near_floor": 0 < (price - dynamic_floor) <= 300, "at_floor": price <= dynamic_floor}
+        "checklist": {}
     }
-
-@app.get("/api/positions")
-def get_positions():
-    conn = get_db()
-    rows = [dict(r) for r in conn.execute("SELECT * FROM positions").fetchall()]
-    conn.close()
-    return rows
 
 class PositionCreate(BaseModel):
     date: str
     type: str
-    lots: int
+    lots: float
     entry_price: float
     note: Optional[str] = ""
 
 @app.post("/api/positions")
 def add_position(pos: PositionCreate):
     conn = get_db()
-    cur = conn.execute("INSERT INTO positions (date,type,lots,entry_price,note,status) VALUES (?,?,?,?,?,'open')",
-        (pos.date, pos.type, pos.lots, pos.entry_price, pos.note))
+    cur = conn.cursor()
+    cur.execute(
+        "INSERT INTO positions (date, type, lots, entry_price, note, status) VALUES (%s, %s, %s, %s, %s, 'open') RETURNING *",
+        (pos.date, pos.type, pos.lots, pos.entry_price, pos.note)
+    )
+    row = dict(cur.fetchone())
     conn.commit()
-    row = dict(conn.execute("SELECT * FROM positions WHERE id=?", (cur.lastrowid,)).fetchone())
+    cur.close()
     conn.close()
     return row
 
-class PartialClose(BaseModel):
-    lots: int
-    exit_price: float
-    note: Optional[str] = ""
-
-@app.post("/api/positions/{pos_id}/close")
-def close_position(pos_id: int, data: PartialClose):
+@app.get("/api/positions")
+def get_positions():
     conn = get_db()
-    pos = conn.execute("SELECT * FROM positions WHERE id=?", (pos_id,)).fetchone()
-    if not pos:
-        raise HTTPException(404, "找不到部位")
-    pos = dict(pos)
-    remaining = pos["lots"] - data.lots
-    pnl = (data.exit_price - pos["entry_price"]) * MICRO_POINT_VALUE * data.lots
-    conn.execute("INSERT INTO realized_pnl (date,lots,entry_price,exit_price,pnl_twd,note) VALUES (?,?,?,?,?,?)",
-        (str(datetime.now().date()), data.lots, pos["entry_price"], data.exit_price, round(pnl, 0), data.note))
-    if remaining <= 0:
-        conn.execute("UPDATE positions SET status='closed' WHERE id=?", (pos_id,))
-    else:
-        conn.execute("UPDATE positions SET lots=? WHERE id=?", (remaining, pos_id))
-    conn.commit()
+    cur = conn.cursor()
+    cur.execute("SELECT * FROM positions")
+    rows = [dict(r) for r in cur.fetchall()]
+    cur.close()
     conn.close()
-    return {"message": f"已平倉 {data.lots} 口，剩餘 {max(remaining, 0)} 口，損益 {round(pnl, 0)} 元"}
+    return rows
+
+@app.patch("/api/positions/{pos_id}")
+def update_position(pos_id: int, data: dict):
+    conn = get_db()
+    cur = conn.cursor()
+    cur.execute(
+        "UPDATE positions SET lots=%s, entry_price=%s WHERE id=%s",
+        (data.get('lots'), data.get('entry_price'), pos_id)
+    )
+    conn.commit()
+    cur.execute("SELECT * FROM positions WHERE id=%s", (pos_id,))
+    row = dict(cur.fetchone())
+    cur.close()
+    conn.close()
+    return row
 
 @app.delete("/api/positions/{pos_id}")
 def delete_position(pos_id: int):
     conn = get_db()
-    conn.execute("UPDATE positions SET status='closed' WHERE id=?", (pos_id,))
+    cur = conn.cursor()
+    cur.execute("UPDATE positions SET status='closed' WHERE id=%s", (pos_id,))
     conn.commit()
+    cur.close()
     conn.close()
     return {"message": "已平倉"}
 
 @app.post("/api/price-override")
-def override_price(date: str, price: float):
+def override_price(data: dict):
     conn = get_db()
-    conn.execute("INSERT OR REPLACE INTO price_overrides (date,price) VALUES (?,?)", (date, price))
+    cur = conn.cursor()
+    cur.execute(
+        "INSERT INTO price_overrides (date, price) VALUES (%s, %s) ON CONFLICT (date) DO UPDATE SET price=EXCLUDED.price",
+        (data.get('date'), data.get('price'))
+    )
     conn.commit()
+    cur.close()
     conn.close()
-    return {"message": f"已覆蓋 {date} 的價格為 {price}"}
+    return {"message": f"已覆蓋 {data.get('date')} 為 {data.get('price')}"}
 
-@app.post("/api/snapshot")
-def save_snapshot():
-    market = fetch_price()
-    price = market["current_price"]
-    conn = get_db()
-    rows = conn.execute("SELECT * FROM positions WHERE status='open'").fetchall()
-    open_positions = [dict(r) for r in rows]
-    total_lots = sum(p["lots"] for p in open_positions) if open_positions else 0
-    avg_cost = sum(p["entry_price"] * p["lots"] for p in open_positions) / total_lots if open_positions else 0
-    dynamic_floor = round(avg_cost - 100, 0) if open_positions else HARD_FLOOR
-    total_pnl = sum((price - p["entry_price"]) * MICRO_POINT_VALUE * p["lots"] for p in open_positions)
-    today = str(datetime.now().date())
-    conn.execute("INSERT OR REPLACE INTO pnl_snapshots (date,close_price,total_lots,unrealized_pnl,avg_cost,dynamic_floor) VALUES (?,?,?,?,?,?)",
-        (today, price, total_lots, round(total_pnl, 0), round(avg_cost, 0), dynamic_floor))
-    conn.commit()
-    conn.close()
-    return {"message": "快照已儲存", "date": today, "pnl": round(total_pnl, 0)}
+# ─────────── 股票 ───────────
+def fetch_twse_price(symbol):
+    """證交所即時報價（盤中 09:00-13:30 才有資料）"""
+    try:
+        if not (symbol.isdigit() and len(symbol) == 4):
+            return None
+        now = datetime.now()
+        tw_hour = (now.hour + 8) % 24
+        is_trading_hour = (now.weekday() < 5 and 
+                          (9 <= tw_hour <= 12 or (tw_hour == 13 and now.minute < 30)))
+        if not is_trading_hour:
+            return None
+        url = f"https://mis.twse.com.tw/stock/api/getStockInfo.jsp?ex_ch=tse_{symbol}.tw&json=1&delay=0"
+        headers = {
+            "User-Agent": "Mozilla/5.0",
+            "Referer": "https://mis.twse.com.tw/stock/fibest.jsp"
+        }
+        req = urllib.request.Request(url, headers=headers)
+        with urllib.request.urlopen(req, timeout=10) as r:
+            data = json.loads(r.read())
+        if data.get("msgArray"):
+            stock = data["msgArray"][0]
+            price = stock.get("z") or stock.get("y")
+            name = stock.get("n", symbol)
+            if price and price != "-":
+                return {"price": round(float(price), 2), "name": name}
+        return None
+    except Exception as e:
+        print(f"TWSE failed for {symbol}: {e}")
+        return None
 
-@app.get("/api/snapshots")
-def get_snapshots():
-    conn = get_db()
-    rows = [dict(r) for r in conn.execute("SELECT * FROM pnl_snapshots ORDER BY date ASC").fetchall()]
-    conn.close()
-    return rows
-
-@app.get("/api/realized-pnl")
-def get_realized_pnl():
-    conn = get_db()
-    rows = [dict(r) for r in conn.execute("SELECT * FROM realized_pnl ORDER BY date DESC").fetchall()]
-    conn.close()
-    return rows
-
-def init_stock_db():
-    conn = get_db()
-    conn.execute("""CREATE TABLE IF NOT EXISTS stock_positions (
-        id INTEGER PRIMARY KEY AUTOINCREMENT,
-        symbol TEXT, name TEXT, shares INTEGER,
-        cost_price REAL, alert_high REAL, alert_low REAL,
-        status TEXT DEFAULT 'active'
-    )""")
-    conn.commit()
-    conn.close()
-
-init_stock_db()
-
-def fetch_stock_price(symbol: str):
+def fetch_stock_price(symbol):
+    if symbol.startswith("FUND:"):
+        return {"price": None, "name": symbol.replace("FUND:", "")}
+    
+    # 1. 先試證交所
+    twse_result = fetch_twse_price(symbol)
+    if twse_result:
+        return twse_result
+    
+    # 2. fallback Yahoo
     try:
         tw_symbol = symbol + ".TW" if not symbol.endswith(".TW") else symbol
         url = f"https://query2.finance.yahoo.com/v8/finance/chart/{tw_symbol}?interval=1d&range=5d"
-        headers = {"User-Agent": "Mozilla/5.0"}
-        req = urllib.request.Request(url, headers=headers)
+        req = urllib.request.Request(url, headers={"User-Agent": "Mozilla/5.0"})
         with urllib.request.urlopen(req, timeout=10) as r:
             data = json.loads(r.read())
         result = data["chart"]["result"][0]
@@ -311,51 +616,343 @@ def fetch_stock_price(symbol: str):
 @app.get("/api/stocks")
 def get_stocks():
     conn = get_db()
-    rows = [dict(r) for r in conn.execute("SELECT * FROM stock_positions WHERE status='active'").fetchall()]
-    conn.close()
+    cur = conn.cursor()
+    cur.execute("SELECT * FROM stock_positions WHERE status='active'")
+    rows = [dict(r) for r in cur.fetchall()]
+    
     results = []
     for s in rows:
         info = fetch_stock_price(s["symbol"])
         price = info["price"]
+        # 基金讀取手動淨值
+        if s["symbol"].startswith("FUND:"):
+            cur.execute("SELECT price FROM fund_prices WHERE stock_id=%s", (s["id"],))
+            fp = cur.fetchone()
+            if fp:
+                price = fp["price"]
+        
         pnl = round((price - s["cost_price"]) * s["shares"], 0) if price else None
         pnl_pct = round((price - s["cost_price"]) / s["cost_price"] * 100, 2) if price else None
-        if price:
+        
+        # ============ 個股警戒 ============
+        if price and s.get("notify_enabled", True):
+            today_str = str(datetime.now().date())
+            symbol = s["symbol"]
+            display_name = symbol.replace("FUND:", "")
+            site_url = "https://ken0857888.github.io/txf-tracker/stocks.html"
+            pnl_str = f"\n💰 損益：{round(pnl):+,} 元 ({pnl_pct:+.2f}%)" if pnl is not None else ""
+            
+            # 1. 突破警戒
             if s["alert_high"] and price >= s["alert_high"]:
-                send_telegram(f"🚀 {s['symbol']} 突破！現價 {price}")
+                send_telegram(
+                    f"🚀 <b>{display_name} 突破警戒</b>\n"
+                    f"現價：{price:,.2f}\n"
+                    f"目標：{s['alert_high']:,.2f}"
+                    f"{pnl_str}\n"
+                    f"💡 建議：考慮獲利了結或加碼\n"
+                    f"🔗 {site_url}",
+                    alert_key=f"stock_{symbol}_high_{today_str}",
+                    alert_type="stock_high",
+                    symbol=symbol
+                )
+            
+            # 2. 跌破警戒
             if s["alert_low"] and price <= s["alert_low"]:
-                send_telegram(f"⚠️ {s['symbol']} 跌破！現價 {price}")
+                send_telegram(
+                    f"⚠️ <b>{display_name} 跌破警戒</b>\n"
+                    f"現價：{price:,.2f}\n"
+                    f"防線：{s['alert_low']:,.2f}"
+                    f"{pnl_str}\n"
+                    f"💡 建議：考慮停損或減倉\n"
+                    f"🔗 {site_url}",
+                    alert_key=f"stock_{symbol}_low_{today_str}",
+                    alert_type="stock_low",
+                    symbol=symbol
+                )
+            
+            # 3. 大幅波動 ±7%（用成本價當基準粗估，更精準需歷史價）
+            if s["cost_price"] and pnl_pct is not None and abs(pnl_pct) >= 7:
+                emoji = "🚀" if pnl_pct > 0 else "🔻"
+                action = "可考慮獲利出場" if pnl_pct > 0 else "可考慮停損保本"
+                send_telegram(
+                    f"{emoji} <b>{display_name} 大幅波動 {pnl_pct:+.2f}%</b>\n"
+                    f"現價：{price:,.2f}\n"
+                    f"成本：{s['cost_price']:,.2f}"
+                    f"{pnl_str}\n"
+                    f"💡 建議：{action}\n"
+                    f"🔗 {site_url}",
+                    alert_key=f"stock_{symbol}_big_move_{today_str}",
+                    alert_type="stock_big_move",
+                    symbol=symbol
+                )
+        # ====================================
+        
         results.append({**s, "current_price": price, "name": info["name"], "pnl_twd": pnl, "pnl_pct": pnl_pct})
+    
+    cur.close()
+    conn.close()
     return results
 
 class StockCreate(BaseModel):
     symbol: str
-    shares: int
+    shares: float
     cost_price: float
     alert_high: Optional[float] = None
     alert_low: Optional[float] = None
 
 @app.post("/api/stocks")
 def add_stock(s: StockCreate):
+    # C4: 沒設定警戒時，自動帶 ±10% 預設值
+    alert_high = s.alert_high
+    alert_low = s.alert_low
+    if alert_high is None and s.cost_price:
+        alert_high = round(s.cost_price * 1.10, 2)
+    if alert_low is None and s.cost_price:
+        alert_low = round(s.cost_price * 0.90, 2)
+    
     conn = get_db()
-    cur = conn.execute("INSERT INTO stock_positions (symbol,name,shares,cost_price,alert_high,alert_low,status) VALUES (?,?,?,?,?,?,'active')",
-        (s.symbol.upper(), s.symbol, s.shares, s.cost_price, s.alert_high, s.alert_low))
+    cur = conn.cursor()
+    cur.execute(
+        "INSERT INTO stock_positions (symbol, name, shares, cost_price, alert_high, alert_low, status) VALUES (%s, %s, %s, %s, %s, %s, 'active') RETURNING *",
+        (s.symbol.upper(), s.symbol, s.shares, s.cost_price, alert_high, alert_low)
+    )
+    row = dict(cur.fetchone())
     conn.commit()
-    row = dict(conn.execute("SELECT * FROM stock_positions WHERE id=?", (cur.lastrowid,)).fetchone())
+    cur.close()
     conn.close()
     return row
 
 @app.delete("/api/stocks/{stock_id}")
 def delete_stock(stock_id: int):
     conn = get_db()
-    conn.execute("UPDATE stock_positions SET status='deleted' WHERE id=?", (stock_id,))
+    cur = conn.cursor()
+    cur.execute("UPDATE stock_positions SET status='deleted' WHERE id=%s", (stock_id,))
     conn.commit()
+    cur.close()
     conn.close()
     return {"message": "已刪除"}
 
-@app.put("/api/stocks/{stock_id}/alert")
-def update_stock_alert(stock_id: int, alert_high: Optional[float] = None, alert_low: Optional[float] = None):
+@app.put("/api/stocks/{stock_id}/price")
+def update_stock_price(stock_id: int, data: dict):
     conn = get_db()
-    conn.execute("UPDATE stock_positions SET alert_high=?, alert_low=? WHERE id=?", (alert_high, alert_low, stock_id))
+    cur = conn.cursor()
+    cur.execute(
+        "INSERT INTO fund_prices (stock_id, price) VALUES (%s, %s) ON CONFLICT (stock_id) DO UPDATE SET price=EXCLUDED.price",
+        (stock_id, data.get('price'))
+    )
     conn.commit()
+    cur.close()
     conn.close()
-    return {"message": "提醒已更新"}
+    return {"message": "已更新淨值"}
+
+@app.get("/api/snapshots")
+def get_snapshots():
+    conn = get_db()
+    cur = conn.cursor()
+    cur.execute("SELECT * FROM pnl_snapshots ORDER BY date ASC")
+    rows = [dict(r) for r in cur.fetchall()]
+    cur.close()
+    conn.close()
+    return rows
+
+@app.delete("/api/snapshots/{snap_id}")
+def delete_snapshot(snap_id: int):
+    conn = get_db()
+    cur = conn.cursor()
+    cur.execute("DELETE FROM pnl_snapshots WHERE id=%s", (snap_id,))
+    conn.commit()
+    cur.close()
+    conn.close()
+    return {"message": "已刪除"}
+
+# ============ 通知管理 API ============
+@app.get("/api/notifications")
+def get_notifications(limit: int = 50):
+    """取得通知歷史"""
+    conn = get_db()
+    cur = conn.cursor()
+    cur.execute("""
+        SELECT * FROM notifications 
+        ORDER BY sent_at DESC 
+        LIMIT %s
+    """, (limit,))
+    rows = [dict(r) for r in cur.fetchall()]
+    cur.close()
+    conn.close()
+    # 把 datetime 轉字串
+    for r in rows:
+        if r.get('sent_at'):
+            r['sent_at'] = str(r['sent_at'])
+    return rows
+
+@app.delete("/api/notifications")
+def clear_notifications():
+    """清空通知歷史"""
+    conn = get_db()
+    cur = conn.cursor()
+    cur.execute("DELETE FROM notifications")
+    conn.commit()
+    cur.close()
+    conn.close()
+    return {"message": "已清空通知歷史"}
+
+@app.get("/api/notifications/status")
+def get_notification_status():
+    """取得通知系統狀態"""
+    return {
+        "enabled": NOTIFICATIONS_ENABLED,
+        "cooldown_minutes": ALERT_COOLDOWN_MINUTES,
+        "telegram_configured": bool(TELEGRAM_TOKEN and TELEGRAM_CHAT_ID)
+    }
+
+@app.put("/api/stocks/{stock_id}/notify")
+def toggle_stock_notify(stock_id: int, data: dict):
+    """切換個股通知開關"""
+    enabled = data.get('enabled', True)
+    conn = get_db()
+    cur = conn.cursor()
+    cur.execute(
+        "UPDATE stock_positions SET notify_enabled=%s WHERE id=%s",
+        (enabled, stock_id)
+    )
+    conn.commit()
+    cur.close()
+    conn.close()
+    return {"message": f"通知{'開啟' if enabled else '關閉'}"}
+
+@app.get("/api/settings")
+def get_settings():
+    """取得系統設定"""
+    conn = get_db()
+    cur = conn.cursor()
+    cur.execute("SELECT key, value FROM app_settings")
+    settings = {r['key']: r['value'] for r in cur.fetchall()}
+    cur.close()
+    conn.close()
+    return settings
+
+@app.put("/api/settings/{key}")
+def update_setting(key: str, data: dict):
+    """更新系統設定"""
+    value = str(data.get('value', ''))
+    conn = get_db()
+    cur = conn.cursor()
+    cur.execute("""
+        INSERT INTO app_settings (key, value, updated_at) VALUES (%s, %s, NOW())
+        ON CONFLICT (key) DO UPDATE SET value=EXCLUDED.value, updated_at=NOW()
+    """, (key, value))
+    conn.commit()
+    cur.close()
+    conn.close()
+    return {"message": f"已更新 {key} = {value}"}
+
+@app.post("/api/notifications/test")
+def test_notification():
+    """測試通知（不受冷卻限制）"""
+    if not TELEGRAM_TOKEN or not TELEGRAM_CHAT_ID:
+        return {"success": False, "message": "Telegram 未設定"}
+    
+    try:
+        url = f"https://api.telegram.org/bot{TELEGRAM_TOKEN}/sendMessage"
+        msg = "🧪 <b>測試通知</b>\n通知系統運作正常！"
+        data = json.dumps({"chat_id": TELEGRAM_CHAT_ID, "text": msg, "parse_mode": "HTML"}).encode()
+        req = urllib.request.Request(url, data=data, headers={"Content-Type": "application/json"})
+        urllib.request.urlopen(req, timeout=10)
+        return {"success": True, "message": "已發送測試通知"}
+    except Exception as e:
+        return {"success": False, "message": str(e)}
+# ======================================
+
+class PartialClose(BaseModel):
+    lots: float
+    exit_price: float
+    note: Optional[str] = ""
+
+@app.post("/api/positions/{pos_id}/close")
+def close_position(pos_id: int, data: PartialClose):
+    conn = get_db()
+    cur = conn.cursor()
+    cur.execute("SELECT * FROM positions WHERE id=%s", (pos_id,))
+    pos = cur.fetchone()
+    if not pos:
+        cur.close()
+        conn.close()
+        raise HTTPException(404, "找不到部位")
+    pos = dict(pos)
+    remaining = pos["lots"] - data.lots
+    contract_type = pos.get("type") or "TMF"
+    pnl_result = calc_futures_pnl(
+        entry_price=pos["entry_price"],
+        exit_price=data.exit_price,
+        lots=data.lots,
+        contract_type=contract_type
+    )
+    pnl = pnl_result["net_pnl"]
+    fee = pnl_result["fee"]
+    tax = pnl_result["tax"]
+    cur.execute(
+        "INSERT INTO realized_pnl (date, lots, entry_price, exit_price, pnl_twd, fee, tax, note) VALUES (%s, %s, %s, %s, %s, %s, %s, %s)",
+        (str(datetime.now().date()), data.lots, pos["entry_price"], data.exit_price, round(pnl, 0), round(fee, 0), round(tax, 0), pos["type"] + " " + (data.note or ""))
+    )
+    if remaining <= 0:
+        cur.execute("UPDATE positions SET status='closed' WHERE id=%s", (pos_id,))
+    else:
+        cur.execute("UPDATE positions SET lots=%s WHERE id=%s", (remaining, pos_id))
+    conn.commit()
+    cur.close()
+    conn.close()
+    return {"message": f"已結算 {data.lots} 口，損益 {round(pnl, 0)} 元"}
+
+@app.put("/api/stocks/{stock_id}")
+def update_stock(stock_id: int, data: dict):
+    conn = get_db()
+    cur = conn.cursor()
+    cur.execute(
+        "UPDATE stock_positions SET shares=%s, cost_price=%s, alert_high=%s, alert_low=%s WHERE id=%s",
+        (data.get('shares'), data.get('cost_price'), data.get('alert_high'), data.get('alert_low'), stock_id)
+    )
+    conn.commit()
+    cur.close()
+    conn.close()
+    return {"message": "已更新"}
+
+class StockSell(BaseModel):
+    shares: float
+    exit_price: float
+    note: Optional[str] = ""
+
+@app.post("/api/stocks/{stock_id}/sell")
+def sell_stock(stock_id: int, data: StockSell):
+    conn = get_db()
+    cur = conn.cursor()
+    cur.execute("SELECT * FROM stock_positions WHERE id=%s", (stock_id,))
+    s = cur.fetchone()
+    if not s:
+        cur.close()
+        conn.close()
+        raise HTTPException(404, "找不到")
+    s = dict(s)
+    remaining = s["shares"] - data.shares
+    pnl = (data.exit_price - s["cost_price"]) * data.shares
+    cur.execute(
+        "INSERT INTO realized_pnl (date, lots, entry_price, exit_price, pnl_twd, fee, tax, note) VALUES (%s, %s, %s, %s, %s, %s, %s, %s)",
+        (str(datetime.now().date()), data.shares, s["cost_price"], data.exit_price, round(pnl, 0), 0, 0, s["symbol"] + " " + (data.note or ""))
+    )
+    if remaining <= 0:
+        cur.execute("UPDATE stock_positions SET status='deleted' WHERE id=%s", (stock_id,))
+    else:
+        cur.execute("UPDATE stock_positions SET shares=%s WHERE id=%s", (remaining, stock_id))
+    conn.commit()
+    cur.close()
+    conn.close()
+    return {"message": f"已結算 {data.shares}，損益 {round(pnl, 0)} 元"}
+
+@app.get("/api/realized-pnl")
+def get_realized_pnl():
+    conn = get_db()
+    cur = conn.cursor()
+    cur.execute("SELECT * FROM realized_pnl ORDER BY date DESC, id DESC")
+    rows = [dict(r) for r in cur.fetchall()]
+    cur.close()
+    conn.close()
+    return rows
