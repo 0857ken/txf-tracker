@@ -82,7 +82,7 @@
       <div class="value" id="pnl">—</div>
       <div class="sub" id="pnl-sub">—</div>
       <div style="margin-top:10px;padding-top:10px;border-top:1px solid var(--border);font-size:11px;color:var(--muted)">
-        最後防線：<span id="hard-floor" class="red" style="font-family:var(--mono)">—</span>
+        獲利保護線 <span style="cursor:pointer;color:#d4af37" onclick="openSettings()" title="點此設定">⚙️</span>：<span id="hard-floor" class="red" style="font-family:var(--mono)">—</span>
       </div>
     </div>
     <div class="card">
@@ -176,6 +176,35 @@
 <script>
 const API = 'https://txf-tracker-production.up.railway.app';
 let chart = null;
+
+
+async function openSettings() {
+  try {
+    const res = await fetch(API + '/api/settings');
+    const settings = await res.json();
+    document.getElementById('setting-pp').value = settings.profit_protect_pct || '1.0';
+    document.getElementById('settings-dialog').showModal();
+  } catch (e) {
+    alert('載入失敗：' + e.message);
+  }
+}
+
+async function saveSettings() {
+  const val = document.getElementById('setting-pp').value;
+  if (val === '') return alert('請輸入數值');
+  try {
+    const res = await fetch(API + '/api/settings/profit_protect_pct', {
+      method: 'PUT',
+      headers: {'Content-Type': 'application/json'},
+      body: JSON.stringify({value: val})
+    });
+    if (!res.ok) throw new Error('儲存失敗');
+    document.getElementById('settings-dialog').close();
+    loadDashboard();
+  } catch (e) {
+    alert('儲存失敗：' + e.message);
+  }
+}
 
 async function loadDashboard() {
   try {
@@ -360,5 +389,20 @@ function renderChart(data) {
 loadDashboard();
 setInterval(loadDashboard, 60000);
 </script>
+
+<!-- 系統設定 dialog -->
+<dialog id="settings-dialog" style="background:#141925;color:#e8eaed;border:1px solid #252d3d;border-radius:12px;padding:24px;min-width:340px;box-shadow:0 10px 25px rgba(0,0,0,0.5)">
+  <h3 style="margin-top:0;font-size:1.2rem;border-bottom:1px solid #252d3d;padding-bottom:12px;color:#d4af37">⚙️ 系統設定</h3>
+  <div style="display:flex;flex-direction:column;gap:14px;margin-top:16px">
+    <label style="font-size:0.9rem;color:#6b7280">獲利保護線 % (均價 × (100 + X%))
+      <input id="setting-pp" type="number" step="0.1" inputmode="decimal" style="width:100%;padding:10px;background:#0a0e1a;color:#fff;border:1px solid #252d3d;border-radius:6px;margin-top:4px;font-size:16px">
+      <div style="font-size:11px;color:#6b7280;margin-top:4px">例如 1 = 均價的 101%。跌破此線時警戒。</div>
+    </label>
+    <div style="display:flex;gap:12px;justify-content:flex-end;margin-top:8px">
+      <button onclick="document.getElementById('settings-dialog').close()" style="background:transparent;color:#6b7280;border:none;cursor:pointer;padding:8px 16px">取消</button>
+      <button onclick="saveSettings()" style="background:#d4af37;color:#0a0e1a;border:none;border-radius:6px;padding:8px 20px;cursor:pointer;font-weight:bold">儲存</button>
+    </div>
+  </div>
+</dialog>
 </body>
 </html>
