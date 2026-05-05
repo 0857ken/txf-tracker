@@ -102,7 +102,16 @@ def generate_summary():
         futures_value += txf_close * m * p["lots"]
     
     avg_cost = sum(p['entry_price']*p['lots'] for p in positions) / total_lots if total_lots else 0
-    hard_floor = round(avg_cost - 100) if avg_cost else 0
+    # 讀取 app_settings 的 profit_protect_pct（與主程式同步）
+    profit_protect_pct = 1.0
+    try:
+        cur.execute("SELECT value FROM app_settings WHERE key=%s", ("profit_protect_pct",))
+        r = cur.fetchone()
+        if r and r["value"] is not None:
+            profit_protect_pct = float(r["value"])
+    except Exception as e:
+        print(f"讀取 profit_protect_pct 失敗: {e}")
+    hard_floor = round(avg_cost * (1 + profit_protect_pct/100)) if avg_cost else 0
     dist_to_floor = round(txf_close - hard_floor) if hard_floor else None
     futures_equity = futures_value
     
