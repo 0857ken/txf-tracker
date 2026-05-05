@@ -384,15 +384,15 @@ def dashboard():
     today_str = str(datetime.now().date())
     site_url = "https://ken0857888.github.io/txf-tracker/"
     
-    # 1. 硬底線警戒
+    # 1. 成本警戒線警戒
     dist = cp - hard_floor
     total_pnl_str = f"\n💰 未實現損益：{round(total_pnl):+,} 元" if total_pnl else ""
     
     if 0 < dist <= 300:
         send_telegram(
-            f"⚠️ <b>台指期接近硬底線</b>\n"
+            f"⚠️ <b>台指期接近成本警戒線</b>\n"
             f"現價：{cp:,.0f}\n"
-            f"硬底線：{hard_floor:,.0f}\n"
+            f"成本警戒線：{hard_floor:,.0f}\n"
             f"距離：僅剩 {round(dist):,} 點"
             f"{total_pnl_str}\n"
             f"💡 建議：注意減倉或停損\n"
@@ -403,9 +403,9 @@ def dashboard():
     
     if cp <= hard_floor:
         send_telegram(
-            f"🚨 <b>跌破硬底線！</b>\n"
+            f"🚨 <b>跌破成本警戒線！</b>\n"
             f"現價：{cp:,.0f}\n"
-            f"硬底線：{hard_floor:,.0f}"
+            f"成本警戒線：{hard_floor:,.0f}"
             f"{total_pnl_str}\n"
             f"💡 建議：立即停損出場\n"
             f"🔗 {site_url}",

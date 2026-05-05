@@ -368,12 +368,12 @@
 
 <main>
 
-  <!-- 硬底線警報 -->
+  <!-- 成本警戒線警報 -->
   <div class="alert-banner" id="floor-alert">
     ⚠ 警告：現價距離撤退牆 (35,800) 不足 300 點！請評估是否執行絕對撤退計劃
   </div>
   <div class="alert-banner" id="nuke-alert" style="border-left-color:#ff0000">
-    🚨 緊急：現價已觸及或跌破 35,800 硬底線！依計劃全數清倉！
+    🚨 緊急：現價已觸及或跌破 35,800 成本警戒線！依計劃全數清倉！
   </div>
 
   <!-- TOP CARDS -->
@@ -402,7 +402,7 @@
           <span>距撤退牆</span><span id="floor-dist">—</span>
         </div>
         <div class="floor-bar"><div class="floor-fill" id="floor-fill" style="width:50%"></div></div>
-        <div style="font-size:10px;color:var(--muted);font-family:var(--mono);margin-top:3px">硬底線 35,800</div>
+        <div style="font-size:10px;color:var(--muted);font-family:var(--mono);margin-top:3px">成本警戒線 35,800</div>
       </div>
     </div>
 
@@ -709,7 +709,7 @@ function renderChart(chartData, ma5, ma20) {
           pointRadius: 0, tension: 0
         },
         {
-          label: '硬底線 35800', data: floorLine,
+          label: '成本警戒線 35800', data: floorLine,
           borderColor: 'rgba(255,71,87,.6)', borderWidth: 1, borderDash: [2,4],
           pointRadius: 0, tension: 0
         }

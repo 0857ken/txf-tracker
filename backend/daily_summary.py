@@ -162,7 +162,7 @@ def generate_summary():
         lines.append(f"  未實現：{emoji} {sign}{round(total_pnl):,} 元")
         if dist_to_floor is not None:
             warn = " 🚨 已跌破！" if dist_to_floor <= 0 else (" ⚠️ 接近警戒" if dist_to_floor <= 300 else "")
-            lines.append(f"  硬底線：{hard_floor:,} (距 {dist_to_floor:+} 點){warn}")
+            lines.append(f"  成本警戒線：{hard_floor:,} (距 {dist_to_floor:+} 點){warn}")
     else:
         lines.append("💼 <b>持倉狀態</b>")
         lines.append("  無持倉")
