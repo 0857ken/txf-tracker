@@ -382,7 +382,7 @@ def dashboard():
     # ============ Telegram 警戒系統 ============
     cp = market["current_price"]
     today_str = str(datetime.now().date())
-    site_url = "https://ken0857888.github.io/txf-tracker/"
+    site_url = "https://0857ken.github.io/txf-tracker/"
     
     # 1. 成本警戒線警戒
     dist = cp - hard_floor
@@ -639,7 +639,7 @@ def get_stocks():
             today_str = str(datetime.now().date())
             symbol = s["symbol"]
             display_name = symbol.replace("FUND:", "")
-            site_url = "https://ken0857888.github.io/txf-tracker/stocks.html"
+            site_url = "https://0857ken.github.io/txf-tracker/stocks.html"
             pnl_str = f"\n💰 損益：{round(pnl):+,} 元 ({pnl_pct:+.2f}%)" if pnl is not None else ""
             
             # 1. 突破警戒

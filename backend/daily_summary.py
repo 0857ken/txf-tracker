@@ -92,20 +92,28 @@ def generate_summary():
     positions = cur.fetchall()
     total_pnl = 0
     total_lots = 0
-    futures_margin = 0
+    futures_value = 0
     for p in positions:
         ct = p.get('type') or 'TMF'
         m = CONTRACT_MULTIPLIER.get(ct, 10)
-        margin = CONTRACT_MARGIN.get(ct, 30000)
         pnl = (txf_close - p['entry_price']) * m * p['lots']
         total_pnl += pnl
         total_lots += p['lots']
-        futures_margin += margin * p['lots']
+        futures_value += txf_close * m * p["lots"]
     
     avg_cost = sum(p['entry_price']*p['lots'] for p in positions) / total_lots if total_lots else 0
-    hard_floor = round(avg_cost - 100) if avg_cost else 0
+    # 讀取 app_settings 的 profit_protect_pct（與主程式同步）
+    profit_protect_pct = 1.0
+    try:
+        cur.execute("SELECT value FROM app_settings WHERE key=%s", ("profit_protect_pct",))
+        r = cur.fetchone()
+        if r and r["value"] is not None:
+            profit_protect_pct = float(r["value"])
+    except Exception as e:
+        print(f"讀取 profit_protect_pct 失敗: {e}")
+    hard_floor = round(avg_cost * (1 + profit_protect_pct/100)) if avg_cost else 0
     dist_to_floor = round(txf_close - hard_floor) if hard_floor else None
-    futures_equity = futures_margin + total_pnl
+    futures_equity = futures_value
     
     # 股票
     cur.execute("SELECT * FROM stock_positions WHERE status='active'")
@@ -142,7 +150,7 @@ def generate_summary():
         kbar = ""
     
     # 組訊息
-    site_url = "https://ken0857888.github.io/txf-tracker/"
+    site_url = "https://0857ken.github.io/txf-tracker/"
     lines = [f"📊 <b>{today} (週{weekday_zh}) 盤後總結</b>", ""]
     
     if twii_close:
@@ -170,7 +178,7 @@ def generate_summary():
     
     # 資產合計
     lines.append("📦 <b>每日資產合計</b>")
-    lines.append(f"  期貨權益：{round(futures_equity):,} 元")
+    lines.append(f"  期貨市值：{round(futures_equity):,} 元")
     lines.append(f"  股票市值：{round(stock_value):,} 元")
     lines.append(f"  <b>總市值：{round(total_value):,} 元</b>")
     lines.append(f"  佔 200 萬：<b>{total_pct:.2f}%</b>")
