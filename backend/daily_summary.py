@@ -150,7 +150,7 @@ def generate_summary():
         kbar = ""
     
     # 組訊息
-    site_url = "https://ken0857888.github.io/txf-tracker/"
+    site_url = "https://0857ken.github.io/txf-tracker/"
     lines = [f"📊 <b>{today} (週{weekday_zh}) 盤後總結</b>", ""]
     
     if twii_close:
