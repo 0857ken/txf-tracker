@@ -409,6 +409,7 @@ async function renderPnlDetail() {
         <td data-label="損益" class="${hasFullData ? color : ''}">${hasFullData ? (pnl >= 0 ? '+' : '') + pnl.toLocaleString() : '—'}</td>
         <td data-label="報酬率" class="${hasFullData ? color : ''}">${hasFullData ? (pnl >= 0 ? '+' : '') + pnlPct + '%' : '—'}</td>
         <td data-label="操作"><button onclick="editAsset(${i})">編輯</button>
+            <button onclick="settleAsset(${i})" style="background:rgba(0, 229, 160, 0.7)">結算</button>
             <button onclick="deleteAsset(${i})" style="background:rgba(255, 71, 87, 0.7)">刪除</button></td>
       </tr>
     `;
@@ -785,7 +786,42 @@ async function sellStock(id, maxShares, symbol) {
   }
 }
 
+function settleAsset(i) {
+  const a = assets[i];
+  const exitValue = parseInt(prompt(`結算「${a.name || a.type}」\n結算金額？`, a.value));
+  if (!exitValue) return;
+  const cost = (a.shares && a.cost) ? a.shares * a.cost : a.value;
+  const pnl = exitValue - cost;
+  const note = prompt('備註（選填）', '結算') || '結算';
+
+  fetch(API + '/api/realized-pnl/custom', {
+    method: 'POST',
+    headers: {'Content-Type': 'application/json'},
+    body: JSON.stringify({
+      date: new Date().toISOString().slice(0,10),
+      lots: a.shares || 1,
+      entry_price: a.cost || a.value,
+      exit_price: a.shares ? (exitValue / a.shares) : exitValue,
+      pnl_twd: pnl,
+      note: `${a.name || a.type} ${note}`
+    })
+  }).then(r => r.json()).then(() => {
+    alert(`已結算\n損益：${pnl >= 0 ? '+' : ''}${pnl.toLocaleString()} 元`);
+    assets.splice(i, 1);
+    localStorage.setItem('assets', JSON.stringify(assets));
+    calculateAssets();
+    loadRealized();
+  }).catch(() => {
+    if (confirm('後端寫入失敗，是否仍從本地刪除？')) {
+      assets.splice(i, 1);
+      localStorage.setItem('assets', JSON.stringify(assets));
+      calculateAssets();
+    }
+  });
+}
+
 function deleteAsset(i) {
+  if (!confirm('確定刪除？')) return;
   assets.splice(i, 1);
   localStorage.setItem('assets', JSON.stringify(assets));
   calculateAssets();
