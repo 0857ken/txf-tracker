@@ -174,6 +174,17 @@ def init_db():
     
     # 系統設定表（key-value）
     cur.execute("""
+        CREATE TABLE IF NOT EXISTS custom_assets (
+            id SERIAL PRIMARY KEY,
+            name TEXT NOT NULL,
+            type TEXT NOT NULL,
+            shares REAL DEFAULT 0,
+            cost REAL DEFAULT 0,
+            value REAL NOT NULL,
+            created_at TIMESTAMP DEFAULT NOW()
+        )
+    """)
+    cur.execute("""
         CREATE TABLE IF NOT EXISTS app_settings (
             key TEXT PRIMARY KEY,
             value TEXT,
@@ -946,6 +957,81 @@ def sell_stock(stock_id: int, data: StockSell):
     cur.close()
     conn.close()
     return {"message": f"已結算 {data.shares}，損益 {round(pnl, 0)} 元"}
+
+@app.get("/api/custom-assets")
+def list_custom_assets():
+    conn = get_db()
+    cur = conn.cursor(cursor_factory=RealDictCursor)
+    cur.execute("SELECT * FROM custom_assets ORDER BY id DESC")
+    rows = cur.fetchall()
+    cur.close()
+    conn.close()
+    return rows
+
+
+@app.post("/api/custom-assets")
+def add_custom_asset(payload: dict = Body(...)):
+    conn = get_db()
+    cur = conn.cursor(cursor_factory=RealDictCursor)
+    cur.execute(
+        "INSERT INTO custom_assets (name, type, shares, cost, value) VALUES (%s, %s, %s, %s, %s) RETURNING *",
+        (payload['name'], payload['type'], payload.get('shares', 0), payload.get('cost', 0), payload['value'])
+    )
+    row = cur.fetchone()
+    conn.commit()
+    cur.close()
+    conn.close()
+    return row
+
+
+@app.put("/api/custom-assets/{asset_id}")
+def update_custom_asset(asset_id: int, payload: dict = Body(...)):
+    conn = get_db()
+    cur = conn.cursor()
+    cur.execute(
+        "UPDATE custom_assets SET name=%s, type=%s, shares=%s, cost=%s, value=%s WHERE id=%s",
+        (payload['name'], payload['type'], payload.get('shares', 0), payload.get('cost', 0), payload['value'], asset_id)
+    )
+    conn.commit()
+    cur.close()
+    conn.close()
+    return {"success": True}
+
+
+@app.delete("/api/custom-assets/{asset_id}")
+def delete_custom_asset(asset_id: int):
+    conn = get_db()
+    cur = conn.cursor()
+    cur.execute("DELETE FROM custom_assets WHERE id=%s", (asset_id,))
+    conn.commit()
+    cur.close()
+    conn.close()
+    return {"success": True}
+
+
+@app.post("/api/realized-pnl/custom")
+def add_custom_realized_pnl(payload: dict = Body(...)):
+    """自訂資產結算寫入已實現損益"""
+    conn = get_db()
+    cur = conn.cursor()
+    cur.execute(
+        "INSERT INTO realized_pnl (date, lots, entry_price, exit_price, pnl_twd, fee, tax, note) VALUES (%s, %s, %s, %s, %s, %s, %s, %s)",
+        (
+            payload.get('date'),
+            payload.get('lots', 1),
+            payload.get('entry_price', 0),
+            payload.get('exit_price', 0),
+            payload.get('pnl_twd', 0),
+            payload.get('fee', 0),
+            payload.get('tax', 0),
+            payload.get('note', '自訂資產結算'),
+        )
+    )
+    conn.commit()
+    cur.close()
+    conn.close()
+    return {"success": True}
+
 
 @app.get("/api/realized-pnl")
 def get_realized_pnl():
