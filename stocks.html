@@ -151,11 +151,25 @@ async function loadStocks() {
       });
     } catch (e) { console.error('TXF error:', e); }
     
+    let customRows = '';
+    try {
+      const customRes = await fetch(API + '/api/custom-assets');
+      const customs = await customRes.json();
+      customs.forEach(a => {
+        totalValue += a.value;
+        const hasFullData = a.shares && a.cost;
+        const pnl = hasFullData ? (a.value - a.shares * a.cost) : 0;
+        const pnlPct = hasFullData ? ((pnl / (a.shares * a.cost)) * 100).toFixed(2) : 0;
+        const color = pnl >= 0 ? 'red' : 'green';
+        customRows += '<tr style="opacity:0.85"><td>' + a.name + '</td><td>' + a.type + '</td><td>' + (hasFullData ? a.shares : '-') + '</td><td>' + (hasFullData ? a.cost.toLocaleString() : '-') + '</td><td>' + a.value.toLocaleString() + '</td><td class="' + (hasFullData ? color : '') + '">' + (hasFullData ? (pnl >= 0 ? '+' : '') + pnl.toLocaleString() + ' (' + pnlPct + '%)' : '-') + '</td><td>-</td><td>-</td><td>-</td></tr>';
+      });
+    } catch (e) { console.error('custom error:', e); }
+
     const tbody = document.getElementById('stock-tbody');
-    if (stocks.length === 0 && !txfRows) {
+    if (stocks.length === 0 && !txfRows && !customRows) {
       tbody.innerHTML = '<tr><td colspan="9" style="color:var(--muted)">尚無持倉</td></tr>';
     } else {
-      tbody.innerHTML = txfRows + stocks.map(s => {
+      tbody.innerHTML = txfRows + customRows + stocks.map(s => {
         const value = (s.current_price || 0) * s.shares;
         totalValue += value;
         const pnlColor = (s.pnl_twd || 0) >= 0 ? 'red' : 'green';
