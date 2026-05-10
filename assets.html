@@ -168,7 +168,7 @@
       <div style="margin-top:20px;padding-top:20px;border-top:1px solid var(--border)">
         <div class="label">資產明細</div>
         <table id="asset-table" class="responsive">
-          <tr><th>類別</th><th>金額</th><th>佔比</th><th></th></tr>
+          <tr><th>項目</th><th>類別</th><th>數量</th><th>成本</th><th>市值</th><th>佔比</th><th></th></tr>
         </table>
       </div>
     </div>
@@ -408,7 +408,8 @@ async function renderPnlDetail() {
         <td data-label="市值">${a.value.toLocaleString()}</td>
         <td data-label="損益" class="${hasFullData ? color : ''}">${hasFullData ? (pnl >= 0 ? '+' : '') + pnl.toLocaleString() : '—'}</td>
         <td data-label="報酬率" class="${hasFullData ? color : ''}">${hasFullData ? (pnl >= 0 ? '+' : '') + pnlPct + '%' : '—'}</td>
-        <td data-label="操作"><button onclick="deleteAsset(${i})" style="background:rgba(255, 71, 87, 0.7)">刪除</button></td>
+        <td data-label="操作"><button onclick="editAsset(${i})">編輯</button>
+            <button onclick="deleteAsset(${i})" style="background:rgba(255, 71, 87, 0.7)">刪除</button></td>
       </tr>
     `;
   });
@@ -504,15 +505,43 @@ async function renderPie(marketValue, cash) {
 
 function renderAssetTable() {
   const table = document.getElementById('asset-table');
-  const totalValue = 2000000 - assets.reduce((s,a)=>s+a.value,0);
-  
-  table.innerHTML = '<tr><th>類別</th><th>金額</th><th>佔比</th><th></th></tr>' +
-    assets.map((a,i) => `<tr>
-      <td>${a.type}</td>
-      <td>${a.value.toLocaleString()}</td>
-      <td>${((a.value/2000000)*100).toFixed(1)}%</td>
-      <td><button onclick="deleteAsset(${i})" style="background:var(--red);padding:4px 8px;font-size:11px">刪</button></td>
-    </tr>`).join('');
+  const totalAssets = assets.reduce((s,a)=>s+a.value,0);
+
+  table.innerHTML = '<tr><th>項目</th><th>類別</th><th>數量</th><th>成本</th><th>市值</th><th>佔比</th><th></th></tr>' +
+    assets.map((a,i) => {
+      const hasFullData = a.shares && a.cost;
+      return `<tr>
+        <td data-label="項目">${a.name || a.type}</td>
+        <td data-label="類別">${a.type}</td>
+        <td data-label="數量">${hasFullData ? a.shares : '—'}</td>
+        <td data-label="成本">${hasFullData ? a.cost.toLocaleString() : '—'}</td>
+        <td data-label="市值">${a.value.toLocaleString()}</td>
+        <td data-label="佔比">${totalAssets ? ((a.value/totalAssets)*100).toFixed(1) : 0}%</td>
+        <td data-label="操作">
+          <button onclick="editAsset(${i})" style="background:var(--blue);padding:4px 8px;font-size:11px">編輯</button>
+          <button onclick="deleteAsset(${i})" style="background:var(--red);padding:4px 8px;font-size:11px">刪</button>
+        </td>
+      </tr>`;
+    }).join('');
+}
+
+function editAsset(i) {
+  const a = assets[i];
+  const name = prompt('項目名稱', a.name || a.type) ?? a.name;
+  if (name === null) return;
+  const type = prompt('類別', a.type);
+  if (type === null) return;
+  const shares = parseFloat(prompt('數量（可留空）', a.shares || '')) || 0;
+  const cost = parseFloat(prompt('成本（可留空）', a.cost || '')) || 0;
+  const value = parseInt(prompt('市值', a.value));
+  if (!value) return alert('市值必填');
+
+  const pnl = (shares && cost) ? (value - shares * cost) : 0;
+  const pnlPct = (shares && cost) ? ((pnl / (shares * cost)) * 100).toFixed(2) : 0;
+
+  assets[i] = {name, type, shares, cost, value, pnl, pnlPct};
+  localStorage.setItem('assets', JSON.stringify(assets));
+  calculateAssets();
 }
 
 function addAsset() {
