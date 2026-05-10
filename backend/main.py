@@ -947,6 +947,30 @@ def sell_stock(stock_id: int, data: StockSell):
     conn.close()
     return {"message": f"已結算 {data.shares}，損益 {round(pnl, 0)} 元"}
 
+@app.post("/api/realized-pnl/custom")
+def add_custom_realized_pnl(payload: dict = Body(...)):
+    """自訂資產結算寫入已實現損益"""
+    conn = get_db()
+    cur = conn.cursor()
+    cur.execute(
+        "INSERT INTO realized_pnl (date, lots, entry_price, exit_price, pnl_twd, fee, tax, note) VALUES (%s, %s, %s, %s, %s, %s, %s, %s)",
+        (
+            payload.get('date'),
+            payload.get('lots', 1),
+            payload.get('entry_price', 0),
+            payload.get('exit_price', 0),
+            payload.get('pnl_twd', 0),
+            payload.get('fee', 0),
+            payload.get('tax', 0),
+            payload.get('note', '自訂資產結算'),
+        )
+    )
+    conn.commit()
+    cur.close()
+    conn.close()
+    return {"success": True}
+
+
 @app.get("/api/realized-pnl")
 def get_realized_pnl():
     conn = get_db()
