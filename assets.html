@@ -205,7 +205,15 @@
 
 <script>
 const API = 'https://txf-tracker-production.up.railway.app';
-let assets = JSON.parse(localStorage.getItem('assets')) || [];
+let assets = [];
+
+async function loadCustomAssets() {
+  try {
+    const res = await fetch(API + '/api/custom-assets');
+    assets = await res.json();
+    calculateAssets();
+  } catch (e) { console.error('load custom assets failed', e); }
+}
 let pieChart = null;
 
 async function loadNotifications() {
@@ -526,9 +534,9 @@ function renderAssetTable() {
     }).join('');
 }
 
-function editAsset(i) {
+async function editAsset(i) {
   const a = assets[i];
-  const name = prompt('項目名稱', a.name || a.type) ?? a.name;
+  const name = prompt('項目名稱', a.name || a.type);
   if (name === null) return;
   const type = prompt('類別', a.type);
   if (type === null) return;
@@ -537,15 +545,17 @@ function editAsset(i) {
   const value = parseInt(prompt('市值', a.value));
   if (!value) return alert('市值必填');
 
-  const pnl = (shares && cost) ? (value - shares * cost) : 0;
-  const pnlPct = (shares && cost) ? ((pnl / (shares * cost)) * 100).toFixed(2) : 0;
-
-  assets[i] = {name, type, shares, cost, value, pnl, pnlPct};
-  localStorage.setItem('assets', JSON.stringify(assets));
-  calculateAssets();
+  try {
+    await fetch(API + '/api/custom-assets/' + a.id, {
+      method: 'PUT',
+      headers: {'Content-Type': 'application/json'},
+      body: JSON.stringify({name, type, shares, cost, value})
+    });
+    await loadCustomAssets();
+  } catch (e) { alert('更新失敗'); }
 }
 
-function addAsset() {
+async function addAsset() {
   const name = document.getElementById('asset-name').value;
   const type = document.getElementById('asset-type').value;
   const shares = parseFloat(document.getElementById('asset-shares').value) || 0;
@@ -553,17 +563,19 @@ function addAsset() {
   const value = parseInt(document.getElementById('asset-value').value);
   if (!name || !type || !value) return alert('請填寫項目、類別和市值');
 
-  const pnl = (shares && cost) ? (value - shares * cost) : 0;
-  const pnlPct = (shares && cost) ? ((pnl / (shares * cost)) * 100).toFixed(2) : 0;
-
-  assets.push({name, type, shares, cost, value, pnl, pnlPct});
-  localStorage.setItem('assets', JSON.stringify(assets));
-  document.getElementById('asset-name').value = '';
-  document.getElementById('asset-type').value = '';
-  document.getElementById('asset-shares').value = '';
-  document.getElementById('asset-cost').value = '';
-  document.getElementById('asset-value').value = '';
-  calculateAssets();
+  try {
+    await fetch(API + '/api/custom-assets', {
+      method: 'POST',
+      headers: {'Content-Type': 'application/json'},
+      body: JSON.stringify({name, type, shares, cost, value})
+    });
+    document.getElementById('asset-name').value = '';
+    document.getElementById('asset-type').value = '';
+    document.getElementById('asset-shares').value = '';
+    document.getElementById('asset-cost').value = '';
+    document.getElementById('asset-value').value = '';
+    await loadCustomAssets();
+  } catch (e) { alert('新增失敗'); }
 }
 
 async function loadRealized() {
@@ -805,29 +817,29 @@ function settleAsset(i) {
       pnl_twd: pnl,
       note: `${a.name || a.type} ${note}`
     })
-  }).then(r => r.json()).then(() => {
+  }).then(r => r.json()).then(async () => {
     alert(`已結算\n損益：${pnl >= 0 ? '+' : ''}${pnl.toLocaleString()} 元`);
-    assets.splice(i, 1);
-    localStorage.setItem('assets', JSON.stringify(assets));
-    calculateAssets();
+    await fetch(API + '/api/custom-assets/' + a.id, {method: 'DELETE'});
+    await loadCustomAssets();
     loadRealized();
-  }).catch(() => {
-    if (confirm('後端寫入失敗，是否仍從本地刪除？')) {
-      assets.splice(i, 1);
-      localStorage.setItem('assets', JSON.stringify(assets));
-      calculateAssets();
+  }).catch(async () => {
+    if (confirm('後端寫入失敗，是否仍刪除？')) {
+      await fetch(API + '/api/custom-assets/' + a.id, {method: 'DELETE'});
+      await loadCustomAssets();
     }
   });
 }
 
-function deleteAsset(i) {
+async function deleteAsset(i) {
   if (!confirm('確定刪除？')) return;
-  assets.splice(i, 1);
-  localStorage.setItem('assets', JSON.stringify(assets));
-  calculateAssets();
+  const a = assets[i];
+  try {
+    await fetch(API + '/api/custom-assets/' + a.id, {method: 'DELETE'});
+    await loadCustomAssets();
+  } catch (e) { alert('刪除失敗'); }
 }
 
-calculateAssets();
+loadCustomAssets();
 loadNotifications();
 loadRealized();
 </script>
