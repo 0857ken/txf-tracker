@@ -155,10 +155,13 @@
     <div class="card">
       <div class="label">快速新增資產</div>
       <table class="responsive">
-        <tr><th>類別</th><th>金額</th></tr>
+        <tr><th>項目</th><th>類別</th><th>數量</th><th>成本價</th><th>市值</th></tr>
         <tr>
+          <td><input type="text" id="asset-name" placeholder="名稱"></td>
           <td><input type="text" id="asset-type" placeholder="台股/ETF/基金/加密"></td>
-          <td><input type="number" id="asset-value" placeholder="10000" style="width:100%"></td>
+          <td><input type="number" id="asset-shares" placeholder="0" step="any"></td>
+          <td><input type="number" id="asset-cost" placeholder="0" step="any"></td>
+          <td><input type="number" id="asset-value" placeholder="0" style="width:100%"></td>
         </tr>
       </table>
       <button onclick="addAsset()">新增</button>
@@ -392,16 +395,20 @@ async function renderPnlDetail() {
   
   // 自訂資產
   assets.forEach((a, i) => {
+    const pnl = a.pnl || 0;
+    const pnlPct = a.pnlPct || 0;
+    const color = pnl >= 0 ? 'red' : 'green';
+    const hasFullData = a.shares && a.cost;
     html += `
       <tr>
-        <td>${a.type}</td>
-        <td>自訂</td>
-        <td>—</td>
-        <td>—</td>
-        <td>${a.value.toLocaleString()}</td>
-        <td>—</td>
-        <td>—</td>
-        <td><button onclick="deleteAsset(${i})" style="background:rgba(255, 71, 87, 0.7)">刪除</button></td>
+        <td data-label="項目">${a.name || a.type}</td>
+        <td data-label="類別">${a.type}</td>
+        <td data-label="數量">${hasFullData ? a.shares : '—'}</td>
+        <td data-label="成本價">${hasFullData ? a.cost.toLocaleString() : '—'}</td>
+        <td data-label="市值">${a.value.toLocaleString()}</td>
+        <td data-label="損益" class="${hasFullData ? color : ''}">${hasFullData ? (pnl >= 0 ? '+' : '') + pnl.toLocaleString() : '—'}</td>
+        <td data-label="報酬率" class="${hasFullData ? color : ''}">${hasFullData ? (pnl >= 0 ? '+' : '') + pnlPct + '%' : '—'}</td>
+        <td data-label="操作"><button onclick="deleteAsset(${i})" style="background:rgba(255, 71, 87, 0.7)">刪除</button></td>
       </tr>
     `;
   });
@@ -509,13 +516,22 @@ function renderAssetTable() {
 }
 
 function addAsset() {
+  const name = document.getElementById('asset-name').value;
   const type = document.getElementById('asset-type').value;
+  const shares = parseFloat(document.getElementById('asset-shares').value) || 0;
+  const cost = parseFloat(document.getElementById('asset-cost').value) || 0;
   const value = parseInt(document.getElementById('asset-value').value);
-  if (!type || !value) return alert('請填寫類別和金額');
-  
-  assets.push({type, value});
+  if (!name || !type || !value) return alert('請填寫項目、類別和市值');
+
+  const pnl = (shares && cost) ? (value - shares * cost) : 0;
+  const pnlPct = (shares && cost) ? ((pnl / (shares * cost)) * 100).toFixed(2) : 0;
+
+  assets.push({name, type, shares, cost, value, pnl, pnlPct});
   localStorage.setItem('assets', JSON.stringify(assets));
+  document.getElementById('asset-name').value = '';
   document.getElementById('asset-type').value = '';
+  document.getElementById('asset-shares').value = '';
+  document.getElementById('asset-cost').value = '';
   document.getElementById('asset-value').value = '';
   calculateAssets();
 }
