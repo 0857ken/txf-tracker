@@ -120,13 +120,26 @@ async function editCustomAsset(id) {
     const cost = parseFloat(prompt('成本（可留空）', a.cost || '')) || 0;
     const value = parseInt(prompt('市值', a.value));
     if (!value) return alert('市值必填');
+    const alert_high = parseFloat(prompt('提醒上限（市值超過會通知，可留空）', a.alert_high || '')) || null;
+    const alert_low = parseFloat(prompt('提醒下限（市值低於會通知，可留空）', a.alert_low || '')) || null;
     await fetch(API + '/api/custom-assets/' + id, {
       method: 'PUT',
       headers: {'Content-Type': 'application/json'},
-      body: JSON.stringify({name, type, shares, cost, value})
+      body: JSON.stringify({name, type, shares, cost, value, alert_high, alert_low})
     });
     loadStocks();
   } catch (e) { alert('更新失敗'); }
+}
+
+async function toggleCustomNotify(id, currentlyEnabled) {
+  try {
+    await fetch(API + '/api/custom-assets/' + id + '/notify', {
+      method: 'PUT',
+      headers: {'Content-Type': 'application/json'},
+      body: JSON.stringify({enabled: !currentlyEnabled})
+    });
+    loadStocks();
+  } catch (e) { alert('切換失敗'); }
 }
 
 async function deleteCustomAsset(id) {
@@ -193,7 +206,7 @@ async function loadStocks() {
         const pnl = hasFullData ? (a.value - a.shares * a.cost) : 0;
         const pnlPct = hasFullData ? ((pnl / (a.shares * a.cost)) * 100).toFixed(2) : 0;
         const color = pnl >= 0 ? 'red' : 'green';
-        customRows += '<tr style="opacity:0.85"><td>' + a.name + '</td><td>' + a.type + '</td><td>' + (hasFullData ? a.shares : '-') + '</td><td>' + (hasFullData ? a.cost.toLocaleString() : '-') + '</td><td>' + a.value.toLocaleString() + '</td><td class="' + (hasFullData ? color : '') + '">' + (hasFullData ? (pnl >= 0 ? '+' : '') + pnl.toLocaleString() + ' (' + pnlPct + '%)' : '-') + '</td><td>-</td><td>-</td><td><button onclick="editCustomAsset(' + a.id + ')" style="background:var(--blue);font-size:11px;margin-right:4px">✏️ 編輯</button><button onclick="deleteCustomAsset(' + a.id + ')" class="red">刪除</button></td></tr>';
+        customRows += '<tr style="opacity:0.85"><td>' + a.name + '</td><td>' + a.type + '</td><td>' + (hasFullData ? a.shares : '-') + '</td><td>' + (hasFullData ? a.cost.toLocaleString() : '-') + '</td><td>' + a.value.toLocaleString() + '</td><td class="' + (hasFullData ? color : '') + '">' + (hasFullData ? (pnl >= 0 ? '+' : '') + pnl.toLocaleString() + ' (' + pnlPct + '%)' : '-') + '</td><td>' + (a.alert_high || '-') + '</td><td>' + (a.alert_low || '-') + '</td><td><button onclick="editCustomAsset(' + a.id + ')" style="background:var(--blue);font-size:11px;margin-right:4px">✏️ 編輯</button><button onclick="toggleCustomNotify(' + a.id + ', ' + (a.notify_enabled !== false) + ')" style="background:' + (a.notify_enabled !== false ? 'var(--green)' : 'var(--muted)') + ';font-size:11px;margin-right:4px" title="' + (a.notify_enabled !== false ? '通知已開' : '通知已關') + '">' + (a.notify_enabled !== false ? '🔔' : '🔕') + '</button><button onclick="deleteCustomAsset(' + a.id + ')" class="red">刪除</button></td></tr>';
       });
     } catch (e) { console.error('custom error:', e); }
 
