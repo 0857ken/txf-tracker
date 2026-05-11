@@ -105,6 +105,38 @@
 <script>
 const API = 'https://txf-tracker-production.up.railway.app';
 
+
+async function editCustomAsset(id) {
+  try {
+    const r = await fetch(API + '/api/custom-assets');
+    const list = await r.json();
+    const a = list.find(x => x.id === id);
+    if (!a) return alert('找不到資產');
+    const name = prompt('項目名稱', a.name);
+    if (name === null) return;
+    const type = prompt('類別', a.type);
+    if (type === null) return;
+    const shares = parseFloat(prompt('數量（可留空）', a.shares || '')) || 0;
+    const cost = parseFloat(prompt('成本（可留空）', a.cost || '')) || 0;
+    const value = parseInt(prompt('市值', a.value));
+    if (!value) return alert('市值必填');
+    await fetch(API + '/api/custom-assets/' + id, {
+      method: 'PUT',
+      headers: {'Content-Type': 'application/json'},
+      body: JSON.stringify({name, type, shares, cost, value})
+    });
+    loadStocks();
+  } catch (e) { alert('更新失敗'); }
+}
+
+async function deleteCustomAsset(id) {
+  if (!confirm('確定刪除這筆自訂資產？')) return;
+  try {
+    await fetch(API + '/api/custom-assets/' + id, {method: 'DELETE'});
+    loadStocks();
+  } catch (e) { alert('刪除失敗'); }
+}
+
 async function loadStocks() {
   try {
     const res = await fetch(API + '/api/stocks');
@@ -161,7 +193,7 @@ async function loadStocks() {
         const pnl = hasFullData ? (a.value - a.shares * a.cost) : 0;
         const pnlPct = hasFullData ? ((pnl / (a.shares * a.cost)) * 100).toFixed(2) : 0;
         const color = pnl >= 0 ? 'red' : 'green';
-        customRows += '<tr style="opacity:0.85"><td>' + a.name + '</td><td>' + a.type + '</td><td>' + (hasFullData ? a.shares : '-') + '</td><td>' + (hasFullData ? a.cost.toLocaleString() : '-') + '</td><td>' + a.value.toLocaleString() + '</td><td class="' + (hasFullData ? color : '') + '">' + (hasFullData ? (pnl >= 0 ? '+' : '') + pnl.toLocaleString() + ' (' + pnlPct + '%)' : '-') + '</td><td>-</td><td>-</td><td>-</td></tr>';
+        customRows += '<tr style="opacity:0.85"><td>' + a.name + '</td><td>' + a.type + '</td><td>' + (hasFullData ? a.shares : '-') + '</td><td>' + (hasFullData ? a.cost.toLocaleString() : '-') + '</td><td>' + a.value.toLocaleString() + '</td><td class="' + (hasFullData ? color : '') + '">' + (hasFullData ? (pnl >= 0 ? '+' : '') + pnl.toLocaleString() + ' (' + pnlPct + '%)' : '-') + '</td><td>-</td><td>-</td><td><button onclick="editCustomAsset(' + a.id + ')" style="background:var(--blue);font-size:11px;margin-right:4px">✏️ 編輯</button><button onclick="deleteCustomAsset(' + a.id + ')" class="red">刪除</button></td></tr>';
       });
     } catch (e) { console.error('custom error:', e); }
 
