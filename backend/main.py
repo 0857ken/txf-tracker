@@ -147,6 +147,9 @@ def init_db():
     # 加 fee 跟 tax 欄位
     cur.execute("ALTER TABLE realized_pnl ADD COLUMN IF NOT EXISTS fee REAL DEFAULT 0")
     cur.execute("ALTER TABLE realized_pnl ADD COLUMN IF NOT EXISTS tax REAL DEFAULT 0")
+    cur.execute("ALTER TABLE custom_assets ADD COLUMN IF NOT EXISTS alert_high REAL")
+    cur.execute("ALTER TABLE custom_assets ADD COLUMN IF NOT EXISTS alert_low REAL")
+    cur.execute("ALTER TABLE custom_assets ADD COLUMN IF NOT EXISTS notify_enabled BOOLEAN DEFAULT TRUE")
     
     # 擴充 pnl_snapshots 變成 Equity Curve
     cur.execute("ALTER TABLE pnl_snapshots ADD COLUMN IF NOT EXISTS total_equity REAL")
@@ -181,6 +184,9 @@ def init_db():
             shares REAL DEFAULT 0,
             cost REAL DEFAULT 0,
             value REAL NOT NULL,
+            alert_high REAL,
+            alert_low REAL,
+            notify_enabled BOOLEAN DEFAULT TRUE,
             created_at TIMESTAMP DEFAULT NOW()
         )
     """)
@@ -974,8 +980,8 @@ def add_custom_asset(payload: dict = Body(...)):
     conn = get_db()
     cur = conn.cursor(cursor_factory=RealDictCursor)
     cur.execute(
-        "INSERT INTO custom_assets (name, type, shares, cost, value) VALUES (%s, %s, %s, %s, %s) RETURNING *",
-        (payload['name'], payload['type'], payload.get('shares', 0), payload.get('cost', 0), payload['value'])
+        "INSERT INTO custom_assets (name, type, shares, cost, value, alert_high, alert_low) VALUES (%s, %s, %s, %s, %s, %s, %s) RETURNING *",
+        (payload['name'], payload['type'], payload.get('shares', 0), payload.get('cost', 0), payload['value'], payload.get('alert_high'), payload.get('alert_low'))
     )
     row = cur.fetchone()
     conn.commit()
@@ -988,10 +994,39 @@ def add_custom_asset(payload: dict = Body(...)):
 def update_custom_asset(asset_id: int, payload: dict = Body(...)):
     conn = get_db()
     cur = conn.cursor()
+    new_value = payload['value']
+    alert_high = payload.get('alert_high')
+    alert_low = payload.get('alert_low')
     cur.execute(
-        "UPDATE custom_assets SET name=%s, type=%s, shares=%s, cost=%s, value=%s WHERE id=%s",
-        (payload['name'], payload['type'], payload.get('shares', 0), payload.get('cost', 0), payload['value'], asset_id)
+        "UPDATE custom_assets SET name=%s, type=%s, shares=%s, cost=%s, value=%s, alert_high=%s, alert_low=%s WHERE id=%s",
+        (payload['name'], payload['type'], payload.get('shares', 0), payload.get('cost', 0), new_value, alert_high, alert_low, asset_id)
     )
+    # 觸發提醒判斷
+    cur2 = conn.cursor(cursor_factory=RealDictCursor)
+    cur2.execute("SELECT * FROM custom_assets WHERE id=%s", (asset_id,))
+    a = cur2.fetchone()
+    cur2.close()
+    if a and a.get('notify_enabled', True):
+        msg = None
+        if alert_high and new_value >= alert_high:
+            msg = f"🚀 <b>{a['name']} 觸及提醒上限</b>\n現值：{new_value:,}\n上限：{alert_high:,}"
+        elif alert_low and new_value <= alert_low:
+            msg = f"⚠️ <b>{a['name']} 觸及提醒下限</b>\n現值：{new_value:,}\n下限：{alert_low:,}"
+        if msg:
+            try:
+                send_telegram(msg, alert_key=f"custom_{asset_id}_{new_value}", alert_type="custom_alert", symbol=a['name'])
+            except Exception as e:
+                print(f"通知失敗: {e}")
+    conn.commit()
+    cur.close()
+    conn.close()
+    return {"success": True}
+
+@app.put("/api/custom-assets/{asset_id}/notify")
+def toggle_custom_notify(asset_id: int, payload: dict = Body(...)):
+    conn = get_db()
+    cur = conn.cursor()
+    cur.execute("UPDATE custom_assets SET notify_enabled=%s WHERE id=%s", (payload.get('enabled', True), asset_id))
     conn.commit()
     cur.close()
     conn.close()
