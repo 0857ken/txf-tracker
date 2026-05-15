@@ -112,22 +112,34 @@ async function editCustomAsset(id) {
     const list = await r.json();
     const a = list.find(x => x.id === id);
     if (!a) return alert('找不到資產');
-    const name = prompt('項目名稱', a.name);
-    if (name === null) return;
-    const type = prompt('類別', a.type);
-    if (type === null) return;
-    const shares = parseFloat(prompt('數量（可留空）', a.shares || '')) || 0;
-    const cost = parseFloat(prompt('成本（可留空）', a.cost || '')) || 0;
-    const value = parseInt(prompt('市值', a.value));
-    if (!value) return alert('市值必填');
-    const alert_high = parseFloat(prompt('提醒上限（市值超過會通知，可留空）', a.alert_high || '')) || null;
-    const alert_low = parseFloat(prompt('提醒下限（市值低於會通知，可留空）', a.alert_low || '')) || null;
-    await fetch(API + '/api/custom-assets/' + id, {
-      method: 'PUT',
-      headers: {'Content-Type': 'application/json'},
-      body: JSON.stringify({name, type, shares, cost, value, alert_high, alert_low})
-    });
-    loadStocks();
+    const dialog = document.getElementById('custom-edit-dialog');
+    document.getElementById('custom-name').value = a.name || '';
+    document.getElementById('custom-type').value = a.type || '';
+    document.getElementById('custom-shares').value = a.shares || '';
+    document.getElementById('custom-cost').value = a.cost || '';
+    document.getElementById('custom-value').value = a.value || '';
+    document.getElementById('custom-high').value = a.alert_high || '';
+    document.getElementById('custom-low').value = a.alert_low || '';
+    dialog.showModal();
+    document.getElementById('custom-confirm').onclick = async () => {
+      const name = document.getElementById('custom-name').value;
+      const type = document.getElementById('custom-type').value;
+      const shares = parseFloat(document.getElementById('custom-shares').value) || 0;
+      const cost = parseFloat(document.getElementById('custom-cost').value) || 0;
+      const value = parseFloat(document.getElementById('custom-value').value);
+      const hVal = document.getElementById('custom-high').value;
+      const lVal = document.getElementById('custom-low').value;
+      const alert_high = hVal === '' ? null : parseFloat(hVal);
+      const alert_low = lVal === '' ? null : parseFloat(lVal);
+      if (!name || !type || !value) return alert('項目、類別、市值為必填');
+      await fetch(API + '/api/custom-assets/' + id, {
+        method: 'PUT',
+        headers: {'Content-Type': 'application/json'},
+        body: JSON.stringify({name, type, shares, cost, value, alert_high, alert_low})
+      });
+      dialog.close();
+      loadStocks();
+    };
   } catch (e) { alert('更新失敗'); }
 }
 
@@ -454,6 +466,37 @@ setInterval(loadHistory, 300000);
     <div style="display:flex;gap:12px;justify-content:flex-end;margin-top:8px">
       <button onclick="document.getElementById('alert-edit-dialog').close()" style="background:transparent;color:#6b7280;border:none;cursor:pointer;padding:8px 16px">取消</button>
       <button id="alert-confirm" style="background:#d4af37;color:#0a0e1a;border:none;border-radius:6px;padding:8px 20px;cursor:pointer;font-weight:bold">儲存</button>
+    </div>
+  </div>
+</dialog>
+
+<dialog id="custom-edit-dialog" style="background:#141925;color:#e8eaed;border:1px solid #252d3d;border-radius:12px;padding:24px;min-width:340px;max-width:90%;box-shadow:0 10px 25px rgba(0,0,0,0.5)">
+  <h3 style="margin-top:0;font-size:1.2rem;border-bottom:1px solid #252d3d;padding-bottom:12px;color:#d4af37">編輯自訂資產</h3>
+  <div style="display:flex;flex-direction:column;gap:14px;margin-top:16px">
+    <label style="font-size:0.9rem;color:#6b7280">項目名稱
+      <input id="custom-name" type="text" style="width:100%;padding:10px;background:#0a0e1a;color:#fff;border:1px solid #252d3d;border-radius:6px;margin-top:4px;font-size:16px">
+    </label>
+    <label style="font-size:0.9rem;color:#6b7280">類別
+      <input id="custom-type" type="text" placeholder="台股/ETF/基金/加密" style="width:100%;padding:10px;background:#0a0e1a;color:#fff;border:1px solid #252d3d;border-radius:6px;margin-top:4px;font-size:16px">
+    </label>
+    <label style="font-size:0.9rem;color:#6b7280">數量（可留空）
+      <input id="custom-shares" type="number" step="any" inputmode="decimal" style="width:100%;padding:10px;background:#0a0e1a;color:#fff;border:1px solid #252d3d;border-radius:6px;margin-top:4px;font-size:16px">
+    </label>
+    <label style="font-size:0.9rem;color:#6b7280">成本（可留空）
+      <input id="custom-cost" type="number" step="any" inputmode="decimal" style="width:100%;padding:10px;background:#0a0e1a;color:#fff;border:1px solid #252d3d;border-radius:6px;margin-top:4px;font-size:16px">
+    </label>
+    <label style="font-size:0.9rem;color:#6b7280">市值
+      <input id="custom-value" type="number" step="any" inputmode="decimal" style="width:100%;padding:10px;background:#0a0e1a;color:#fff;border:1px solid #252d3d;border-radius:6px;margin-top:4px;font-size:16px">
+    </label>
+    <label style="font-size:0.9rem;color:#6b7280">提醒上限（市值超過會通知）
+      <input id="custom-high" type="number" step="any" inputmode="decimal" placeholder="留空=不通知" style="width:100%;padding:10px;background:#0a0e1a;color:#fff;border:1px solid #252d3d;border-radius:6px;margin-top:4px;font-size:16px">
+    </label>
+    <label style="font-size:0.9rem;color:#6b7280">提醒下限（市值低於會通知）
+      <input id="custom-low" type="number" step="any" inputmode="decimal" placeholder="留空=不通知" style="width:100%;padding:10px;background:#0a0e1a;color:#fff;border:1px solid #252d3d;border-radius:6px;margin-top:4px;font-size:16px">
+    </label>
+    <div style="display:flex;gap:12px;justify-content:flex-end;margin-top:8px">
+      <button onclick="document.getElementById('custom-edit-dialog').close()" style="background:transparent;color:#6b7280;border:none;cursor:pointer;padding:8px 16px">取消</button>
+      <button id="custom-confirm" style="background:#d4af37;color:#0a0e1a;border:none;border-radius:6px;padding:8px 20px;cursor:pointer;font-weight:bold">儲存</button>
     </div>
   </div>
 </dialog>
