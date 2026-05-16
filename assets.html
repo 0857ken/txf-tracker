@@ -645,6 +645,10 @@ async function loadRealized() {
           <td data-label="成本">${r.entry_price.toLocaleString()}</td>
           <td data-label="結算">${r.exit_price.toLocaleString()}</td>
           <td data-label="淨損益" class="${color}">${sign}${r.pnl_twd.toLocaleString()}</td>
+          <td data-label="操作">
+            <button onclick="editRealized(${r.id})" style="background:var(--blue);font-size:11px;margin-right:4px">✏️ 編輯</button>
+            <button onclick="deleteRealized(${r.id})" style="background:rgba(255, 71, 87, 0.7);font-size:11px">刪除</button>
+          </td>
         </tr>
       `;
     }).join('');
