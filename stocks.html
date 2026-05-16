@@ -213,12 +213,12 @@ async function loadStocks() {
       const customRes = await fetch(API + '/api/custom-assets');
       const customs = await customRes.json();
       customs.forEach(a => {
-        totalValue += a.value;
         const hasFullData = a.shares && a.cost;
+        totalValue += hasFullData ? a.shares * a.value : a.value;
         const pnl = hasFullData ? (a.value - a.shares * a.cost) : 0;
         const pnlPct = hasFullData ? ((pnl / (a.shares * a.cost)) * 100).toFixed(2) : 0;
         const color = pnl >= 0 ? 'red' : 'green';
-        customRows += '<tr style="opacity:0.85"><td>' + a.name + '</td><td>' + a.type + '</td><td>' + (hasFullData ? a.shares : '-') + '</td><td>' + (hasFullData ? a.cost.toLocaleString() : '-') + '</td><td>' + a.value.toLocaleString() + '</td><td class="' + (hasFullData ? color : '') + '">' + (hasFullData ? (pnl >= 0 ? '+' : '') + pnl.toLocaleString() + ' (' + pnlPct + '%)' : '-') + '</td><td>' + (a.alert_high || '-') + '</td><td>' + (a.alert_low || '-') + '</td><td><button onclick="editCustomAsset(' + a.id + ')" style="background:var(--blue);font-size:11px;margin-right:4px">✏️ 編輯</button><button onclick="toggleCustomNotify(' + a.id + ', ' + (a.notify_enabled !== false) + ')" style="background:' + (a.notify_enabled !== false ? 'var(--green)' : 'var(--muted)') + ';font-size:11px;margin-right:4px" title="' + (a.notify_enabled !== false ? '通知已開' : '通知已關') + '">' + (a.notify_enabled !== false ? '🔔' : '🔕') + '</button><button onclick="deleteCustomAsset(' + a.id + ')" class="red">刪除</button></td></tr>';
+        const marketValue = hasFullData ? a.shares * a.value : a.value; const realPnl = hasFullData ? marketValue - a.shares * a.cost : 0; const realPnlPct = hasFullData ? ((realPnl / (a.shares * a.cost)) * 100).toFixed(2) : 0; const realColor = realPnl >= 0 ? 'red' : 'green'; customRows += '<tr style="opacity:0.85"><td>' + a.name + '</td><td>' + a.type + '</td><td>' + (hasFullData ? a.shares : '-') + '</td><td>' + (hasFullData ? a.cost.toLocaleString() : '-') + '</td><td>' + a.value.toLocaleString() + '</td><td class="' + (hasFullData ? realColor : '') + '">' + (hasFullData ? (realPnl >= 0 ? '+' : '') + Math.round(realPnl).toLocaleString() + ' (' + realPnlPct + '%)' : '-') + '</td><td>' + (a.alert_high || '-') + '</td><td>' + (a.alert_low || '-') + '</td><td><button onclick="editCustomAsset(' + a.id + ')" style="background:var(--blue);font-size:11px;margin-right:4px">✏️ 編輯</button><button onclick="toggleCustomNotify(' + a.id + ', ' + (a.notify_enabled !== false) + ')" style="background:' + (a.notify_enabled !== false ? 'var(--green)' : 'var(--muted)') + ';font-size:11px;margin-right:4px" title="' + (a.notify_enabled !== false ? '通知已開' : '通知已關') + '">' + (a.notify_enabled !== false ? '🔔' : '🔕') + '</button><button onclick="deleteCustomAsset(' + a.id + ')" class="red">刪除</button></td></tr>';
       });
     } catch (e) { console.error('custom error:', e); }
 
@@ -485,7 +485,7 @@ setInterval(loadHistory, 300000);
     <label style="font-size:0.9rem;color:#6b7280">成本（可留空）
       <input id="custom-cost" type="number" step="any" inputmode="decimal" style="width:100%;padding:10px;background:#0a0e1a;color:#fff;border:1px solid #252d3d;border-radius:6px;margin-top:4px;font-size:16px">
     </label>
-    <label style="font-size:0.9rem;color:#6b7280">市值
+    <label style="font-size:0.9rem;color:#6b7280">現價/單位淨值
       <input id="custom-value" type="number" step="any" inputmode="decimal" style="width:100%;padding:10px;background:#0a0e1a;color:#fff;border:1px solid #252d3d;border-radius:6px;margin-top:4px;font-size:16px">
     </label>
     <label style="font-size:0.9rem;color:#6b7280">提醒上限（市值超過會通知）
