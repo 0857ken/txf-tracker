@@ -488,8 +488,9 @@
         <div class="form-group">
           <label>種類</label>
           <select id="f-type">
-            <option value="MXF">微台 (MXF)</option>
-            <option value="TXF">小台 (TXF)</option>
+            <option value="TMF">微台 (TMF)</option>
+            <option value="MXF">小台 (MXF)</option>
+            <option value="TXF">大台 (TXF)</option>
           </select>
         </div>
         <div class="form-group">
@@ -585,9 +586,19 @@ function renderDashboard(d) {
 
   // 口數
   const openPos = positions.filter(p => p.status === 'open');
-  const totalLots = openPos.reduce((s, p) => s + p.lots, 0);
-  document.getElementById('total-lots').textContent = totalLots + ' 口';
-  document.getElementById('lots-sub').textContent = '微台 × ' + totalLots + ' 口（各 50元/點）';
+  let lotsTMF = 0, lotsMXF = 0, lotsTXF = 0;
+  openPos.forEach(p => {
+    if (p.type === 'MXF' || p.type === '小台') lotsMXF += p.lots;
+    else if (p.type === 'TXF' || p.type === '大台') lotsTXF += p.lots;
+    else lotsTMF += p.lots;
+  });
+  const equivLots = lotsTMF + lotsMXF * 5 + lotsTXF * 20;
+  document.getElementById('total-lots').textContent = equivLots + ' 口';
+  const parts = [];
+  if (lotsTMF) parts.push('微台 ' + lotsTMF);
+  if (lotsMXF) parts.push('小台 ' + lotsMXF);
+  if (lotsTXF) parts.push('大台 ' + lotsTXF);
+  document.getElementById('lots-sub').textContent = (parts.join(' / ') || '—') + '（換算微台）';
 
   // 均線狀態
   const s = ma_state;
