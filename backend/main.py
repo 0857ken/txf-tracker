@@ -1068,6 +1068,32 @@ def add_custom_realized_pnl(payload: dict = Body(...)):
     return {"success": True}
 
 
+@app.put("/api/realized-pnl/{record_id}")
+def update_realized_pnl(record_id: int, payload: dict = Body(...)):
+    conn = get_db()
+    cur = conn.cursor()
+    cur.execute(
+        "UPDATE realized_pnl SET date=%s, lots=%s, entry_price=%s, exit_price=%s, pnl_twd=%s, note=%s WHERE id=%s",
+        (payload.get('date'), payload.get('lots'), payload.get('entry_price'),
+         payload.get('exit_price'), payload.get('pnl_twd'), payload.get('note', ''), record_id)
+    )
+    conn.commit()
+    cur.close()
+    conn.close()
+    return {"success": True}
+
+
+@app.delete("/api/realized-pnl/{record_id}")
+def delete_realized_pnl(record_id: int):
+    conn = get_db()
+    cur = conn.cursor()
+    cur.execute("DELETE FROM realized_pnl WHERE id=%s", (record_id,))
+    conn.commit()
+    cur.close()
+    conn.close()
+    return {"success": True}
+
+
 @app.get("/api/realized-pnl")
 def get_realized_pnl():
     conn = get_db()
