@@ -189,8 +189,8 @@
     <div class="label">已實現損益（累積曲線）</div>
     <div style="height:200px;margin-bottom:16px"><canvas id="realized-chart"></canvas></div>
     <table class="responsive">
-      <thead><tr><th>日期</th><th>項目</th><th>數量</th><th>成本價</th><th>結算價</th><th>損益</th></tr></thead>
-      <tbody id="realized-tbody"><tr><td colspan="6" style="color:var(--muted)">尚無結算記錄</td></tr></tbody>
+      <thead><tr><th>日期</th><th>項目</th><th>數量</th><th>成本價</th><th>結算價</th><th>損益</th><th>操作</th></tr></thead>
+      <tbody id="realized-tbody"><tr><td colspan="7" style="color:var(--muted)">尚無結算記錄</td></tr></tbody>
     </table>
   </div>
 
@@ -578,6 +578,50 @@ async function addAsset() {
   } catch (e) { alert('新增失敗'); }
 }
 
+
+
+async function editRealized(id) {
+  try {
+    const res = await fetch(API + '/api/realized-pnl');
+    const list = await res.json();
+    const r = list.find(x => x.id === id);
+    if (!r) return alert('找不到記錄');
+    const dialog = document.getElementById('realized-edit-dialog');
+    document.getElementById('rd-date').value = r.date;
+    document.getElementById('rd-note').value = r.note || '';
+    document.getElementById('rd-lots').value = r.lots;
+    document.getElementById('rd-entry').value = r.entry_price;
+    document.getElementById('rd-exit').value = r.exit_price;
+    document.getElementById('rd-pnl').value = r.pnl_twd;
+    dialog.showModal();
+    document.getElementById('rd-confirm').onclick = async () => {
+      const payload = {
+        date: document.getElementById('rd-date').value,
+        note: document.getElementById('rd-note').value,
+        lots: parseFloat(document.getElementById('rd-lots').value),
+        entry_price: parseFloat(document.getElementById('rd-entry').value),
+        exit_price: parseFloat(document.getElementById('rd-exit').value),
+        pnl_twd: parseFloat(document.getElementById('rd-pnl').value)
+      };
+      await fetch(API + '/api/realized-pnl/' + id, {
+        method: 'PUT',
+        headers: {'Content-Type': 'application/json'},
+        body: JSON.stringify(payload)
+      });
+      dialog.close();
+      loadRealized();
+    };
+  } catch (e) { alert('編輯失敗'); }
+}
+
+async function deleteRealized(id) {
+  if (!confirm('確定刪除這筆已實現損益？')) return;
+  try {
+    await fetch(API + '/api/realized-pnl/' + id, {method: 'DELETE'});
+    loadRealized();
+  } catch (e) { alert('刪除失敗'); }
+}
+
 async function loadRealized() {
   try {
     const res = await fetch(API + '/api/realized-pnl');
@@ -585,7 +629,7 @@ async function loadRealized() {
     const tbody = document.getElementById('realized-tbody');
     
     if (records.length === 0) {
-      tbody.innerHTML = '<tr><td colspan="6" style="color:var(--muted)">尚無結算記錄</td></tr>';
+      tbody.innerHTML = '<tr><td colspan="7" style="color:var(--muted)">尚無結算記錄</td></tr>';
       return;
     }
     
@@ -871,5 +915,33 @@ loadRealized();
   </div>
 </dialog>
 
+
+<dialog id="realized-edit-dialog" style="background:#141925;color:#e8eaed;border:1px solid #252d3d;border-radius:12px;padding:24px;min-width:340px;max-width:90%;box-shadow:0 10px 25px rgba(0,0,0,0.5)">
+  <h3 style="margin-top:0;font-size:1.2rem;border-bottom:1px solid #252d3d;padding-bottom:12px;color:#d4af37">編輯已實現損益</h3>
+  <div style="display:flex;flex-direction:column;gap:14px;margin-top:16px">
+    <label style="font-size:0.9rem;color:#6b7280">日期
+      <input id="rd-date" type="date" style="width:100%;padding:10px;background:#0a0e1a;color:#fff;border:1px solid #252d3d;border-radius:6px;margin-top:4px;font-size:16px">
+    </label>
+    <label style="font-size:0.9rem;color:#6b7280">項目/備註
+      <input id="rd-note" type="text" style="width:100%;padding:10px;background:#0a0e1a;color:#fff;border:1px solid #252d3d;border-radius:6px;margin-top:4px;font-size:16px">
+    </label>
+    <label style="font-size:0.9rem;color:#6b7280">數量
+      <input id="rd-lots" type="number" step="any" inputmode="decimal" style="width:100%;padding:10px;background:#0a0e1a;color:#fff;border:1px solid #252d3d;border-radius:6px;margin-top:4px;font-size:16px">
+    </label>
+    <label style="font-size:0.9rem;color:#6b7280">成本價
+      <input id="rd-entry" type="number" step="any" inputmode="decimal" style="width:100%;padding:10px;background:#0a0e1a;color:#fff;border:1px solid #252d3d;border-radius:6px;margin-top:4px;font-size:16px">
+    </label>
+    <label style="font-size:0.9rem;color:#6b7280">結算價
+      <input id="rd-exit" type="number" step="any" inputmode="decimal" style="width:100%;padding:10px;background:#0a0e1a;color:#fff;border:1px solid #252d3d;border-radius:6px;margin-top:4px;font-size:16px">
+    </label>
+    <label style="font-size:0.9rem;color:#6b7280">損益（元）
+      <input id="rd-pnl" type="number" step="any" inputmode="decimal" style="width:100%;padding:10px;background:#0a0e1a;color:#fff;border:1px solid #252d3d;border-radius:6px;margin-top:4px;font-size:16px">
+    </label>
+    <div style="display:flex;gap:12px;justify-content:flex-end;margin-top:8px">
+      <button onclick="document.getElementById('realized-edit-dialog').close()" style="background:transparent;color:#6b7280;border:none;cursor:pointer;padding:8px 16px">取消</button>
+      <button id="rd-confirm" style="background:#d4af37;color:#0a0e1a;border:none;border-radius:6px;padding:8px 20px;cursor:pointer;font-weight:bold">儲存</button>
+    </div>
+  </div>
+</dialog>
 </body>
 </html>
