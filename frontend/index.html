@@ -594,7 +594,7 @@ function renderDashboard(d) {
     else lotsTMF += p.lots;
   });
   const equivLots = lotsTMF + lotsMXF * 5 + lotsTXF * 20;
-  document.getElementById('total-lots').textContent = equivLots + ' 口';
+  document.getElementById('total-lots').textContent = equivLots + ' 口 (微台)';
   const parts = [];
   if (lotsTMF) parts.push('微台 ' + lotsTMF);
   if (lotsMXF) parts.push('小台 ' + lotsMXF);
