@@ -588,8 +588,9 @@ function renderDashboard(d) {
   const openPos = positions.filter(p => p.status === 'open');
   let lotsTMF = 0, lotsMXF = 0, lotsTXF = 0;
   openPos.forEach(p => {
-    if (p.type === 'MXF' || p.type === '小台') lotsMXF += p.lots;
-    else if (p.type === 'TXF' || p.type === '大台') lotsTXF += p.lots;
+    const t = p.type || '';
+    if (t === 'MXF' || t.startsWith('小台')) lotsMXF += p.lots;
+    else if (t === 'TXF' || t.startsWith('大台')) lotsTXF += p.lots;
     else lotsTMF += p.lots;
   });
   const equivLots = lotsTMF + lotsMXF * 5 + lotsTXF * 20;
