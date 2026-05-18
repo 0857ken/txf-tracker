@@ -338,8 +338,15 @@ async function loadDashboard() {
     document.getElementById('leverage').textContent = data.ma_state.mode === '收割' ? '1.5-2.0倍' : data.ma_state.mode === '進攻' ? '1.2-1.5倍' : '0.8-1.0倍';
     document.getElementById('lots-suggest').textContent = data.ma_state.mode === '收割' ? '1小台+2微台' : data.ma_state.mode === '進攻' ? '5-6口微台' : '3-4口微台';
     
-    const total_lots = data.positions.reduce((a,p)=>a+p.lots, 0);
-    document.getElementById('lots').textContent = total_lots;
+    let lotsTMF = 0, lotsMXF = 0, lotsTXF = 0;
+    data.positions.forEach(p => {
+      const t = p.type || '';
+      if (t === 'MXF' || t.startsWith('小台')) lotsMXF += p.lots;
+      else if (t === 'TXF' || t.startsWith('大台')) lotsTXF += p.lots;
+      else lotsTMF += p.lots;
+    });
+    const equivLots = lotsTMF + lotsMXF * 5 + lotsTXF * 20;
+    document.getElementById('lots').textContent = equivLots + ' 口 (微台)';
     document.getElementById('lots-sub').textContent = data.positions.length + ' 筆部位';
     
     const tbody = document.getElementById('pos-tbody');
