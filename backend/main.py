@@ -1,4 +1,13 @@
-from fastapi import FastAPI, Body, HTTPException
+import logging
+from fastapi import FastAPI, Body
+
+# Logging 設定
+logging.basicConfig(
+    level=logging.INFO,
+    format='%(asctime)s [%(levelname)s] %(message)s',
+    datefmt='%Y-%m-%d %H:%M:%S'
+)
+logger = logging.getLogger(__name__), HTTPException
 from fastapi.middleware.cors import CORSMiddleware
 from datetime import datetime, timedelta
 import urllib.request, json, os
@@ -255,7 +264,7 @@ def send_telegram(msg, alert_key=None, alert_type=None, symbol=None):
                 if last_time > cutoff:
                     return False  # 冷卻中
         except Exception as e:
-            print(f"冷卻檢查失敗: {e}")
+            logger.info(f"冷卻檢查失敗: {e}")
     
     # 發送 Telegram
     try:
@@ -277,11 +286,11 @@ def send_telegram(msg, alert_key=None, alert_type=None, symbol=None):
                 cur.close()
                 conn.close()
             except Exception as e:
-                print(f"通知記錄失敗: {e}")
+                logger.info(f"通知記錄失敗: {e}")
         
         return True
     except Exception as e:
-        print(f"Telegram 失敗: {e}")
+        logger.error(f"Telegram 失敗: {e}", exc_info=True)
         return False
 
 def fetch_yahoo(symbol, range_param="90d"):
@@ -302,7 +311,7 @@ def fetch_yahoo(symbol, range_param="90d"):
             "timestamps": timestamps
         }
     except Exception as e:
-        print(f"Yahoo fetch failed for {symbol}: {e}")
+        logger.info(f"Yahoo fetch failed for {symbol}: {e}")
         return None
 
 def fetch_price():
@@ -392,7 +401,7 @@ def dashboard():
         cur_s.close()
         conn_s.close()
     except Exception as e:
-        print(f"讀取 settings 失敗: {e}")
+        logger.info(f"讀取 settings 失敗: {e}")
     # 獲利保護線：均價 × (1 + X%)
     hard_floor = round(avg_cost * (1 + profit_protect_pct/100), 0) if open_positions else 35800
     
@@ -603,7 +612,7 @@ def fetch_twse_price(symbol):
                 return {"price": round(float(price), 2), "name": name}
         return None
     except Exception as e:
-        print(f"TWSE failed for {symbol}: {e}")
+        logger.info(f"TWSE failed for {symbol}: {e}")
         return None
 
 def fetch_stock_price(symbol):
@@ -1016,7 +1025,7 @@ def update_custom_asset(asset_id: int, payload: dict = Body(...)):
             try:
                 send_telegram(msg, alert_key=f"custom_{asset_id}_{new_value}", alert_type="custom_alert", symbol=a['name'])
             except Exception as e:
-                print(f"通知失敗: {e}")
+                logger.error(f"通知失敗: {e}", exc_info=True)
     conn.commit()
     cur.close()
     conn.close()
