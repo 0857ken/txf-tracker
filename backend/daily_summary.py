@@ -9,6 +9,14 @@ import urllib.request
 import psycopg2
 from psycopg2.extras import RealDictCursor
 from datetime import datetime, timezone, timedelta
+import logging
+
+logging.basicConfig(
+    level=logging.INFO,
+    format='%(asctime)s [%(levelname)s] %(message)s',
+    datefmt='%Y-%m-%d %H:%M:%S'
+)
+logger = logging.getLogger(__name__)
 
 DATABASE_URL = os.environ.get('DATABASE_URL')
 TELEGRAM_TOKEN = os.environ.get('TELEGRAM_TOKEN')
@@ -40,12 +48,12 @@ def fetch_yahoo(symbol):
             data = json.loads(r.read())
         return data['chart']['result'][0]
     except Exception as e:
-        print(f'Yahoo {symbol} failed: {e}')
+        logger.error(f'Yahoo {symbol} failed: {e}')
         return None
 
 def send_telegram(msg):
     if not TELEGRAM_TOKEN or not TELEGRAM_CHAT_ID:
-        print('Telegram 未設定')
+        logger.info('Telegram 未設定')
         return False
     try:
         url = f'https://api.telegram.org/bot{TELEGRAM_TOKEN}/sendMessage'
@@ -54,12 +62,12 @@ def send_telegram(msg):
         urllib.request.urlopen(req, timeout=10)
         return True
     except Exception as e:
-        print(f'Telegram 失敗: {e}')
+        logger.error(f'Telegram 失敗: {e}')
         return False
 
 def generate_summary():
     if not is_trading_day():
-        print('非交易日')
+        logger.info('非交易日')
         return
     
     today = get_tw_now().strftime('%Y-%m-%d')
@@ -110,7 +118,7 @@ def generate_summary():
         if r and r["value"] is not None:
             profit_protect_pct = float(r["value"])
     except Exception as e:
-        print(f"讀取 profit_protect_pct 失敗: {e}")
+        logger.error(f"讀取 profit_protect_pct 失敗: {e}")
     hard_floor = round(avg_cost * (1 + profit_protect_pct/100)) if avg_cost else 0
     dist_to_floor = round(txf_close - hard_floor) if hard_floor else None
     futures_equity = futures_value
@@ -196,11 +204,11 @@ def generate_summary():
     lines.append(f"🔗 {site_url}")
     
     msg = "\n".join(lines)
-    print(msg)
-    print()
+    logger.info(msg)
+    logger.info()
     
     if send_telegram(msg):
-        print('✅ 已發送')
+        logger.info('✅ 已發送')
 
 if __name__ == '__main__':
     generate_summary()

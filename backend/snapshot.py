@@ -9,6 +9,14 @@ import urllib.request
 import psycopg2
 from psycopg2.extras import RealDictCursor
 from datetime import datetime, timezone, timedelta
+import logging
+
+logging.basicConfig(
+    level=logging.INFO,
+    format='%(asctime)s [%(levelname)s] %(message)s',
+    datefmt='%Y-%m-%d %H:%M:%S'
+)
+logger = logging.getLogger(__name__)
 
 DATABASE_URL = os.environ.get('DATABASE_URL')
 TOTAL_FUND = 2000000
@@ -30,7 +38,7 @@ def get_tw_now():
 def is_trading_day():
     now = get_tw_now()
     if now.weekday() >= 5:
-        print(f'⚠️ {now.strftime("%Y-%m-%d")} 是週末（仍會記錄）')
+        logger.info(f'⚠️ {now.strftime("%Y-%m-%d")} 是週末（仍會記錄）')
     return True
 
 def fetch_yahoo(symbol):
@@ -41,14 +49,14 @@ def fetch_yahoo(symbol):
             data = json.loads(r.read())
         return data['chart']['result'][0].get('meta', {}).get('regularMarketPrice')
     except Exception as e:
-        print(f'⚠️ Yahoo {symbol} failed: {e}')
+        logger.error(f'⚠️ Yahoo {symbol} failed: {e}')
         return None
 
 def take_snapshot():
     if not is_trading_day():
         return
     if not DATABASE_URL:
-        print('❌ 沒有 DATABASE_URL')
+        logger.info('❌ 沒有 DATABASE_URL')
         sys.exit(1)
     
     conn = psycopg2.connect(DATABASE_URL)
@@ -62,18 +70,18 @@ def take_snapshot():
     ov = cur.fetchone()
     if ov:
         txf_price = float(ov['price'])
-        print(f'📌 使用今日校對價格: {txf_price}')
+        logger.info(f'📌 使用今日校對價格: {txf_price}')
     else:
         # 2. 沿用最近一次校對價（適合週末/未校對新一天）
         cur.execute("SELECT price, date FROM price_overrides ORDER BY date DESC LIMIT 1")
         latest = cur.fetchone()
         if latest:
             txf_price = float(latest['price'])
-            print(f'📌 沿用 {latest["date"]} 的校對價格: {txf_price}')
+            logger.info(f'📌 沿用 {latest["date"]} 的校對價格: {txf_price}')
         else:
             # 3. 都沒有就 fallback Yahoo
             txf_price = fetch_yahoo('TXF=F') or twii_price
-            print(f'⚠️ 無校對價，使用 Yahoo: {txf_price}')
+            logger.info(f'⚠️ 無校對價，使用 Yahoo: {txf_price}')
     
     cur.execute("SELECT * FROM positions WHERE status='open'")
     positions = cur.fetchall()
@@ -155,11 +163,11 @@ def take_snapshot():
     cur.close()
     conn.close()
     
-    print(f'✅ {today}')
-    print(f'   總權益: {total_equity:,.0f}')
-    print(f'   未實現: {unrealized:,.0f}')
-    print(f'   已實現(今日): {realized_today:,.0f}')
-    print(f'   現金: {cash:,.0f}')
+    logger.info(f'✅ {today}')
+    logger.info(f'   總權益: {total_equity:,.0f}')
+    logger.info(f'   未實現: {unrealized:,.0f}')
+    logger.info(f'   已實現(今日): {realized_today:,.0f}')
+    logger.info(f'   現金: {cash:,.0f}')
 
 if __name__ == '__main__':
     take_snapshot()
