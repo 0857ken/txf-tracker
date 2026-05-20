@@ -7,7 +7,8 @@ logging.basicConfig(
     format='%(asctime)s [%(levelname)s] %(message)s',
     datefmt='%Y-%m-%d %H:%M:%S'
 )
-logger = logging.getLogger(__name__), HTTPException
+from fastapi import HTTPException
+logger = logging.getLogger(__name__)
 from fastapi.middleware.cors import CORSMiddleware
 from datetime import datetime, timedelta
 import urllib.request, json, os
