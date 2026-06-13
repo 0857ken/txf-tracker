@@ -295,81 +295,55 @@ async function saveSettings() {
 
 async function loadDashboard() {
   try {
-    const res = await fetch(API + '/api/dashboard');
-    if (!res.ok) throw new Error('API 錯誤');
-    const data = await res.json();
-    
-    document.getElementById('price').textContent = data.market.current_price.toLocaleString();
-    
-    // 期現價差顯示（台灣紅漲綠跌）
-    const spread = data.market.spread;
-    const twiiPrice = data.market.twii_price;
+    const res = await fetch('data/market_data.json?t=' + Date.now());
+    if (!res.ok) throw new Error('讀取報價失敗');
+    const j = await res.json();
+
+    // 報價現價
+    document.getElementById('price').textContent = j.market.current_price.toLocaleString();
+
+    // 期現價差：serverless 版無即時期貨,顯示盤後
     const spreadEl = document.getElementById('spread');
     const statusEl = document.getElementById('spread-status');
     const twiiEl = document.getElementById('twii-price');
-    
-    if (twiiPrice) {
-      twiiEl.textContent = twiiPrice.toLocaleString();
-    }
-    
-    if (spread !== null && spread !== undefined) {
-      const sign = spread >= 0 ? '+' : '';
-      spreadEl.textContent = sign + spread.toFixed(0) + ' 點';
-      spreadEl.className = 'value ' + (spread >= 0 ? 'red' : 'green');
-      statusEl.textContent = spread >= 0 ? '正價差（看多）' : '逆價差（看空）';
-    } else {
-      spreadEl.textContent = '—';
-      statusEl.textContent = '盤後';
-    }
-    document.getElementById('data-source').textContent = data.market.data_source + ' · ' + new Date().toLocaleTimeString('zh-TW');
-    
-    const pnl = data.total_pnl_twd;
+    if (twiiEl) twiiEl.textContent = j.market.current_price.toLocaleString();
+    if (spreadEl) { spreadEl.textContent = '—'; }
+    if (statusEl) { statusEl.textContent = '加權指數現值'; }
+
+    document.getElementById('data-source').textContent =
+      'Yahoo Finance · ' + (j.updated_at || '');
+
+    // 均線
+    document.getElementById('ma5').textContent = j.ma_state.ma5 ? j.ma_state.ma5.toLocaleString() : '—';
+    document.getElementById('ma20').textContent = j.ma_state.ma20 ? j.ma_state.ma20.toLocaleString() : '—';
+    document.getElementById('ma60').textContent = j.ma_state.ma60 ? j.ma_state.ma60.toLocaleString() : '—';
+    document.getElementById('ma-state').textContent = j.ma_state.state;
+    document.getElementById('ma-mode').textContent = j.ma_state.mode;
+    document.getElementById('leverage').textContent = j.ma_state.leverage + '倍';
+    const lotsSuggest = document.getElementById('lots-suggest');
+    if (lotsSuggest) lotsSuggest.textContent = j.ma_state.mode;
+
+    // 部位相關:等 Firestore,暫時顯示佔位
     const pnlEl = document.getElementById('pnl');
-    pnlEl.className = 'value ' + (pnl >= 0 ? 'red' : 'green');
-    pnlEl.textContent = (pnl >= 0 ? '+' : '') + pnl.toLocaleString() + ' 元';
-    
-    document.getElementById('hard-floor').textContent = data.hard_floor.toLocaleString();
-    document.getElementById('ma5').textContent = data.market.ma5.toLocaleString();
-    document.getElementById('ma20').textContent = data.market.ma20.toLocaleString();
-    document.getElementById('ma60').textContent = data.market.ma60.toLocaleString();
-    
-    document.getElementById('ma-state').textContent = data.ma_state.state;
-    document.getElementById('ma-mode').textContent = data.ma_state.mode;
-    document.getElementById('leverage').textContent = data.ma_state.mode === '收割' ? '1.5-2.0倍' : data.ma_state.mode === '進攻' ? '1.2-1.5倍' : '0.8-1.0倍';
-    document.getElementById('lots-suggest').textContent = data.ma_state.mode === '收割' ? '1小台+2微台' : data.ma_state.mode === '進攻' ? '5-6口微台' : '3-4口微台';
-    
-    let lotsTMF = 0, lotsMXF = 0, lotsTXF = 0;
-    data.positions.forEach(p => {
-      const t = p.type || '';
-      if (t === 'MXF' || t.startsWith('小台')) lotsMXF += p.lots;
-      else if (t === 'TXF' || t.startsWith('大台')) lotsTXF += p.lots;
-      else lotsTMF += p.lots;
-    });
-    const equivLots = lotsTMF + lotsMXF * 5 + lotsTXF * 20;
-    document.getElementById('lots').textContent = equivLots + ' 口 (微台)';
-    document.getElementById('lots-sub').textContent = data.positions.length + ' 筆部位';
-    
-    const tbody = document.getElementById('pos-tbody');
-    tbody.innerHTML = data.positions.map((p, i) => `
-      <tr>
-        <td>${p.date}</td><td>${p.type}</td>
-        <td><input type="number" id="lots-${i}" value="${p.lots}" style="width:60px"></td>
-        <td><input type="number" id="cost-${i}" value="${p.entry_price}" step="0.1" style="width:80px"></td>
-        <td class="${p.pnl_twd >= 0 ? 'red' : 'green'}">${(p.pnl_twd >= 0 ? '+' : '') + p.pnl_twd.toLocaleString()}</td>
-        <td>${p.note}</td>
-        <td>
-          <button onclick="updatePos(${p.id}, ${i})">保存</button>
-          <button onclick="deletePos(${p.id})" class="red">刪除</button>
-        </td>
-      </tr>
-    `).join('');
-    
-    renderChart(data.market.chart_data);
+    if (pnlEl) { pnlEl.textContent = '—'; pnlEl.className = 'value'; }
+    const hardFloorEl = document.getElementById('hard-floor');
+    if (hardFloorEl) hardFloorEl.textContent = '—';
+    const lotsEl = document.getElementById('lots');
+    if (lotsEl) lotsEl.textContent = '—';
+    const lotsSub = document.getElementById('lots-sub');
+    if (lotsSub) lotsSub.textContent = '部位功能遷移中';
+    const posTbody = document.getElementById('pos-tbody');
+    if (posTbody) posTbody.innerHTML = '<tr><td colspan="7" style="color:var(--muted)">部位功能即將上線(Firestore)</td></tr>';
+
+    // 走勢圖:把 trend 轉成 renderChart 要的格式
+    const chartData = j.trend.dates.map((d, i) => ({ date: d, close: j.trend.prices[i] }));
+    renderChart(chartData);
   } catch (e) {
     console.error('Error:', e);
-    document.getElementById('price').textContent = '連線失敗';
+    document.getElementById('price').textContent = '讀取失敗';
   }
 }
+
 
 async function overridePrice() {
   const price = parseFloat(document.getElementById('override-price').value);
