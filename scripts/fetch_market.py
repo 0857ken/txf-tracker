@@ -1,6 +1,6 @@
 #!/usr/bin/env python3
 """抓 ^TWII 報價,算 5/20/60 均線與紅黑K,輸出 data/market_data.json"""
-import json, sys, urllib.request
+import json, sys, os, urllib.request
 from datetime import datetime, timezone, timedelta
 
 YAHOO_URL = "https://query1.finance.yahoo.com/v8/finance/chart/%5ETWII?interval=1d&range=3mo"
@@ -66,6 +66,7 @@ def main():
     if not rows:
         print("ERROR: 沒抓到報價", file=sys.stderr); sys.exit(1)
     data = build(rows)
+    os.makedirs("data", exist_ok=True)
     with open("data/market_data.json", "w", encoding="utf-8") as f:
         json.dump(data, f, ensure_ascii=False, indent=2)
     print(f"OK 現價 {data['market']['current_price']}")
