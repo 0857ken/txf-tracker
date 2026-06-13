@@ -173,6 +173,8 @@
 </main>
 
 <script src="https://cdnjs.cloudflare.com/ajax/libs/Chart.js/3.9.1/chart.min.js"></script>
+<script type="module" src="firebase-init.js"></script>
+<script type="module" src="positions.js"></script>
 <script>
 const API = 'https://txf-tracker-production.up.railway.app';
 let chart = null;
@@ -323,17 +325,61 @@ async function loadDashboard() {
     const lotsSuggest = document.getElementById('lots-suggest');
     if (lotsSuggest) lotsSuggest.textContent = j.ma_state.mode;
 
-    // 部位相關:等 Firestore,暫時顯示佔位
+    // 部位:從 Firestore 讀取並計算損益
+    const curPrice = j.market.current_price;
+    let positions = [];
+    try { positions = await window.fetchPositions(); } catch (err) { console.error('讀取部位失敗', err); }
+
+    let totalPnl = 0, equivLots = 0;
+    positions.forEach(p => {
+      p._pnl = window.calcPnl(p, curPrice);
+      totalPnl += p._pnl;
+      const mult = window.CONTRACT_MULT[p.type] || 10;
+      equivLots += (mult / 10) * p.lots;  // 換算微台口數
+    });
+
     const pnlEl = document.getElementById('pnl');
-    if (pnlEl) { pnlEl.textContent = '—'; pnlEl.className = 'value'; }
-    const hardFloorEl = document.getElementById('hard-floor');
-    if (hardFloorEl) hardFloorEl.textContent = '—';
+    if (pnlEl) {
+      pnlEl.textContent = (totalPnl >= 0 ? '+' : '') + totalPnl.toLocaleString() + ' 元';
+      pnlEl.className = 'value ' + (totalPnl >= 0 ? 'red' : 'green');
+    }
     const lotsEl = document.getElementById('lots');
-    if (lotsEl) lotsEl.textContent = '—';
+    if (lotsEl) lotsEl.textContent = equivLots + ' 口 (微台)';
     const lotsSub = document.getElementById('lots-sub');
-    if (lotsSub) lotsSub.textContent = '部位功能遷移中';
+    if (lotsSub) lotsSub.textContent = positions.length + ' 筆部位';
+
+    // 獲利保護線:取第一筆部位的成本 ×(1+保護%),簡化用 5%
+    const hardFloorEl = document.getElementById('hard-floor');
+    if (hardFloorEl) {
+      if (positions.length > 0) {
+        const avgCost = positions.reduce((s,p)=>s+p.entry_price,0)/positions.length;
+        hardFloorEl.textContent = Math.round(avgCost * 1.05).toLocaleString();
+      } else {
+        hardFloorEl.textContent = '—';
+      }
+    }
+
+    // 畫部位表格
     const posTbody = document.getElementById('pos-tbody');
-    if (posTbody) posTbody.innerHTML = '<tr><td colspan="7" style="color:var(--muted)">部位功能即將上線(Firestore)</td></tr>';
+    if (posTbody) {
+      if (positions.length === 0) {
+        posTbody.innerHTML = '<tr><td colspan="7" style="color:var(--muted)">尚無部位,用下方表單新增</td></tr>';
+      } else {
+        posTbody.innerHTML = positions.map((p, i) => `
+          <tr>
+            <td>${p.date}</td><td>${p.type}</td>
+            <td><input type="number" id="lots-${i}" value="${p.lots}" style="width:60px"></td>
+            <td><input type="number" id="cost-${i}" value="${p.entry_price}" step="0.1" style="width:80px"></td>
+            <td class="${p._pnl >= 0 ? 'red' : 'green'}">${(p._pnl >= 0 ? '+' : '') + p._pnl.toLocaleString()}</td>
+            <td>${p.note || ''}</td>
+            <td>
+              <button onclick="updatePos('${p.id}', ${i})">保存</button>
+              <button onclick="deletePos('${p.id}')" class="red">刪除</button>
+            </td>
+          </tr>
+        `).join('');
+      }
+    }
 
     // 走勢圖:把 trend 轉成 renderChart 要的格式
     const chartData = j.trend.dates.map((d, i) => ({ date: d, close: j.trend.prices[i] }));
@@ -369,19 +415,11 @@ async function overridePrice() {
 async function updatePos(posId, idx) {
   const lots = parseInt(document.getElementById(`lots-${idx}`).value);
   const cost = parseFloat(document.getElementById(`cost-${idx}`).value);
-  
   if (!lots || !cost) return alert('請填寫口數和成本價');
-  
   try {
-    const res = await fetch(`${API}/api/positions/${posId}`, {
-      method: 'PATCH',
-      headers: {'Content-Type': 'application/json'},
-      body: JSON.stringify({lots, entry_price: cost})
-    });
-    if (res.ok) {
-      alert('已保存');
-      loadDashboard();
-    }
+    await window.updatePositionFS(posId, { lots, entry_price: cost });
+    alert('已保存');
+    loadDashboard();
   } catch (e) {
     alert('保存失敗: ' + e.message);
   }
@@ -390,10 +428,10 @@ async function updatePos(posId, idx) {
 async function deletePos(posId) {
   if (!confirm('確定刪除？')) return;
   try {
-    await fetch(`${API}/api/positions/${posId}`, {method: 'DELETE'});
+    await window.deletePositionFS(posId);
     loadDashboard();
   } catch (e) {
-    alert('刪除失敗');
+    alert('刪除失敗: ' + e.message);
   }
 }
 
@@ -403,31 +441,23 @@ async function addPosition() {
   const lots = parseInt(document.getElementById('new-lots').value);
   const cost = parseFloat(document.getElementById('new-cost').value);
   const note = document.getElementById('new-note').value;
-  
   if (!date || !type || !lots || !cost) return alert('請填寫所有欄位');
-  
   try {
-    const res = await fetch(API + '/api/positions', {
-      method: 'POST',
-      headers: {'Content-Type': 'application/json'},
-      body: JSON.stringify({date, type, lots, entry_price: cost, note})
-    });
-    if (res.ok) {
-      alert('已新增');
-      document.getElementById('new-date').value = '';
-      document.getElementById('new-type').value = '';
-      document.getElementById('new-lots').value = '';
-      document.getElementById('new-cost').value = '';
-      document.getElementById('new-note').value = '';
-      loadDashboard();
-    }
+    await window.addPositionFS({ date, type, lots, entry_price: cost, note: note || '' });
+    alert('已新增');
+    document.getElementById('new-date').value = '';
+    document.getElementById('new-type').value = '';
+    document.getElementById('new-lots').value = '';
+    document.getElementById('new-cost').value = '';
+    document.getElementById('new-note').value = '';
+    loadDashboard();
   } catch (e) {
     alert('新增失敗: ' + e.message);
   }
 }
 
 function renderChart(data) {
-  const ctx = document.getElementById('chart').getContext('2d');
+const ctx = document.getElementById('chart').getContext('2d');
   if (chart) chart.destroy();
   chart = new Chart(ctx, {
     type: 'line',
