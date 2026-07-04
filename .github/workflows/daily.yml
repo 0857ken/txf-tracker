@@ -1,0 +1,29 @@
+name: LINE 盤後總結
+
+on:
+  schedule:
+    - cron: '50 5 * * *'
+  workflow_dispatch:
+
+jobs:
+  line-summary:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout gh-pages
+        uses: actions/checkout@v4
+        with:
+          ref: gh-pages
+
+      - name: Setup Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: '3.12'
+
+      - name: 安裝套件
+        run: pip install firebase-admin
+
+      - name: 執行 LINE 推播
+        env:
+          LINE_TOKEN: ${{ secrets.LINE_TOKEN }}
+          FIREBASE_KEY: ${{ secrets.FIREBASE_KEY }}
+        run: python scripts/line_summary.py
