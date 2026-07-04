@@ -1,7 +1,7 @@
 // 期貨部位管理(Firestore 版)
 import { collection, addDoc, updateDoc, deleteDoc, doc, getDocs } from 'https://www.gstatic.com/firebasejs/12.14.0/firebase-firestore.js';
 
-const MULT = { TXF: 200, MXF: 50, TMF: 10 };  // 合約乘數:大台/小台/微台
+const MULT = { TXF: 200, MXF: 50, TMF: 10, '大台': 200, '小台': 50, '微台': 10 };  // 合約乘數(含中文別名)
 
 function posCol() {
   return collection(window.fbDb, 'users', 'me', 'positions');
