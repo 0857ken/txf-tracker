@@ -1,0 +1,44 @@
+name: 更新股票價格
+
+on:
+  schedule:
+    # 台股盤中每小時抓(台灣 9-14 點 = UTC 1-6 點)
+    - cron: '0 1-6 * * 1-5'
+  workflow_dispatch:
+
+permissions:
+  contents: write
+
+jobs:
+  update-stocks:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout gh-pages
+        uses: actions/checkout@v4
+        with:
+          ref: gh-pages
+
+      - name: Setup Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: '3.12'
+
+      - name: 安裝套件
+        run: pip install firebase-admin
+
+      - name: 抓取股票價格
+        env:
+          FIREBASE_KEY: ${{ secrets.FIREBASE_KEY }}
+        run: python scripts/fetch_stocks.py
+
+      - name: Commit 更新的 JSON
+        run: |
+          git config user.name "github-actions[bot]"
+          git config user.email "github-actions[bot]@users.noreply.github.com"
+          git add data/stock_prices.json
+          if git diff --staged --quiet; then
+            echo "無變化"
+          else
+            git commit -m "chore: 自動更新股票價格 [skip ci]"
+            git push origin gh-pages
+          fi
