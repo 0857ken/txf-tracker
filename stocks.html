@@ -386,10 +386,7 @@ function changeRange(range) {
   loadHistory();
 }
 
-loadStocks();
-loadHistory();
-document.getElementById('btn-day').classList.add('active');
-setInterval(loadStocks, 60000);
+(function waitInit(){ if(window.fetchStocks){ loadStocks(); loadHistory(); document.getElementById("btn-day").classList.add("active"); setInterval(loadStocks,60000);} else { setTimeout(waitInit,100);} })();
 </script>
 
 <!-- 編輯股票警戒對話框 -->
