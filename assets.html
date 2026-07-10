@@ -203,14 +203,17 @@
   </div>
 </main>
 
+<script type="module" src="firebase-init.js"></script>
+<script type="module" src="positions.js"></script>
+<script type="module" src="stocks-data.js"></script>
 <script>
-const API = 'https://txf-tracker-production.up.railway.app';
+const TXF_MULT = { TXF: 200, MXF: 50, TMF: 10, '大台': 200, '小台': 50, '微台': 10 };
+const TXF_POINT = { TXF: 50, MXF: 10, TMF: 5 };  // 每點價值(現金水位用,保留原邏輯)
 let assets = [];
 
 async function loadCustomAssets() {
   try {
-    const res = await fetch(API + '/api/custom-assets');
-    assets = await res.json();
+    assets = await window.fetchCustomAssets();
     calculateAssets();
   } catch (e) { console.error('load custom assets failed', e); }
 }
@@ -219,8 +222,7 @@ let pieChart = null;
 async function loadNotifications() {
   // 系統狀態
   try {
-    const res = await fetch(API + '/api/notifications/status');
-    const status = await res.json();
+    const status = { enabled: true };  // LINE 推播
     const statusEl = document.getElementById('notify-status');
     if (status.telegram_configured && status.enabled) {
       statusEl.innerHTML = '✅ 通知系統運作中｜冷卻 ' + status.cooldown_minutes + ' 分鐘';
@@ -235,7 +237,7 @@ async function loadNotifications() {
   
   // 通知歷史
   try {
-    const res = await fetch(API + '/api/notifications?limit=20');
+    const res = { json: async () => [] };
     const records = await res.json();
     const listEl = document.getElementById('notify-list');
     if (records.length === 0) {
@@ -258,14 +260,15 @@ async function loadNotifications() {
 }
 
 async function testNotification() {
-  const res = await fetch(API + '/api/notifications/test', {method: 'POST'});
+  alert('測試通知已改用 LINE 推播,請見 LINE 官方帳號'); return;
+  const res = { ok: false };
   const data = await res.json();
   alert(data.message);
 }
 
 async function clearNotifications() {
   if (!confirm('確定清空所有通知歷史？')) return;
-  await fetch(API + '/api/notifications', {method: 'DELETE'});
+  return;  // 通知歷史已改 LINE
   loadNotifications();
 }
 
@@ -275,30 +278,37 @@ async function calculateAssets() {
   let txfData = null;
   let stocksData = [];
   
-  // 抓台指期資料
-  let txfMarginUsed = 0;  // 期貨佔用保證金（算現金水位用）
+  // 抓台指期資料(Firestore 部位 + market_data.json)
+  let txfMarginUsed = 0;
+  let currentPrice = 0;
   try {
-    const res = await fetch(API + '/api/dashboard');
-    txfData = await res.json();
-    const currentPrice = txfData.market.current_price;
-    txfData.positions.forEach(p => {
-      const pointValue = p.type === 'TXF' ? 50 : 10;
-      const margin = p.type === 'TXF' ? 135000 : 30000;
-      const cost = p.entry_price * pointValue * p.lots;
-      const value = currentPrice * pointValue * p.lots;
-      txfMarginUsed += margin * p.lots;
-      totalCost += cost;
-      totalValue += value;
-    });
+    const market = await window.fetchMarketData();
+    if (market && market.market) {
+      currentPrice = market.market.current_price;
+      const positions = await window.fetchPositions();
+      txfData = { market: market.market, positions };
+      positions.forEach(p => {
+        const pointValue = TXF_POINT[p.type] || 10;
+        const margin = (p.type === 'TXF' || p.type === '大台') ? 135000 : 30000;
+        const cost = p.entry_price * pointValue * p.lots;
+        const value = currentPrice * pointValue * p.lots;
+        txfMarginUsed += margin * p.lots;
+        totalCost += cost;
+        totalValue += value;
+      });
+    }
   } catch (e) { console.error(e); }
-  
-  // 抓股票/基金資料
+
+  // 抓股票/基金資料(Firestore + stock_prices.json)
   try {
-    const res = await fetch(API + '/api/stocks');
-    stocksData = await res.json();
+    const prices = await window.fetchStockPrices();
+    stocksData = await window.fetchStocks();
     stocksData.forEach(s => {
+      const isFund = s.is_fund || (s.symbol || '').startsWith('FUND:');
+      const curP = isFund ? (s.current_price || 0) : ((prices[s.symbol] || {}).price || s.current_price || 0);
       const cost = s.cost_price * s.shares;
-      const value = s.current_price ? s.current_price * s.shares : cost;
+      const value = curP ? curP * s.shares : cost;
+      s._current = curP;  // 存起來給後續用
       totalCost += cost;
       totalValue += value;
     });
@@ -340,7 +350,7 @@ async function renderPnlDetail() {
   
   // 台指期明細
   try {
-    const res = await fetch(API + '/api/dashboard');
+    const res = { json: async () => { const m = await window.fetchMarketData(); const positions = await window.fetchPositions(); return { market: m ? m.market : {}, positions, total_pnl_twd: 0 }; } };
     const data = await res.json();
     const positions = data.positions || [];
     
@@ -372,8 +382,7 @@ async function renderPnlDetail() {
   
   // 股票/基金明細
   try {
-    const res = await fetch(API + '/api/stocks');
-    const stocks = await res.json();
+    const stocks = await window.fetchStocks();
     
     stocks.forEach(s => {
       const cost = s.cost_price * s.shares;
@@ -439,7 +448,7 @@ async function renderPie(marketValue, cash) {
   
   // 台指期每筆部位（用保證金算大小，現金+保證金+股票成本=200萬）
   try {
-    const res = await fetch(API + '/api/dashboard');
+    const res = { json: async () => { const m = await window.fetchMarketData(); const positions = await window.fetchPositions(); return { market: m ? m.market : {}, positions }; } };
     const txfData = await res.json();
     txfData.positions.forEach(p => {
       const margin = p.type === 'TXF' ? 540000 : (p.type === 'MXF' ? 135000 : 30000);
@@ -452,7 +461,7 @@ async function renderPie(marketValue, cash) {
   
   // 股票/基金每筆（用成本算）
   try {
-    const res = await fetch(API + '/api/stocks');
+    const res = { json: async () => await window.fetchStocks() };
     const stocks = await res.json();
     stocks.forEach(s => {
       const value = s.cost_price * s.shares;
@@ -546,11 +555,7 @@ async function editAsset(i) {
   if (!value) return alert('市值必填');
 
   try {
-    await fetch(API + '/api/custom-assets/' + a.id, {
-      method: 'PUT',
-      headers: {'Content-Type': 'application/json'},
-      body: JSON.stringify({name, type, shares, cost, value})
-    });
+    await window.updateCustomAssetFS(a.id, {name, type, shares, cost, value});
     await loadCustomAssets();
   } catch (e) { alert('更新失敗'); }
 }
@@ -564,11 +569,7 @@ async function addAsset() {
   if (!name || !type || !value) return alert('請填寫項目、類別和市值');
 
   try {
-    await fetch(API + '/api/custom-assets', {
-      method: 'POST',
-      headers: {'Content-Type': 'application/json'},
-      body: JSON.stringify({name, type, shares, cost, value})
-    });
+    await window.addCustomAssetFS({name, type, shares, cost, value, notify_enabled: true});
     document.getElementById('asset-name').value = '';
     document.getElementById('asset-type').value = '';
     document.getElementById('asset-shares').value = '';
@@ -582,7 +583,7 @@ async function addAsset() {
 
 async function editRealized(id) {
   try {
-    const res = await fetch(API + '/api/realized-pnl');
+    const res = { json: async () => await window.fetchRealized() };
     const list = await res.json();
     const r = list.find(x => x.id === id);
     if (!r) return alert('找不到記錄');
@@ -603,11 +604,7 @@ async function editRealized(id) {
         exit_price: parseFloat(document.getElementById('rd-exit').value),
         pnl_twd: parseFloat(document.getElementById('rd-pnl').value)
       };
-      await fetch(API + '/api/realized-pnl/' + id, {
-        method: 'PUT',
-        headers: {'Content-Type': 'application/json'},
-        body: JSON.stringify(payload)
-      });
+      await window.updateRealizedFS(id, payload);
       dialog.close();
       loadRealized();
     };
@@ -617,15 +614,14 @@ async function editRealized(id) {
 async function deleteRealized(id) {
   if (!confirm('確定刪除這筆已實現損益？')) return;
   try {
-    await fetch(API + '/api/realized-pnl/' + id, {method: 'DELETE'});
+    await window.deleteRealizedFS(id);
     loadRealized();
   } catch (e) { alert('刪除失敗'); }
 }
 
 async function loadRealized() {
   try {
-    const res = await fetch(API + '/api/realized-pnl');
-    const records = await res.json();
+    const records = await window.fetchRealized();
     const tbody = document.getElementById('realized-tbody');
     
     if (records.length === 0) {
@@ -720,12 +716,7 @@ async function editPosition(id, currentLots, currentPrice) {
     confirmBtn.textContent = '更新中...';
     
     try {
-      const res = await fetch(API + '/api/positions/' + id, {
-        method: 'PATCH',
-        headers: {'Content-Type': 'application/json'},
-        body: JSON.stringify({lots: newLots, entry_price: newPrice})
-      });
-      if (!res.ok) throw new Error('更新失敗');
+      await window.updatePositionFS(id, {lots: newLots, entry_price: newPrice});
       dialog.close();
       calculateAssets();
       loadRealized();
@@ -746,13 +737,17 @@ async function closePosition(id, maxLots) {
   const note = prompt('備註 (選填):', '');
   
   try {
-    const res = await fetch(API + '/api/positions/' + id + '/close', {
-      method: 'POST',
-      headers: {'Content-Type': 'application/json'},
-      body: JSON.stringify({lots: parseFloat(lots), exit_price: parseFloat(exitPrice), note: note || ''})
+    const mult = TXF_MULT[window._closingType] || 10;
+    await window.addRealizedFS({
+      date: new Date().toISOString().slice(0,10),
+      lots: parseFloat(lots),
+      entry_price: window._closingEntry || 0,
+      exit_price: parseFloat(exitPrice),
+      pnl_twd: Math.round((parseFloat(exitPrice) - (window._closingEntry||0)) * mult * parseFloat(lots)),
+      note: '台指期平倉 ' + (note || '')
     });
-    const data = await res.json();
-    alert(data.message);
+    await window.deletePositionFS(id);
+    alert('已平倉並記錄損益');
     calculateAssets();
     loadRealized();
   } catch (e) {
@@ -780,12 +775,7 @@ async function editStock(id, currentShares, currentPrice) {
     confirmBtn.textContent = '更新中...';
     
     try {
-      const res = await fetch(API + '/api/stocks/' + id, {
-        method: 'PUT',
-        headers: {'Content-Type': 'application/json'},
-        body: JSON.stringify({shares: newShares, cost_price: newPrice})
-      });
-      if (!res.ok) throw new Error('更新失敗');
+      await window.updateStockFS(id, {shares: newShares, cost_price: newPrice});
       dialog.close();
       calculateAssets();
       loadRealized();
@@ -832,13 +822,16 @@ async function sellStock(id, maxShares, symbol) {
   const note = prompt('備註 (選填):', '');
   
   try {
-    const res = await fetch(API + '/api/stocks/' + id + '/sell', {
-      method: 'POST',
-      headers: {'Content-Type': 'application/json'},
-      body: JSON.stringify({shares: parseFloat(shares), exit_price: parseFloat(exitPrice), note: note || ''})
+    await window.addRealizedFS({
+      date: new Date().toISOString().slice(0,10),
+      lots: parseFloat(shares),
+      entry_price: window._sellingCost || 0,
+      exit_price: parseFloat(exitPrice),
+      pnl_twd: Math.round((parseFloat(exitPrice) - (window._sellingCost||0)) * parseFloat(shares)),
+      note: '股票賣出 ' + (note || '')
     });
-    const data = await res.json();
-    alert(data.message);
+    await window.deleteStockFS(id);
+    alert('已賣出並記錄損益');
     calculateAssets();
     loadRealized();
   } catch (e) {
@@ -854,42 +847,46 @@ function settleAsset(i) {
   const pnl = exitValue - cost;
   const note = prompt('備註（選填）', '結算') || '結算';
 
-  fetch(API + '/api/realized-pnl/custom', {
-    method: 'POST',
-    headers: {'Content-Type': 'application/json'},
-    body: JSON.stringify({
+  try {
+    await window.addRealizedFS({
       date: new Date().toISOString().slice(0,10),
       lots: a.shares || 1,
       entry_price: a.cost || a.value,
       exit_price: a.shares ? (exitValue / a.shares) : exitValue,
       pnl_twd: pnl,
       note: `${a.name || a.type} ${note}`
-    })
-  }).then(r => r.json()).then(async () => {
+    });
     alert(`已結算\n損益：${pnl >= 0 ? '+' : ''}${pnl.toLocaleString()} 元`);
-    await fetch(API + '/api/custom-assets/' + a.id, {method: 'DELETE'});
+    await window.deleteCustomAssetFS(a.id);
     await loadCustomAssets();
     loadRealized();
-  }).catch(async () => {
-    if (confirm('後端寫入失敗，是否仍刪除？')) {
-      await fetch(API + '/api/custom-assets/' + a.id, {method: 'DELETE'});
+  } catch (e) {
+    if (confirm('寫入失敗，是否仍刪除？')) {
+      await window.deleteCustomAssetFS(a.id);
       await loadCustomAssets();
     }
-  });
+  }
 }
 
 async function deleteAsset(i) {
   if (!confirm('確定刪除？')) return;
   const a = assets[i];
   try {
-    await fetch(API + '/api/custom-assets/' + a.id, {method: 'DELETE'});
+    await window.deleteCustomAssetFS(a.id);
     await loadCustomAssets();
   } catch (e) { alert('刪除失敗'); }
 }
 
-loadCustomAssets();
-loadNotifications();
-loadRealized();
+(function waitInit(){
+  if (window.fetchCustomAssets && window.fetchRealized && window.fetchStocks && window.fetchPositions) {
+    loadCustomAssets();
+    loadNotifications();
+    loadRealized();
+    calculateAssets();
+  } else {
+    setTimeout(waitInit, 100);
+  }
+})();
 </script>
 
 <!-- 編輯彈窗 -->

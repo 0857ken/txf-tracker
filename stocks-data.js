@@ -64,3 +64,26 @@ window.fetchMarketData = async function() {
     return await res.json();
   } catch (e) { return null; }
 };
+
+// ---- 已實現損益 ----
+function realizedCol() { return collection(window.fbDb, 'users', 'me', 'realizedPnl'); }
+
+window.fetchRealized = async function() {
+  await window.fbReady;
+  const snap = await getDocs(realizedCol());
+  const list = [];
+  snap.forEach(d => list.push({ id: d.id, ...d.data() }));
+  return list;
+};
+window.addRealizedFS = async function(data) {
+  await window.fbReady;
+  await addDoc(realizedCol(), data);
+};
+window.updateRealizedFS = async function(id, data) {
+  await window.fbReady;
+  await updateDoc(doc(window.fbDb, 'users', 'me', 'realizedPnl', id), data);
+};
+window.deleteRealizedFS = async function(id) {
+  await window.fbReady;
+  await deleteDoc(doc(window.fbDb, 'users', 'me', 'realizedPnl', id));
+};
