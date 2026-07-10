@@ -840,7 +840,7 @@ async function sellStock(id, maxShares, symbol) {
   }
 }
 
-function settleAsset(i) {
+async function settleAsset(i) {
   const a = assets[i];
   const exitValue = parseInt(prompt(`結算「${a.name || a.type}」\n結算金額？`, a.value));
   if (!exitValue) return;
