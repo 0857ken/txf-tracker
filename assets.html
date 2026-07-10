@@ -354,13 +354,14 @@ async function renderPnlDetail() {
     const data = await res.json();
     const positions = data.positions || [];
     
-    const currentPrice = data.market.current_price;
+    const currentPrice = data.market.current_price || 0;
     positions.forEach(p => {
-      const pointValue = p.type === 'TXF' ? 50 : 10;
+      const pointValue = TXF_POINT[p.type] || 10;
       const cost = p.entry_price * pointValue * p.lots;
       const value = currentPrice * pointValue * p.lots;
-      const pnlPct = ((p.pnl_twd / cost) * 100).toFixed(2);
-      const color = p.pnl_twd >= 0 ? 'red' : 'green';
+      const pnl_twd = Math.round((currentPrice - p.entry_price) * pointValue * p.lots);
+      const pnlPct = cost ? ((pnl_twd / cost) * 100).toFixed(2) : '0';
+      const color = pnl_twd >= 0 ? 'red' : 'green';
       html += `
         <tr>
           <td data-label="項目">${p.type} ${p.note || ''}</td>
@@ -368,8 +369,8 @@ async function renderPnlDetail() {
           <td data-label="數量">${p.lots} 口</td>
           <td data-label="成本價">${p.entry_price.toLocaleString()}</td>
           <td data-label="市值">${value.toLocaleString()}</td>
-          <td data-label="損益" class="${color}">${(p.pnl_twd >= 0 ? '+' : '') + p.pnl_twd.toLocaleString()}</td>
-          <td data-label="報酬率" class="${color}">${(p.pnl_twd >= 0 ? '+' : '') + pnlPct}%</td>
+          <td data-label="損益" class="${color}">${(pnl_twd >= 0 ? '+' : '') + pnl_twd.toLocaleString()}</td>
+          <td data-label="報酬率" class="${color}">${(pnl_twd >= 0 ? '+' : '') + pnlPct}%</td>
           <td data-label="操作"><button onclick="editPosition(${p.id}, ${p.lots}, ${p.entry_price})">編輯</button>
             <button onclick="closePosition(${p.id}, ${p.lots})" style="background:rgba(0, 229, 160, 0.7)">結算</button>
           </td>
@@ -839,7 +840,7 @@ async function sellStock(id, maxShares, symbol) {
   }
 }
 
-async function settleAsset(i) {
+function settleAsset(i) {
   const a = assets[i];
   const exitValue = parseInt(prompt(`結算「${a.name || a.type}」\n結算金額？`, a.value));
   if (!exitValue) return;
@@ -879,10 +880,9 @@ async function deleteAsset(i) {
 
 (function waitInit(){
   if (window.fetchCustomAssets && window.fetchRealized && window.fetchStocks && window.fetchPositions) {
-    loadCustomAssets();
+    loadCustomAssets();  // 內部會呼叫 calculateAssets
     loadNotifications();
     loadRealized();
-    calculateAssets();
   } else {
     setTimeout(waitInit, 100);
   }
