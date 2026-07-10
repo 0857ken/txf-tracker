@@ -364,8 +364,7 @@ const ctx = document.getElementById('chart').getContext('2d');
   });
 }
 
-loadDashboard();
-setInterval(loadDashboard, 60000);
+(function waitInit(){ if(window.fetchPositions){ loadDashboard(); setInterval(loadDashboard,60000);} else { setTimeout(waitInit,100);} })();
 </script>
 
 <!-- 系統設定 dialog -->
