@@ -44,7 +44,10 @@ def main():
     stocks = load_stock_list()
     prices = {}
     for s in stocks:
-        code = s.get("code")
+        symbol_raw = s.get("symbol", "")
+        if not symbol_raw or symbol_raw.startswith("FUND:"):
+            continue
+        code = symbol_raw
         if not code:
             continue
         market = s.get("market", "TW")
