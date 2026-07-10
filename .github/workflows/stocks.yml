@@ -40,5 +40,5 @@ jobs:
             echo "無變化"
           else
             git commit -m "chore: 自動更新股票價格 [skip ci]"
-            git push origin gh-pages
+            git pull --rebase origin gh-pages && git push origin gh-pages
           fi

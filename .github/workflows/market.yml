@@ -34,5 +34,5 @@ jobs:
             echo "資料無變化,跳過 commit"
           else
             git commit -m "chore: 自動更新報價資料 [skip ci]"
-            git push origin gh-pages
+            git pull --rebase origin gh-pages && git push origin gh-pages
           fi
