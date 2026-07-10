@@ -176,123 +176,20 @@
 <script type="module" src="firebase-init.js"></script>
 <script type="module" src="positions.js"></script>
 <script>
-const API = 'https://txf-tracker-production.up.railway.app';
 let chart = null;
 
 
 async function openSettings() {
-  try {
-    const res = await fetch(API + '/api/settings');
-    const settings = await res.json();
-    document.getElementById('setting-pp').value = settings.profit_protect_pct || '1.0';
-    document.getElementById('settings-dialog').showModal();
-  } catch (e) {
-    alert('載入失敗：' + e.message);
-  }
+document.getElementById("setting-pp").value = localStorage.getItem("profit_protect_pct") || "1.0";
+document.getElementById("settings-dialog").showModal();
 }
 
-async function saveSettings() {
-  const val = document.getElementById('setting-pp').value;
-  if (val === '') return alert('請輸入數值');
-  try {
-    const res = await fetch(API + '/api/settings/profit_protect_pct', {
-      method: 'PUT',
-      headers: {'Content-Type': 'application/json'},
-      body: JSON.stringify({value: val})
-    });
-    if (!res.ok) throw new Error('儲存失敗');
-    document.getElementById('settings-dialog').close();
-    loadDashboard();
-  } catch (e) {
-    alert('儲存失敗：' + e.message);
-  }
-}
-
-
-async function openSettings() {
-  try {
-    const res = await fetch(API + '/api/settings');
-    const settings = await res.json();
-    document.getElementById('setting-pp').value = settings.profit_protect_pct || '1.0';
-    document.getElementById('settings-dialog').showModal();
-  } catch (e) {
-    alert('載入失敗：' + e.message);
-  }
-}
-
-async function saveSettings() {
-  const val = document.getElementById('setting-pp').value;
-  if (val === '') return alert('請輸入數值');
-  try {
-    const res = await fetch(API + '/api/settings/profit_protect_pct', {
-      method: 'PUT',
-      headers: {'Content-Type': 'application/json'},
-      body: JSON.stringify({value: val})
-    });
-    if (!res.ok) throw new Error('儲存失敗');
-    document.getElementById('settings-dialog').close();
-    loadDashboard();
-  } catch (e) {
-    alert('儲存失敗：' + e.message);
-  }
-}
-
-
-async function openSettings() {
-  try {
-    const res = await fetch(API + '/api/settings');
-    const settings = await res.json();
-    document.getElementById('setting-pp').value = settings.profit_protect_pct || '1.0';
-    document.getElementById('settings-dialog').showModal();
-  } catch (e) {
-    alert('載入失敗：' + e.message);
-  }
-}
-
-async function saveSettings() {
-  const val = document.getElementById('setting-pp').value;
-  if (val === '') return alert('請輸入數值');
-  try {
-    const res = await fetch(API + '/api/settings/profit_protect_pct', {
-      method: 'PUT',
-      headers: {'Content-Type': 'application/json'},
-      body: JSON.stringify({value: val})
-    });
-    if (!res.ok) throw new Error('儲存失敗');
-    document.getElementById('settings-dialog').close();
-    loadDashboard();
-  } catch (e) {
-    alert('儲存失敗：' + e.message);
-  }
-}
-
-
-async function openSettings() {
-  try {
-    const res = await fetch(API + '/api/settings');
-    const settings = await res.json();
-    document.getElementById('setting-pp').value = settings.profit_protect_pct || '1.0';
-    document.getElementById('settings-dialog').showModal();
-  } catch (e) {
-    alert('載入失敗：' + e.message);
-  }
-}
-
-async function saveSettings() {
-  const val = document.getElementById('setting-pp').value;
-  if (val === '') return alert('請輸入數值');
-  try {
-    const res = await fetch(API + '/api/settings/profit_protect_pct', {
-      method: 'PUT',
-      headers: {'Content-Type': 'application/json'},
-      body: JSON.stringify({value: val})
-    });
-    if (!res.ok) throw new Error('儲存失敗');
-    document.getElementById('settings-dialog').close();
-    loadDashboard();
-  } catch (e) {
-    alert('儲存失敗：' + e.message);
-  }
+function saveSettings() {
+const val = document.getElementById("setting-pp").value;
+if (val === "") return alert("請輸入數值");
+localStorage.setItem("profit_protect_pct", val);
+document.getElementById("settings-dialog").close();
+loadDashboard();
 }
 
 async function loadDashboard() {
@@ -391,25 +288,8 @@ async function loadDashboard() {
 }
 
 
-async function overridePrice() {
-  const price = parseFloat(document.getElementById('override-price').value);
-  if (!price) return alert('請輸入價格');
-  
-  const today = new Date().toISOString().split('T')[0];
-  try {
-    const res = await fetch(API + '/api/price-override', {
-      method: 'POST',
-      headers: {'Content-Type': 'application/json'},
-      body: JSON.stringify({date: today, price})
-    });
-    if (res.ok) {
-      alert('已校對為 ' + price);
-      document.getElementById('override-price').value = '';
-      loadDashboard();
-    }
-  } catch (e) {
-    alert('校對失敗: ' + e.message);
-  }
+function overridePrice() {
+alert("報價已改為自動抓取(每30分鐘更新),無需手動校對");
 }
 
 async function updatePos(posId, idx) {
