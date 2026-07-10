@@ -102,14 +102,16 @@
 </main>
 
 <script src="https://cdnjs.cloudflare.com/ajax/libs/Chart.js/3.9.1/chart.min.js"></script>
+<script type="module" src="firebase-init.js"></script>
+<script type="module" src="stocks-data.js"></script>
 <script>
-const API = 'https://txf-tracker-production.up.railway.app';
+// 合約乘數(台指期)
+const TXF_MULT = { TXF: 200, MXF: 50, TMF: 10, '大台': 200, '小台': 50, '微台': 10 };
 
 
 async function editCustomAsset(id) {
   try {
-    const r = await fetch(API + '/api/custom-assets');
-    const list = await r.json();
+    const list = await window.fetchCustomAssets();
     const a = list.find(x => x.id === id);
     if (!a) return alert('找不到資產');
     const dialog = document.getElementById('custom-edit-dialog');
@@ -132,11 +134,7 @@ async function editCustomAsset(id) {
       const alert_high = hVal === '' ? null : parseFloat(hVal);
       const alert_low = lVal === '' ? null : parseFloat(lVal);
       if (!name || !type || !value) return alert('項目、類別、市值為必填');
-      await fetch(API + '/api/custom-assets/' + id, {
-        method: 'PUT',
-        headers: {'Content-Type': 'application/json'},
-        body: JSON.stringify({name, type, shares, cost, value, alert_high, alert_low})
-      });
+      await window.updateCustomAssetFS(id, {name, type, shares, cost, value, alert_high, alert_low});
       dialog.close();
       loadStocks();
     };
@@ -145,11 +143,7 @@ async function editCustomAsset(id) {
 
 async function toggleCustomNotify(id, currentlyEnabled) {
   try {
-    await fetch(API + '/api/custom-assets/' + id + '/notify', {
-      method: 'PUT',
-      headers: {'Content-Type': 'application/json'},
-      body: JSON.stringify({enabled: !currentlyEnabled})
-    });
+    await window.updateCustomAssetFS(id, { notify_enabled: !currentlyEnabled });
     loadStocks();
   } catch (e) { alert('切換失敗'); }
 }
@@ -157,113 +151,79 @@ async function toggleCustomNotify(id, currentlyEnabled) {
 async function deleteCustomAsset(id) {
   if (!confirm('確定刪除這筆自訂資產？')) return;
   try {
-    await fetch(API + '/api/custom-assets/' + id, {method: 'DELETE'});
+    await window.deleteCustomAssetFS(id);
     loadStocks();
   } catch (e) { alert('刪除失敗'); }
 }
 
 async function loadStocks() {
   try {
-    const res = await fetch(API + '/api/stocks');
-    const stocks = await res.json();
-    
+    const [stocks, customs, prices, market] = await Promise.all([
+      window.fetchStocks(),
+      window.fetchCustomAssets(),
+      window.fetchStockPrices(),
+      window.fetchMarketData()
+    ]);
+
     let totalValue = 0;
-    
-    // 加上台指期市值
-    try {
-      const txfRes = await fetch(API + '/api/dashboard');
-      const txfData = await txfRes.json();
-      const currentPrice = txfData.market.current_price;
-      txfData.positions.forEach(p => {
-        const pointValue = p.type === 'TXF' ? 50 : 10;
-        totalValue += currentPrice * pointValue * p.lots;
-      });
-    } catch (e) { console.error('TXF error:', e); }
-    
-    // 先加台指期列
+
+    // 台指期列(讀 Firestore 部位 + market_data.json)
     let txfRows = '';
-    try {
-      const txfRes = await fetch(API + '/api/dashboard');
-      const txfData = await txfRes.json();
-      const currentPrice = txfData.market.current_price;
-      txfData.positions.forEach(p => {
-        const pointValue = p.type === 'TXF' ? 50 : 10;
-        const cost = p.entry_price * pointValue * p.lots;
-        const value = currentPrice * pointValue * p.lots;
-        const pnl = p.pnl_twd;
-        const pnlPct = ((pnl / cost) * 100).toFixed(2);
+    if (market && market.market) {
+      const curPrice = market.market.current_price;
+      let positions = [];
+      try { positions = await window.fetchPositions(); } catch (e) {}
+      positions.forEach(p => {
+        const mult = TXF_MULT[p.type] || 10;
+        const cost = p.entry_price * mult * p.lots;
+        const value = curPrice * mult * p.lots;
+        const pnl = Math.round((curPrice - p.entry_price) * mult * p.lots);
+        const pnlPct = cost ? ((pnl / cost) * 100).toFixed(2) : '0';
         const color = pnl >= 0 ? 'red' : 'green';
         totalValue += value;
-        txfRows += `
-          <tr style="opacity:0.85">
-            <td>${p.type}</td>
-            <td>台指期</td>
-            <td>${p.lots} 口</td>
-            <td>${p.entry_price.toLocaleString()}</td>
-            <td>${currentPrice.toLocaleString()}</td>
-            <td class="${color}">${(pnl >= 0 ? '+' : '') + pnl.toLocaleString()} (${pnlPct}%)</td>
-            <td>—</td><td>—</td><td>—</td>
-          </tr>
-        `;
+        txfRows += '<tr style="opacity:0.85"><td>' + p.type + '</td><td>台指期</td><td>' + p.lots + ' 口</td><td>' + p.entry_price.toLocaleString() + '</td><td>' + curPrice.toLocaleString() + '</td><td class="' + color + '">' + (pnl >= 0 ? '+' : '') + pnl.toLocaleString() + ' (' + pnlPct + '%)</td><td>—</td><td>—</td><td>—</td></tr>';
       });
-    } catch (e) { console.error('TXF error:', e); }
-    
-    let customRows = '';
-    try {
-      const customRes = await fetch(API + '/api/custom-assets');
-      const customs = await customRes.json();
-      customs.forEach(a => {
-        const hasFullData = a.shares && a.cost;
-        totalValue += hasFullData ? a.shares * a.value : a.value;
-        const pnl = hasFullData ? (a.value - a.shares * a.cost) : 0;
-        const pnlPct = hasFullData ? ((pnl / (a.shares * a.cost)) * 100).toFixed(2) : 0;
-        const color = pnl >= 0 ? 'red' : 'green';
-        const marketValue = hasFullData ? a.shares * a.value : a.value; const realPnl = hasFullData ? marketValue - a.shares * a.cost : 0; const realPnlPct = hasFullData ? ((realPnl / (a.shares * a.cost)) * 100).toFixed(2) : 0; const realColor = realPnl >= 0 ? 'red' : 'green'; customRows += '<tr style="opacity:0.85"><td>' + a.name + '</td><td>' + a.type + '</td><td>' + (hasFullData ? a.shares : '-') + '</td><td>' + (hasFullData ? a.cost.toLocaleString() : '-') + '</td><td>' + a.value.toLocaleString() + '</td><td class="' + (hasFullData ? realColor : '') + '">' + (hasFullData ? (realPnl >= 0 ? '+' : '') + Math.round(realPnl).toLocaleString() + ' (' + realPnlPct + '%)' : '-') + '</td><td>' + (a.alert_high || '-') + '</td><td>' + (a.alert_low || '-') + '</td><td><button onclick="editCustomAsset(' + a.id + ')" style="background:var(--blue);font-size:11px;margin-right:4px">✏️ 編輯</button><button onclick="toggleCustomNotify(' + a.id + ', ' + (a.notify_enabled !== false) + ')" style="background:' + (a.notify_enabled !== false ? 'var(--green)' : 'var(--muted)') + ';font-size:11px;margin-right:4px" title="' + (a.notify_enabled !== false ? '通知已開' : '通知已關') + '">' + (a.notify_enabled !== false ? '🔔' : '🔕') + '</button><button onclick="deleteCustomAsset(' + a.id + ')" class="red">刪除</button></td></tr>';
-      });
-    } catch (e) { console.error('custom error:', e); }
+    }
 
+    // 自訂資產列
+    let customRows = '';
+    customs.forEach(a => {
+      const hasFullData = a.shares && a.cost;
+      const marketValue = hasFullData ? a.shares * a.value : a.value;
+      totalValue += marketValue;
+      const realPnl = hasFullData ? marketValue - a.shares * a.cost : 0;
+      const realPnlPct = hasFullData ? ((realPnl / (a.shares * a.cost)) * 100).toFixed(2) : 0;
+      const realColor = realPnl >= 0 ? 'red' : 'green';
+      const notifyOn = a.notify_enabled !== false;
+      customRows += '<tr style="opacity:0.85"><td>' + a.name + '</td><td>' + a.type + '</td><td>' + (hasFullData ? a.shares : '-') + '</td><td>' + (hasFullData ? a.cost.toLocaleString() : '-') + '</td><td>' + (a.value != null ? a.value.toLocaleString() : '-') + '</td><td class="' + (hasFullData ? realColor : '') + '">' + (hasFullData ? (realPnl >= 0 ? '+' : '') + Math.round(realPnl).toLocaleString() + ' (' + realPnlPct + '%)' : '-') + '</td><td>' + (a.alert_high || '-') + '</td><td>' + (a.alert_low || '-') + '</td><td><button onclick="editCustomAsset(\'' + a.id + '\')" style="background:var(--blue);font-size:11px;margin-right:4px">✏️ 編輯</button><button onclick="toggleCustomNotify(\'' + a.id + '\', ' + notifyOn + ')" style="background:' + (notifyOn ? 'var(--green)' : 'var(--muted)') + ';font-size:11px;margin-right:4px">' + (notifyOn ? '🔔' : '🔕') + '</button><button onclick="deleteCustomAsset(\'' + a.id + '\')" class="red">刪除</button></td></tr>';
+    });
+
+    // 股票列(現價從 stock_prices.json)
     const tbody = document.getElementById('stock-tbody');
     if (stocks.length === 0 && !txfRows && !customRows) {
-      tbody.innerHTML = '<tr><td colspan="9" style="color:var(--muted)">尚無持倉</td></tr>';
+      tbody.innerHTML = '<tr><td colspan="9" style="color:var(--muted)">尚無持倉,用下方表單新增</td></tr>';
     } else {
-      tbody.innerHTML = txfRows + customRows + stocks.map(s => {
-        const value = (s.current_price || 0) * s.shares;
+      const stockRows = stocks.map(s => {
+        const isFund = s.is_fund || (s.symbol || '').startsWith('FUND:');
+        const priceInfo = prices[s.symbol] || {};
+        const curPrice = isFund ? (s.current_price || 0) : (priceInfo.price || s.current_price || 0);
+        const value = curPrice * s.shares;
         totalValue += value;
-        const pnlColor = (s.pnl_twd || 0) >= 0 ? 'red' : 'green';
-        return `
-          <tr>
-            <td>${s.symbol}</td>
-            <td>${s.name || '—'}</td>
-            <td>${s.shares}</td>
-            <td>${s.cost_price.toLocaleString()}</td>
-            <td>${s.symbol.startsWith('FUND:') 
-              ? '<input type="number" step="0.0001" value="' + (s.current_price || '') + '" style="width:80px" onchange="updatePrice(' + s.id + ', this.value)">' 
-              : (s.current_price ? s.current_price.toLocaleString() : '—')}</td>
-            <td class="${pnlColor}">${s.pnl_twd ? (s.pnl_twd >= 0 ? '+' : '') + s.pnl_twd.toLocaleString() + ' (' + s.pnl_pct + '%)' : '—'}</td>
-            <td>${s.alert_high || '—'}</td>
-            <td>${s.alert_low || '—'}</td>
-            <td>
-            <button onclick="editStockAlert(${s.id}, ${s.shares}, ${s.cost_price}, ${s.alert_high || 'null'}, ${s.alert_low || 'null'})" style="background:var(--blue);font-size:11px;margin-right:4px">✏️ 編輯</button>
-            <button onclick="toggleNotify(${s.id}, ${s.notify_enabled !== false})" style="background:${s.notify_enabled !== false ? 'var(--green)' : 'var(--muted)'};font-size:11px;margin-right:4px" title="${s.notify_enabled !== false ? '通知已開' : '通知已關'}">${s.notify_enabled !== false ? '🔔' : '🔕'}</button>
-            <button onclick="deleteStock(${s.id})" class="red">刪除</button>
-          </td>
-          </tr>
-        `;
+        const cost = s.cost_price * s.shares;
+        const pnl = curPrice ? Math.round(value - cost) : 0;
+        const pnlPct = cost ? ((pnl / cost) * 100).toFixed(2) : '0';
+        const pnlColor = pnl >= 0 ? 'red' : 'green';
+        const notifyOn = s.notify_enabled !== false;
+        const priceCell = isFund
+          ? '<input type="number" step="0.0001" value="' + (s.current_price || '') + '" style="width:80px" onchange="updatePrice(\'' + s.id + '\', this.value)">'
+          : (curPrice ? curPrice.toLocaleString() : '—');
+        return '<tr><td>' + (s.symbol || '').replace('FUND:', '') + '</td><td>' + (s.name || '—') + '</td><td>' + s.shares + '</td><td>' + s.cost_price.toLocaleString() + '</td><td>' + priceCell + '</td><td class="' + pnlColor + '">' + (curPrice ? (pnl >= 0 ? '+' : '') + pnl.toLocaleString() + ' (' + pnlPct + '%)' : '—') + '</td><td>' + (s.alert_high || '—') + '</td><td>' + (s.alert_low || '—') + '</td><td><button onclick="editStockAlert(\'' + s.id + '\', ' + s.shares + ', ' + s.cost_price + ', ' + (s.alert_high || 'null') + ', ' + (s.alert_low || 'null') + ')" style="background:var(--blue);font-size:11px;margin-right:4px">✏️ 編輯</button><button onclick="toggleNotify(\'' + s.id + '\', ' + notifyOn + ')" style="background:' + (notifyOn ? 'var(--green)' : 'var(--muted)') + ';font-size:11px;margin-right:4px">' + (notifyOn ? '🔔' : '🔕') + '</button><button onclick="deleteStock(\'' + s.id + '\')" class="red">刪除</button></td></tr>';
       }).join('');
+      tbody.innerHTML = txfRows + customRows + stockRows;
     }
-    
-    // 只更新存在的元素
+
     const totalEl = document.getElementById('total-value');
     if (totalEl) totalEl.textContent = Math.round(totalValue).toLocaleString() + ' 元';
-    
-    const remainingEl = document.getElementById('remaining');
-    if (remainingEl) {
-      const remaining = 2000000 - totalValue;
-      const remainingPct = (remaining / 2000000 * 100).toFixed(2);
-      remainingEl.textContent = Math.round(remaining).toLocaleString() + ' 元';
-      const pctEl = document.getElementById('remaining-pct');
-      if (pctEl) pctEl.textContent = remainingPct + '%';
-    }
   } catch (e) {
     console.error('Error:', e);
   }
@@ -271,28 +231,31 @@ async function loadStocks() {
 
 async function addStock() {
   const type = document.getElementById('new-type').value;
-  const symbol = document.getElementById('new-symbol').value;
+  const symbol = document.getElementById('new-symbol').value.trim();
   const shares = parseFloat(document.getElementById('new-shares').value);
   const cost = parseFloat(document.getElementById('new-cost').value);
   const high = parseFloat(document.getElementById('new-high').value) || null;
   const low = parseFloat(document.getElementById('new-low').value) || null;
-  
+
   if (!symbol || !shares || !cost) return alert('請填寫代號、股數和成本價');
-  
-  // 基金 prefix "FUND:" 讓後端不要去抓股價
-  const finalSymbol = type === 'fund' ? 'FUND:' + symbol : symbol;
-  
+
+  const isFund = type === 'fund';
+  const finalSymbol = isFund ? 'FUND:' + symbol : symbol;
+
   try {
-    const res = await fetch(API + '/api/stocks', {
-      method: 'POST',
-      headers: {'Content-Type': 'application/json'},
-      body: JSON.stringify({symbol: finalSymbol, shares, cost_price: cost, alert_high: high, alert_low: low})
+    await window.addStockFS({
+      symbol: finalSymbol,
+      name: isFund ? symbol : symbol,
+      shares, cost_price: cost,
+      alert_high: high, alert_low: low,
+      notify_enabled: true,
+      is_fund: isFund,
+      market: 'TW',
+      current_price: null
     });
-    if (res.ok) {
-      alert('已新增');
-      ['new-symbol','new-shares','new-cost','new-high','new-low'].forEach(id => document.getElementById(id).value = '');
-      loadStocks();
-    }
+    alert('已新增');
+    ['new-symbol','new-shares','new-cost','new-high','new-low'].forEach(id => document.getElementById(id).value = '');
+    loadStocks();
   } catch (e) {
     alert('新增失敗: ' + e.message);
   }
@@ -300,43 +263,37 @@ async function addStock() {
 
 async function updatePrice(id, price) {
   try {
-    await fetch(API + '/api/stocks/' + id + '/price', {
-      method: 'PUT',
-      headers: {'Content-Type': 'application/json'},
-      body: JSON.stringify({price: parseFloat(price)})
-    });
+    await window.updateStockFS(id, { current_price: parseFloat(price) });
     loadStocks();
   } catch (e) {
     alert('更新失敗');
   }
 }
 
-
-
 async function editStockAlert(id, currentShares, currentCost, currentHigh, currentLow) {
   const dialog = document.getElementById('alert-edit-dialog');
   const confirmBtn = document.getElementById('alert-confirm');
-  
+
   document.getElementById('alert-shares').value = currentShares;
   document.getElementById('alert-cost').value = currentCost;
   document.getElementById('alert-high').value = currentHigh !== null ? currentHigh : '';
   document.getElementById('alert-low').value = currentLow !== null ? currentLow : '';
   dialog.showModal();
-  
+
   confirmBtn.onclick = async () => {
     const sharesVal = document.getElementById('alert-shares').value;
     const costVal = document.getElementById('alert-cost').value;
     const highVal = document.getElementById('alert-high').value;
     const lowVal = document.getElementById('alert-low').value;
-    
+
     if (sharesVal === '' || costVal === '') {
       alert('股數跟成本價必填');
       return;
     }
-    
+
     confirmBtn.disabled = true;
     confirmBtn.textContent = '儲存中...';
-    
+
     try {
       const body = {
         shares: parseFloat(sharesVal),
@@ -344,12 +301,7 @@ async function editStockAlert(id, currentShares, currentCost, currentHigh, curre
         alert_high: highVal === '' ? null : parseFloat(highVal),
         alert_low: lowVal === '' ? null : parseFloat(lowVal)
       };
-      const res = await fetch(API + '/api/stocks/' + id, {
-        method: 'PUT',
-        headers: {'Content-Type': 'application/json'},
-        body: JSON.stringify(body)
-      });
-      if (!res.ok) throw new Error('儲存失敗');
+      await window.updateStockFS(id, body);
       dialog.close();
       loadStocks();
     } catch (e) {
@@ -363,12 +315,7 @@ async function editStockAlert(id, currentShares, currentCost, currentHigh, curre
 
 async function toggleNotify(id, currentlyEnabled) {
   try {
-    const res = await fetch(API + '/api/stocks/' + id + '/notify', {
-      method: 'PUT',
-      headers: {'Content-Type': 'application/json'},
-      body: JSON.stringify({enabled: !currentlyEnabled})
-    });
-    if (!res.ok) throw new Error('切換失敗');
+    await window.updateStockFS(id, { notify_enabled: !currentlyEnabled });
     loadStocks();
   } catch (e) {
     alert('切換失敗：' + e.message);
@@ -378,7 +325,7 @@ async function toggleNotify(id, currentlyEnabled) {
 async function deleteStock(id) {
   if (!confirm('確定刪除？')) return;
   try {
-    await fetch(API + '/api/stocks/' + id, {method: 'DELETE'});
+    await window.deleteStockFS(id);
     loadStocks();
   } catch (e) {
     alert('刪除失敗');
@@ -390,9 +337,8 @@ let currentRange = 'day';
 
 async function loadHistory() {
   try {
-    const res = await fetch(API + '/api/snapshots');
-    const snapshots = await res.json();
-    
+    const snapshots = [];  // 歷史快照功能建置中(需 GitHub Actions 每日寫入)
+
     let filtered = snapshots;
     const now = new Date();
     if (currentRange === 'day') {
@@ -402,7 +348,7 @@ async function loadHistory() {
     } else if (currentRange === 'month') {
       filtered = snapshots.slice(-90);
     }
-    
+
     const ctx = document.getElementById('history-chart').getContext('2d');
     if (historyChart) historyChart.destroy();
     historyChart = new Chart(ctx, {
@@ -444,7 +390,6 @@ loadStocks();
 loadHistory();
 document.getElementById('btn-day').classList.add('active');
 setInterval(loadStocks, 60000);
-setInterval(loadHistory, 300000);
 </script>
 
 <!-- 編輯股票警戒對話框 -->
