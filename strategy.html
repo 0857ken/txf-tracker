@@ -1,0 +1,289 @@
+<!DOCTYPE html>
+<html lang="zh-TW">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>策略儀表板 · 0050</title>
+<style>
+  :root {
+    --bg:#0a0e1a; --bg2:#141925; --bg3:#1a2030; --text:#e8eaed; --muted:#6b7280;
+    --border:#252d3d; --gold:#d4af37; --red:#ff3d00; --green:#00c853; --blue:#2196f3;
+    --yellow:#ffd32a; --sans:'DM Sans',sans-serif; --mono:'DM Mono',monospace;
+  }
+  * { box-sizing:border-box; margin:0; padding:0; }
+  body { background:var(--bg); color:var(--text); font-family:var(--sans); font-size:14px; }
+  header { display:flex; justify-content:space-between; align-items:center; padding:14px 28px; border-bottom:1px solid var(--border); background:var(--bg2); }
+  .logo { font-family:var(--mono); font-size:13px; color:var(--blue); letter-spacing:2px; }
+  .nav { display:flex; gap:16px; }
+  .nav a { font-family:var(--mono); font-size:12px; color:var(--muted); text-decoration:none; }
+  .nav a.active { color:var(--blue); border-bottom:1px solid var(--blue); }
+  main { max-width:1100px; margin:0 auto; padding:24px 28px; }
+  .tabs { display:flex; gap:8px; margin-bottom:20px; border-bottom:1px solid var(--border); }
+  .tab { padding:10px 18px; font-family:var(--mono); font-size:13px; color:var(--muted); cursor:pointer; border-bottom:2px solid transparent; }
+  .tab.active { color:var(--gold); border-bottom-color:var(--gold); }
+  .panel { display:none; }
+  .panel.active { display:block; }
+  .banner { padding:20px 24px; border-radius:12px; margin-bottom:20px; font-size:18px; font-weight:600; }
+  .banner.buy { background:rgba(0,200,83,0.12); border:1px solid var(--green); color:var(--green); }
+  .banner.sell { background:rgba(255,61,0,0.12); border:1px solid var(--red); color:var(--red); }
+  .banner.wait { background:rgba(107,114,128,0.12); border:1px solid var(--muted); color:var(--text); }
+  .banner .reason { font-size:13px; font-weight:400; color:var(--muted); margin-top:8px; }
+  .card { background:var(--bg2); border:1px solid var(--border); border-radius:10px; padding:18px; margin-bottom:16px; }
+  .card h3 { font-size:13px; color:var(--muted); font-family:var(--mono); text-transform:uppercase; letter-spacing:1px; margin-bottom:14px; }
+  .radar-row { margin-bottom:14px; }
+  .radar-label { display:flex; justify-content:space-between; font-size:12px; margin-bottom:5px; }
+  .radar-label .dist { font-family:var(--mono); }
+  .bar { height:8px; background:var(--bg3); border-radius:4px; overflow:hidden; }
+  .bar-fill { height:100%; border-radius:4px; transition:width 0.3s; }
+  .checklist { list-style:none; }
+  .checklist li { display:flex; align-items:center; gap:10px; padding:8px 0; font-size:13px; border-bottom:1px solid var(--border); }
+  .checklist li:last-child { border-bottom:none; }
+  .mark { width:20px; text-align:center; font-weight:700; }
+  .mark.yes { color:var(--green); } .mark.no { color:var(--muted); } .mark.warn { color:var(--yellow); }
+  .alert-item { padding:10px 14px; background:rgba(255,211,42,0.1); border-left:3px solid var(--yellow); border-radius:4px; margin-bottom:8px; font-size:13px; }
+  .meta { font-size:12px; color:var(--muted); font-family:var(--mono); margin-bottom:16px; }
+  .val { font-family:var(--mono); }
+  .sop-warn { background:rgba(255,61,0,0.1); border:1px solid var(--red); color:var(--red); padding:10px 14px; border-radius:6px; font-size:13px; margin-bottom:16px; }
+</style>
+</head>
+<body>
+<header>
+  <div class="logo">TXF TRACKER · 策略儀表板</div>
+  <nav class="nav">
+    <a href="index.html">微台期</a>
+    <a href="stocks.html">資產總覽</a>
+    <a href="assets.html">200萬計畫</a>
+    <a href="strategy.html" class="active">策略</a>
+  </nav>
+</header>
+
+<main>
+  <div class="meta" id="meta">載入中…</div>
+  <div class="tabs">
+    <div class="tab active" data-tab="rs">耀的 RS 訊號</div>
+    <div class="tab" data-tab="line">橘太郎三條線</div>
+    <div class="tab" data-tab="grid">月波動網格</div>
+  </div>
+
+  <div class="panel active" id="panel-rs"></div>
+  <div class="panel" id="panel-line"></div>
+  <div class="panel" id="panel-grid"></div>
+</main>
+
+<script src="strategy-calc.js"></script>
+<script>
+// tab 切換
+document.querySelectorAll('.tab').forEach(t => {
+  t.onclick = () => {
+    document.querySelectorAll('.tab').forEach(x => x.classList.remove('active'));
+    document.querySelectorAll('.panel').forEach(x => x.classList.remove('active'));
+    t.classList.add('active');
+    document.getElementById('panel-' + t.dataset.tab).classList.add('active');
+  };
+});
+
+function pct(from, to) {
+  // to 相對 from 的百分比距離
+  return ((to - from) / from * 100);
+}
+function bar(pctVal, color) {
+  // pctVal: 0-100 的填充比例
+  const w = Math.max(0, Math.min(100, pctVal));
+  return `<div class="bar"><div class="bar-fill" style="width:${w}%;background:${color}"></div></div>`;
+}
+function radarRow(label, distText, fillPct, color) {
+  return `<div class="radar-row"><div class="radar-label"><span>${label}</span><span class="dist val">${distText}</span></div>${bar(fillPct, color)}</div>`;
+}
+function check(mark, text) {
+  const cls = mark === '✓' ? 'yes' : (mark === '⚠' ? 'warn' : 'no');
+  return `<li><span class="mark ${cls}">${mark}</span><span>${text}</span></li>`;
+}
+
+// 是否有極端賣/FOMO(跨頁 SOP 警示用)
+let globalOverheat = false;
+
+function renderRS(r) {
+  const bands = r.bands || {};
+  const distSell = r.price && bands.sellP ? pct(r.price, bands.sellP) : null;  // 漲到觸發
+  const distBuy = r.price && bands.buyP ? pct(r.price, bands.buyP) : null;    // 跌到觸發
+  const distMA60 = r.ma60 ? pct(r.price, r.ma60) : null;
+  const distMA20 = r.ma20 ? pct(r.price, r.ma20) : null;
+  const volRatio = r.volMa5 ? r.volume / r.volMa5 : null;
+
+  // 訊號判定
+  const rsUp = r.rsPrev !== null && r.rs > 0 && r.rsPrev <= 0;
+  const rsDown = r.rsPrev !== null && r.rs < 0 && r.rsPrev >= 0;
+  const buySignal = rsUp && r.price > r.ma60 && volRatio > 1.2;
+  const sellSignal = rsDown && r.price < r.ma20;
+  const exSell = bands.sellP && r.high >= bands.sellP && r.high >= bands.h10;
+  const exBuy = bands.buyP && r.low <= bands.buyP && r.low <= bands.l10;
+  const isFomo = [8,9,12,13].includes(r.sc);
+  const isPanic = [8,9,12,13].includes(r.bc);
+
+  if (exSell || isFomo) globalOverheat = true;
+
+  // 結論橫幅
+  let banner, reason;
+  if (exSell || isFomo) {
+    banner = 'sell'; reason = '頂部過熱(極端賣/FOMO),禁止追多,持倉停利';
+  } else if (buySignal) {
+    banner = 'buy'; reason = 'RS 轉正 + 站上季線 + 出量,轉強買進';
+  } else if (exBuy || isPanic) {
+    banner = 'buy'; reason = '極端買點/恐慌超賣,可左側試單';
+  } else if (sellSignal) {
+    banner = 'sell'; reason = 'RS 轉負且跌破月線,停利出場';
+  } else {
+    banner = 'wait'; reason = 'RS ' + (r.rs > 0 ? '為正(強於大盤)' : '為負(弱於大盤)') + ',等待明確訊號';
+  }
+  const bannerText = banner === 'buy' ? '🟢 可買' : (banner === 'sell' ? '🔴 可賣/減碼' : '✋ 等待');
+
+  // 距離雷達
+  let radar = '';
+  if (distSell !== null) radar += radarRow('距極端賣(漲到觸發)', distSell.toFixed(1) + '%', 100 - Math.min(100, Math.abs(distSell)*5), 'var(--red)');
+  if (distBuy !== null) radar += radarRow('距極端買(跌到觸發)', distBuy.toFixed(1) + '%', 100 - Math.min(100, Math.abs(distBuy)*5), 'var(--green)');
+  if (distMA60 !== null) radar += radarRow('現價 vs 季線(買點條件)', (distMA60>=0?'+':'')+distMA60.toFixed(1)+'%', 50+distMA60*3, 'var(--blue)');
+  if (distMA20 !== null) radar += radarRow('現價 vs 月線(賣點條件)', (distMA20>=0?'+':'')+distMA20.toFixed(1)+'%', 50+distMA20*3, 'var(--gold)');
+  radar += radarRow('RS 值 vs 零軸', (r.rs>=0?'+':'')+r.rs.toFixed(2), 50+r.rs*5, r.rs>=0?'var(--green)':'var(--red)');
+  if (volRatio !== null) radar += radarRow('量能比(門檻1.2×)', volRatio.toFixed(2)+'×', volRatio/2*100, 'var(--blue)');
+
+  // 檢核清單
+  let checks = '';
+  checks += check(r.rs > 0 ? '✓' : '✕', 'RS 為正(強於大盤)');
+  checks += check(r.price > r.ma60 ? '✓' : '✕', '站上季線 MA60');
+  checks += check(volRatio > 1.2 ? '✓' : '✕', '成交量 > 5日均量 ×1.2');
+  checks += check(!isFomo ? '✓' : '⚠', 'FOMO 檢查(九轉連漲 ' + r.sc + ')');
+  checks += check(!exSell ? '✓' : '⚠', '極端賣壓檢查');
+
+  // 監視提醒(距觸發<3%)
+  let alerts = '';
+  if (distSell !== null && Math.abs(distSell) < 3) alerts += `<div class="alert-item">⚠ 距極端賣點僅 ${distSell.toFixed(1)}%,接近頂部</div>`;
+  if (distBuy !== null && Math.abs(distBuy) < 3) alerts += `<div class="alert-item">⚠ 距極端買點僅 ${Math.abs(distBuy).toFixed(1)}%,接近底部</div>`;
+  if (r.sc === 7) alerts += `<div class="alert-item">⚠ 九轉連漲 7,再漲 1 天觸發 FOMO 警示</div>`;
+  if (r.bc === 7) alerts += `<div class="alert-item">⚠ 九轉連跌 7,再跌 1 天觸發恐慌撿便宜</div>`;
+  if (!alerts) alerts = '<div style="color:var(--muted);font-size:13px">目前無接近觸發的項目</div>';
+
+  document.getElementById('panel-rs').innerHTML = `
+    <div class="banner ${banner}">${bannerText}<div class="reason">${reason}</div></div>
+    <div class="card"><h3>距離雷達</h3>${radar}</div>
+    <div class="card"><h3>條件檢核</h3><ul class="checklist">${checks}</ul></div>
+    <div class="card"><h3>監視提醒</h3>${alerts}</div>
+  `;
+}
+
+function renderLine(r) {
+  const boll = r.boll || {};
+  const distMA20 = r.ma20 ? pct(r.price, r.ma20) : null;
+  const distMA60 = r.ma60 ? pct(r.price, r.ma60) : null;
+  const distLower = boll.lower ? pct(r.price, boll.lower) : null;
+  const distUpper = boll.upper ? pct(r.price, boll.upper) : null;
+
+  const touchMA20 = distMA20 !== null && distMA20 <= 1;   // 現價接近或跌破月線1%內
+  const touchMA60 = distMA60 !== null && distMA60 <= 1;
+  const touchLower = distLower !== null && distLower <= 1;
+  const touchUpper = distUpper !== null && r.price >= boll.upper;
+
+  let banner, reason;
+  if (touchUpper) {
+    banner = 'sell'; reason = '觸及布林上軌,全部出清';
+  } else if (touchLower) {
+    banner = 'buy'; reason = '觸及布林下軌,投入第3批(50%)';
+  } else if (touchMA60) {
+    banner = 'buy'; reason = '觸及季線,投入第2批(30%)';
+  } else if (touchMA20) {
+    banner = 'buy'; reason = '觸及月線,投入第1批(20%)';
+  } else {
+    banner = 'wait'; reason = '未觸及任何進出場線,等待';
+  }
+  if (globalOverheat && banner === 'buy') reason += ' ⚠ SOP:頂部過熱,禁止追多';
+  const bannerText = banner === 'buy' ? '🟢 可買' : (banner === 'sell' ? '🔴 可賣' : '✋ 等待');
+
+  let radar = '';
+  if (distMA20 !== null) radar += radarRow('距月線 MA20(第1批)', (distMA20>=0?'+':'')+distMA20.toFixed(1)+'%', 100-Math.min(100,Math.abs(distMA20)*10), 'var(--gold)');
+  if (distMA60 !== null) radar += radarRow('距季線 MA60(第2批)', (distMA60>=0?'+':'')+distMA60.toFixed(1)+'%', 100-Math.min(100,Math.abs(distMA60)*10), 'var(--blue)');
+  if (distLower !== null) radar += radarRow('距布林下軌(第3批)', (distLower>=0?'+':'')+distLower.toFixed(1)+'%', 100-Math.min(100,Math.abs(distLower)*10), 'var(--green)');
+  if (distUpper !== null) radar += radarRow('距布林上軌(出場)', (distUpper>=0?'+':'')+distUpper.toFixed(1)+'%', 100-Math.min(100,Math.abs(distUpper)*10), 'var(--red)');
+  radar += radarRow('RSI(加碼濾網≤20)', r.rsi ? r.rsi.toFixed(1) : '—', r.rsi || 0, r.rsi <= 20 ? 'var(--green)' : 'var(--muted)');
+
+  let checks = '';
+  checks += check(touchMA20 ? '✓' : '✕', '觸及月線(第1批 20%)');
+  checks += check(touchMA60 ? '✓' : '✕', '觸及季線(第2批 30%)');
+  checks += check(touchLower ? '✓' : '✕', '觸及布林下軌(第3批 50%)');
+  checks += check(r.rsi <= 20 ? '✓' : '✕', 'RSI ≤ 20(可額外加碼)');
+  checks += check(touchUpper ? '⚠' : '✓', '布林上軌(觸及即出清)');
+
+  let alerts = '';
+  if (distMA20 !== null && distMA20 > 0 && distMA20 < 3) alerts += `<div class="alert-item">⚠ 距月線還差 ${distMA20.toFixed(1)}%,接近第1批進場</div>`;
+  if (distMA60 !== null && distMA60 > 0 && distMA60 < 3) alerts += `<div class="alert-item">⚠ 距季線還差 ${distMA60.toFixed(1)}%,接近第2批進場</div>`;
+  if (distLower !== null && distLower > 0 && distLower < 3) alerts += `<div class="alert-item">⚠ 距布林下軌還差 ${distLower.toFixed(1)}%,接近第3批進場</div>`;
+  if (distUpper !== null && distUpper > 0 && distUpper < 3) alerts += `<div class="alert-item">⚠ 距布林上軌還差 ${distUpper.toFixed(1)}%,接近出場</div>`;
+  if (!alerts) alerts = '<div style="color:var(--muted);font-size:13px">目前無接近觸發的項目</div>';
+
+  document.getElementById('panel-line').innerHTML = `
+    ${globalOverheat ? '<div class="sop-warn">⚠ SOP:其他策略偵測到頂部過熱,買進訊號需謹慎</div>' : ''}
+    <div class="banner ${banner}">${bannerText}<div class="reason">${reason}</div></div>
+    <div class="card"><h3>距離雷達</h3>${radar}</div>
+    <div class="card"><h3>條件檢核</h3><ul class="checklist">${checks}</ul></div>
+    <div class="card"><h3>監視提醒</h3>${alerts}</div>
+  `;
+}
+
+function renderGrid(r) {
+  const H = r.monthHigh;
+  const g1 = H * 0.97, g2 = H * 0.94, g3 = H * 0.91;
+  const drawdown = pct(H, r.price);  // 現價相對當月高的回檔(負值)
+  const distG1 = pct(r.price, g1), distG2 = pct(r.price, g2), distG3 = pct(r.price, g3);
+
+  let banner, reason;
+  if (r.price <= g3) { banner = 'buy'; reason = `跌破 -9%(${g3.toFixed(1)}),當月戰備金全投入`; }
+  else if (r.price <= g2) { banner = 'buy'; reason = `跌破 -6%(${g2.toFixed(1)}),重倉出擊 1.5~2 碼`; }
+  else if (r.price <= g1) { banner = 'buy'; reason = `跌破 -3%(${g1.toFixed(1)}),輕倉試探 0.5 碼`; }
+  else { banner = 'wait'; reason = `距當月高回檔 ${drawdown.toFixed(1)}%,未觸發網格`; }
+  if (globalOverheat && banner === 'buy') reason += ' ⚠ SOP:頂部過熱,禁止追多';
+  const bannerText = banner === 'buy' ? '🟢 可加碼' : '✋ 等待';
+
+  let radar = '';
+  radar += radarRow('當月回檔幅度', drawdown.toFixed(1)+'%', Math.min(100, Math.abs(drawdown)*10), 'var(--gold)');
+  radar += radarRow('距第1檔 -3%('+g1.toFixed(1)+')', (distG1>=0?'+':'')+distG1.toFixed(1)+'%', 100-Math.min(100,Math.abs(distG1)*10), 'var(--yellow)');
+  radar += radarRow('距第2檔 -6%('+g2.toFixed(1)+')', (distG2>=0?'+':'')+distG2.toFixed(1)+'%', 100-Math.min(100,Math.abs(distG2)*10), 'var(--blue)');
+  radar += radarRow('距第3檔 -9%('+g3.toFixed(1)+')', (distG3>=0?'+':'')+distG3.toFixed(1)+'%', 100-Math.min(100,Math.abs(distG3)*10), 'var(--green)');
+  if (r.ma20) radar += radarRow('現價 vs MA20(回均線出清)', (pct(r.price,r.ma20)>=0?'+':'')+pct(r.price,r.ma20).toFixed(1)+'%', 50+pct(r.price,r.ma20)*3, 'var(--muted)');
+
+  let checks = '';
+  checks += check(r.price <= g1 ? '✓' : '✕', '跌破 -3%(第1檔 0.5碼)');
+  checks += check(r.price <= g2 ? '✓' : '✕', '跌破 -6%(第2檔 1.5~2碼)');
+  checks += check(r.price <= g3 ? '✓' : '✕', '跌破 -9%(第3檔 全投入)');
+
+  let alerts = '';
+  if (distG1 < 0 && distG1 > -3) alerts += `<div class="alert-item">⚠ 距第1檔還差 ${Math.abs(distG1).toFixed(1)}%</div>`;
+  if (distG2 < 0 && distG2 > -3) alerts += `<div class="alert-item">⚠ 距第2檔還差 ${Math.abs(distG2).toFixed(1)}%</div>`;
+  if (distG3 < 0 && distG3 > -3) alerts += `<div class="alert-item">⚠ 距第3檔還差 ${Math.abs(distG3).toFixed(1)}%</div>`;
+  if (!alerts) alerts = '<div style="color:var(--muted);font-size:13px">目前無接近觸發的項目</div>';
+
+  document.getElementById('panel-grid').innerHTML = `
+    ${globalOverheat ? '<div class="sop-warn">⚠ SOP:其他策略偵測到頂部過熱</div>' : ''}
+    <div class="banner ${banner}">${bannerText}<div class="reason">${reason}</div></div>
+    <div class="card"><h3>距離雷達</h3>${radar}</div>
+    <div class="card"><h3>條件檢核</h3><ul class="checklist">${checks}</ul></div>
+    <div class="card"><h3>監視提醒</h3>${alerts}</div>
+  `;
+}
+
+async function init() {
+  try {
+    const data = await window.fetchStrategyData();
+    const r = window.computeAll(data);
+    document.getElementById('meta').textContent =
+      `標的 0050 · 現價 ${r.price} · 更新 ${data.updated_at} · 資料 ${data.target.length} 天`;
+    globalOverheat = false;
+    renderRS(r);   // RS 先跑(會設定 globalOverheat)
+    renderLine(r);
+    renderGrid(r);
+  } catch (e) {
+    document.getElementById('meta').textContent = '載入失敗: ' + e.message;
+    console.error(e);
+  }
+}
+init();
+</script>
+</body>
+</html>
