@@ -89,8 +89,7 @@ def compute_signals(data):
     sc, bc = td_seq(closes)
     boll = bollinger(closes)
     bands = extreme_bands(highs, lows, closes)
-    month = cur["date"][:7]
-    month_high = max(r["high"] for r in rows if r["date"][:7] == month)
+    month_high = max(highs[-20:])
 
     signals = []
     vol_ratio = vols[-1] / vol_ma5 if vol_ma5 else 0

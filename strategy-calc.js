@@ -91,8 +91,7 @@ function computeAll(data) {
   const boll = bollinger(closes);
   const rsiVal = rsi(closes);
   const bands = extremeBands(highs, lows, closes);
-  const curMonth = cur.date.slice(0, 7);
-  const monthHigh = Math.max(...rows.filter(r => r.date.slice(0,7) === curMonth).map(r => r.high));
+const monthHigh = Math.max(...highs.slice(Math.max(0, highs.length - 20)));
   return {
     date: cur.date, price: cur.close,
     open: cur.open, high: cur.high, low: cur.low, volume: cur.volume,
