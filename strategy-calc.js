@@ -108,3 +108,50 @@ window.fetchStrategyData = async function() {
   const res = await fetch('data/strategy_data.json?t=' + Date.now());
   return await res.json();
 };
+
+// ===== 歷史序列(畫圖用) =====
+function computeSeries(data) {
+  const rows = data.target;
+  const closes = rows.map(r => r.close);
+  const highs = rows.map(r => r.high);
+  const lows = rows.map(r => r.low);
+  const bench = data.benchmark_close;
+  const n = rows.length;
+  const dates = rows.map(r => r.date);
+  const ma20Arr = [], ma60Arr = [], bollUp = [], bollLow = [], bollMid = [];
+  const sellPArr = [], buyPArr = [];
+  const rsData = mansfieldRS(closes, bench);
+  const rsArr = rsData.smoothed;
+  for (let i = 0; i < n; i++) {
+    ma20Arr.push(sma(closes, 20, i));
+    ma60Arr.push(sma(closes, 60, i));
+    const mid = sma(closes, 20, i);
+    if (mid !== null) {
+      let v = 0;
+      for (let j = i - 19; j <= i; j++) v += (closes[j] - mid) ** 2;
+      const sd = Math.sqrt(v / 20);
+      bollMid.push(mid); bollUp.push(mid + 2*sd); bollLow.push(mid - 2*sd);
+    } else { bollMid.push(null); bollUp.push(null); bollLow.push(null); }
+    const m23 = sma(closes, 23, i);
+    if (m23 !== null && i >= 60) {
+      let mu = -Infinity, ml = -Infinity;
+      for (let j = i - 60; j < i; j++) {
+        const m = sma(closes, 23, j);
+        if (m === null) continue;
+        mu = Math.max(mu, highs[j] - m);
+        ml = Math.max(ml, m - lows[j]);
+      }
+      sellPArr.push(m23 + mu); buyPArr.push(m23 - ml);
+    } else { sellPArr.push(null); buyPArr.push(null); }
+  }
+  const signals = [];
+  for (let i = 1; i < n; i++) {
+    if (ma60Arr[i] === null) continue;
+    const rsUp = rsArr[i] > 0 && rsArr[i-1] <= 0;
+    const rsDown = rsArr[i] < 0 && rsArr[i-1] >= 0;
+    if (rsUp && closes[i] > ma60Arr[i]) signals.push({ i, type: 'buy', price: closes[i] });
+    else if (rsDown && ma20Arr[i] && closes[i] < ma20Arr[i]) signals.push({ i, type: 'sell', price: closes[i] });
+  }
+  return { dates, closes, ma20Arr, ma60Arr, bollUp, bollLow, bollMid, sellPArr, buyPArr, rsArr, signals };
+}
+window.computeSeries = computeSeries;

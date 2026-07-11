@@ -70,6 +70,7 @@
   <div class="panel" id="panel-grid"></div>
 </main>
 
+<script src="https://cdnjs.cloudflare.com/ajax/libs/Chart.js/3.9.1/chart.min.js"></script>
 <script src="strategy-calc.js"></script>
 <script>
 // tab 切換
@@ -79,8 +80,60 @@ document.querySelectorAll('.tab').forEach(t => {
     document.querySelectorAll('.panel').forEach(x => x.classList.remove('active'));
     t.classList.add('active');
     document.getElementById('panel-' + t.dataset.tab).classList.add('active');
+    // 重繪對應圖表(隱藏 canvas 切回來要重畫)
+    setTimeout(() => {
+      if (t.dataset.tab === 'rs') drawRSChart();
+      else if (t.dataset.tab === 'line') drawLineChart();
+      else if (t.dataset.tab === 'grid') drawGridChart();
+    }, 50);
   };
 });
+
+
+// ===== 圖表 =====
+let charts = {};
+function lineDataset(label, data, color, opts={}) {
+  return Object.assign({ label, data, borderColor: color, backgroundColor: 'transparent',
+    borderWidth: opts.width||1.5, pointRadius: 0, tension: 0.2, borderDash: opts.dash||[], fill: false }, opts.extra||{});
+}
+function drawChart(canvasId, series, config) {
+  const ctx = document.getElementById(canvasId).getContext('2d');
+  if (charts[canvasId]) charts[canvasId].destroy();
+  // 只顯示最近 90 天,圖較清楚
+  const start = Math.max(0, series.dates.length - 90);
+  const slice = a => a.slice(start);
+  const labels = slice(series.dates);
+  const datasets = config.datasets(slice);
+  // 訊號點標記
+  const sigPoints = { buy: [], sell: [] };
+  (series.signals||[]).forEach(s => {
+    if (s.i >= start) {
+      const x = s.i - start;
+      sigPoints[s.type].push({ x, y: s.price });
+    }
+  });
+  if (config.showSignals) {
+    datasets.push({ label: '買進訊號', data: sigPoints.buy, type: 'scatter',
+      pointBackgroundColor: '#00c853', pointRadius: 6, pointStyle: 'triangle', showLine: false });
+    datasets.push({ label: '賣出訊號', data: sigPoints.sell, type: 'scatter',
+      pointBackgroundColor: '#ff3d00', pointRadius: 6, pointStyle: 'triangle', rotation: 180, showLine: false });
+  }
+  charts[canvasId] = new Chart(ctx, {
+    type: 'line',
+    data: { labels, datasets },
+    options: {
+      responsive: true, maintainAspectRatio: false, interaction: { intersect: false, mode: 'index' },
+      plugins: { legend: { labels: { color: '#8b98a5', font: { size: 10 }, boxWidth: 12 } } },
+      scales: {
+        y: { ticks: { color: '#4a6070', font: { size: 10 } }, grid: { color: '#1e3048' } },
+        x: { ticks: { color: '#4a6070', font: { size: 9 }, maxTicksLimit: 8 }, grid: { display: false } }
+      }
+    }
+  });
+}
+function hline(series, slice, value, color, label, dash) {
+  return lineDataset(label, slice(series.dates).map(() => value), color, { dash: dash||[5,5], width: 1 });
+}
 
 function pct(from, to) {
   // to 相對 from 的百分比距離
@@ -164,10 +217,12 @@ function renderRS(r) {
 
   document.getElementById('panel-rs').innerHTML = `
     <div class="banner ${banner}">${bannerText}<div class="reason">${reason}</div></div>
+    <div class="card"><h3>走勢圖 · 收盤/均線/極端軌道</h3><div style="height:280px"><canvas id="chart-rs"></canvas></div></div>
     <div class="card"><h3>距離雷達</h3>${radar}</div>
     <div class="card"><h3>條件檢核</h3><ul class="checklist">${checks}</ul></div>
     <div class="card"><h3>監視提醒</h3>${alerts}</div>
   `;
+  drawRSChart();
 }
 
 function renderLine(r) {
@@ -221,10 +276,12 @@ function renderLine(r) {
   document.getElementById('panel-line').innerHTML = `
     ${globalOverheat ? '<div class="sop-warn">⚠ SOP:其他策略偵測到頂部過熱,買進訊號需謹慎</div>' : ''}
     <div class="banner ${banner}">${bannerText}<div class="reason">${reason}</div></div>
+    <div class="card"><h3>走勢圖 · 收盤/月線/季線/布林</h3><div style="height:280px"><canvas id="chart-line"></canvas></div></div>
     <div class="card"><h3>距離雷達</h3>${radar}</div>
     <div class="card"><h3>條件檢核</h3><ul class="checklist">${checks}</ul></div>
     <div class="card"><h3>監視提醒</h3>${alerts}</div>
   `;
+  drawLineChart();
 }
 
 function renderGrid(r) {
@@ -262,10 +319,55 @@ function renderGrid(r) {
   document.getElementById('panel-grid').innerHTML = `
     ${globalOverheat ? '<div class="sop-warn">⚠ SOP:其他策略偵測到頂部過熱</div>' : ''}
     <div class="banner ${banner}">${bannerText}<div class="reason">${reason}</div></div>
+    <div class="card"><h3>走勢圖 · 收盤/網格價位</h3><div style="height:280px"><canvas id="chart-grid"></canvas></div></div>
     <div class="card"><h3>距離雷達</h3>${radar}</div>
     <div class="card"><h3>條件檢核</h3><ul class="checklist">${checks}</ul></div>
     <div class="card"><h3>監視提醒</h3>${alerts}</div>
   `;
+  drawGridChart();
+}
+
+
+let seriesData = null;
+function drawRSChart() {
+  if (!seriesData) return;
+  drawChart('chart-rs', seriesData, {
+    showSignals: true,
+    datasets: (slice) => [
+      lineDataset('收盤', slice(seriesData.closes), '#3d9eff', { width: 2 }),
+      lineDataset('MA20', slice(seriesData.ma20Arr), '#d4af37'),
+      lineDataset('MA60', slice(seriesData.ma60Arr), '#8b98a5'),
+      lineDataset('極端賣', slice(seriesData.sellPArr), '#ff3d00', { dash: [4,4] }),
+      lineDataset('極端買', slice(seriesData.buyPArr), '#00c853', { dash: [4,4] }),
+    ]
+  });
+}
+function drawLineChart() {
+  if (!seriesData) return;
+  drawChart('chart-line', seriesData, {
+    showSignals: false,
+    datasets: (slice) => [
+      lineDataset('收盤', slice(seriesData.closes), '#3d9eff', { width: 2 }),
+      lineDataset('月線MA20', slice(seriesData.ma20Arr), '#d4af37'),
+      lineDataset('季線MA60', slice(seriesData.ma60Arr), '#8b98a5'),
+      lineDataset('布林上', slice(seriesData.bollUp), '#ff3d00', { dash: [4,4] }),
+      lineDataset('布林下', slice(seriesData.bollLow), '#00c853', { dash: [4,4] }),
+    ]
+  });
+}
+function drawGridChart() {
+  if (!seriesData || !window._gridPrices) return;
+  const g = window._gridPrices;
+  drawChart('chart-grid', seriesData, {
+    showSignals: false,
+    datasets: (slice) => [
+      lineDataset('收盤', slice(seriesData.closes), '#3d9eff', { width: 2 }),
+      hline(seriesData, slice, g.H, '#8b98a5', '當月高', [2,2]),
+      hline(seriesData, slice, g.g1, '#ffd32a', '-3%'),
+      hline(seriesData, slice, g.g2, '#2196f3', '-6%'),
+      hline(seriesData, slice, g.g3, '#00c853', '-9%'),
+    ]
+  });
 }
 
 async function init() {
@@ -274,8 +376,10 @@ async function init() {
     const r = window.computeAll(data);
     document.getElementById('meta').textContent =
       `標的 0050 · 現價 ${r.price} · 更新 ${data.updated_at} · 資料 ${data.target.length} 天`;
+    seriesData = window.computeSeries(data);
+    window._gridPrices = { H: r.monthHigh, g1: r.monthHigh*0.97, g2: r.monthHigh*0.94, g3: r.monthHigh*0.91 };
     globalOverheat = false;
-    renderRS(r);   // RS 先跑(會設定 globalOverheat)
+    renderRS(r);   // RS 先跑(會設定 globalOverheat)+畫圖
     renderLine(r);
     renderGrid(r);
   } catch (e) {
