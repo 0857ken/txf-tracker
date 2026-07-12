@@ -373,7 +373,7 @@ async function renderPnlDetail() {
           <td data-label="損益" class="${color}">${(pnl_twd >= 0 ? '+' : '') + pnl_twd.toLocaleString()}</td>
           <td data-label="報酬率" class="${color}">${(pnl_twd >= 0 ? '+' : '') + pnlPct}%</td>
           <td data-label="操作"><button onclick="editPosition(${p.id}, ${p.lots}, ${p.entry_price})">編輯</button>
-            <button onclick="closePosition(${p.id}, ${p.lots})" style="background:rgba(0, 229, 160, 0.7)">結算</button>
+            <button onclick="closePosition('${p.id}', ${p.lots}, ${p.entry_price}, '${p.type}')" style="background:rgba(0, 229, 160, 0.7)">結算</button>
           </td>
         </tr>
       `;
@@ -403,7 +403,7 @@ async function renderPnlDetail() {
           <td data-label="損益" class="${color}">${pnl ? (pnl >= 0 ? '+' : '') + pnl.toLocaleString() : '—'}</td>
           <td data-label="報酬率" class="${color}">${pnlPct ? (pnlPct >= 0 ? '+' : '') + pnlPct + '%' : '—'}</td>
           <td data-label="操作"><button onclick="editStock(${s.id}, ${s.shares}, ${s.cost_price})">編輯</button>
-            <button onclick="sellStock(${s.id}, ${s.shares}, '${s.symbol}')" style="background:rgba(0, 229, 160, 0.7)">結算</button>
+            <button onclick="sellStock('${s.id}', ${s.shares}, '${s.symbol}', ${s.cost_price})" style="background:rgba(0, 229, 160, 0.7)">結算</button>
           </td>
         </tr>
       `;
@@ -731,7 +731,7 @@ async function editPosition(id, currentLots, currentPrice) {
   };
 }
 
-async function closePosition(id, maxLots) {
+async function closePosition(id, maxLots, entryPrice, posType) {
   const lots = prompt(`輸入結算口數 (最多 ${maxLots}):`, maxLots);
   if (!lots) return;
   const exitPrice = prompt('輸入結算價格:');
@@ -739,13 +739,13 @@ async function closePosition(id, maxLots) {
   const note = prompt('備註 (選填):', '');
   
   try {
-    const mult = TXF_MULT[window._closingType] || 10;
+    const mult = TXF_MULT[posType] || 10;
     await window.addRealizedFS({
       date: new Date().toISOString().slice(0,10),
       lots: parseFloat(lots),
-      entry_price: window._closingEntry || 0,
+      entry_price: entryPrice || 0,
       exit_price: parseFloat(exitPrice),
-      pnl_twd: Math.round((parseFloat(exitPrice) - (window._closingEntry||0)) * mult * parseFloat(lots)),
+      pnl_twd: Math.round((parseFloat(exitPrice) - (entryPrice||0)) * mult * parseFloat(lots)),
       note: '台指期平倉 ' + (note || '')
     });
     await window.deletePositionFS(id);
@@ -816,7 +816,7 @@ async function deleteItem(id, type, name) {
   };
 }
 
-async function sellStock(id, maxShares, symbol) {
+async function sellStock(id, maxShares, symbol, costPrice) {
   const shares = prompt(`輸入結算數量 (最多 ${maxShares}):`, maxShares);
   if (!shares) return;
   const exitPrice = prompt('輸入結算價格:');
@@ -827,9 +827,9 @@ async function sellStock(id, maxShares, symbol) {
     await window.addRealizedFS({
       date: new Date().toISOString().slice(0,10),
       lots: parseFloat(shares),
-      entry_price: window._sellingCost || 0,
+      entry_price: costPrice || 0,
       exit_price: parseFloat(exitPrice),
-      pnl_twd: Math.round((parseFloat(exitPrice) - (window._sellingCost||0)) * parseFloat(shares)),
+      pnl_twd: Math.round((parseFloat(exitPrice) - (costPrice||0)) * parseFloat(shares)),
       note: '股票賣出 ' + (note || '')
     });
     await window.deleteStockFS(id);
