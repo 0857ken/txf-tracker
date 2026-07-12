@@ -3,7 +3,7 @@ name: 更新策略資料
 on:
   schedule:
     # 每天台灣 14:00(收盤後) = UTC 06:00,週一到五
-    - cron: '0 6 * * 1-5'
+    - cron: '40 5 * * 1-5'
   workflow_dispatch:
 
 permissions:
