@@ -290,11 +290,12 @@ function renderGrid(r) {
   const drawdown = pct(H, r.price);  // 現價相對當月高的回檔(負值)
   const distG1 = pct(r.price, g1), distG2 = pct(r.price, g2), distG3 = pct(r.price, g3);
 
-  let banner, reason;
-  if (r.price <= g3) { banner = 'buy'; reason = `跌破 -9%(${g3.toFixed(1)}),當月戰備金全投入`; }
-  else if (r.price <= g2) { banner = 'buy'; reason = `跌破 -6%(${g2.toFixed(1)}),重倉出擊 1.5~2 碼`; }
-  else if (r.price <= g1) { banner = 'buy'; reason = `跌破 -3%(${g1.toFixed(1)}),輕倉試探 0.5 碼`; }
-  else { banner = 'wait'; reason = `距當月高回檔 ${drawdown.toFixed(1)}%,未觸發網格`; }
+let banner, reason;
+if (!r.gridActive) { banner = 'wait'; reason = `大盤未從高點/季線拉回,網格未啟動`; }
+else if (r.price <= g3) { banner = 'buy'; reason = `跌破 -9%(${g3.toFixed(1)}),當月戰備金全投入`; }
+else if (r.price <= g2) { banner = 'buy'; reason = `跌破 -6%(${g2.toFixed(1)}),重倉出擊 1.5~2 碼`; }
+else if (r.price <= g1) { banner = 'buy'; reason = `跌破 -3%(${g1.toFixed(1)}),輕倉試探 0.5 碼`; }
+else { banner = "wait"; reason = `距當月高回檔 ${drawdown.toFixed(1)}%,未觸發網格`; }
   if (globalOverheat && banner === 'buy') reason += ' ⚠ SOP:頂部過熱,禁止追多';
   const bannerText = banner === 'buy' ? '🟢 可加碼' : '✋ 等待';
 

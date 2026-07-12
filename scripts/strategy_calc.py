@@ -117,12 +117,19 @@ def compute_signals(data):
     elif ma20 and price <= ma20 * 1.01:
         signals.append("三條線:🟢 觸月線,第1批")
 
+    # 網格啟動:大盤從近20日高拉回或跌破季線
+    bench_valid = [x for x in bench if x is not None]
+    bench_cur = bench_valid[-1]
+    bench_high20 = max(bench_valid[-20:])
+    bench_ma60 = sum(bench_valid[-60:]) / 60 if len(bench_valid) >= 60 else None
+    grid_active = bench_cur < bench_high20 or (bench_ma60 and bench_cur < bench_ma60)
+
     g1, g2, g3 = month_high * 0.97, month_high * 0.94, month_high * 0.91
-    if price <= g3:
+    if grid_active and price <= g3:
         signals.append("網格:🟢 跌破-9%,戰備金全投入")
-    elif price <= g2:
+    elif grid_active and price <= g2:
         signals.append("網格:🟢 跌破-6%,重倉1.5~2碼")
-    elif price <= g1:
+    elif grid_active and price <= g1:
         signals.append("網格:🟢 跌破-3%,輕倉0.5碼")
 
     return {"price": price, "rs": rs, "signals": signals}

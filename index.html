@@ -65,10 +65,6 @@
       <div class="label">台指期數 現價</div>
       <div class="value blue" id="price">—</div>
       <div class="sub" id="data-source">Yahoo Finance</div>
-      <div style="margin-top:12px">
-        <input type="number" id="override-price" placeholder="輸入今日收盤價" step="0.1" style="width:140px">
-        <button onclick="overridePrice()" class="yellow">校對</button>
-      </div>
     </div>
     <div class="card">
       <div class="label">期現價差</div>
@@ -289,10 +285,6 @@ async function loadDashboard() {
   }
 }
 
-
-function overridePrice() {
-alert("報價已改為自動抓取(每30分鐘更新),無需手動校對");
-}
 
 async function updatePos(posId, idx) {
   const lots = parseInt(document.getElementById(`lots-${idx}`).value);

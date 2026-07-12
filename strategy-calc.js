@@ -92,6 +92,12 @@ function computeAll(data) {
   const rsiVal = rsi(closes);
   const bands = extremeBands(highs, lows, closes);
 const monthHigh = Math.max(...highs.slice(Math.max(0, highs.length - 20)));
+// 網格啟動:大盤(加權指數)從近20日高拉回,或跌破季線60MA
+const benchValid = bench.filter(x => x != null);
+const benchCur = benchValid[benchValid.length - 1];
+const benchHigh20 = Math.max(...benchValid.slice(-20));
+const benchMa60 = benchValid.length >= 60 ? benchValid.slice(-60).reduce((a,b)=>a+b,0)/60 : null;
+const gridActive = benchCur < benchHigh20 || (benchMa60 && benchCur < benchMa60);
   return {
     date: cur.date, price: cur.close,
     open: cur.open, high: cur.high, low: cur.low, volume: cur.volume,
@@ -99,7 +105,7 @@ const monthHigh = Math.max(...highs.slice(Math.max(0, highs.length - 20)));
     rs: rsData.smoothed[rsData.smoothed.length - 1],
     rsPrev: rsData.smoothed[rsData.smoothed.length - 2],
     sc: td.sc, bc: td.bc,
-    boll, rsi: rsiVal, bands, monthHigh,
+    boll, rsi: rsiVal, bands, monthHigh, gridActive,
   };
 }
 window.computeAll = computeAll;
