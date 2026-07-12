@@ -289,7 +289,7 @@ let txfNotional = 0;
       currentPrice = market.market.current_price;
       const positions = await window.fetchPositions();
 positions.forEach(p => {
-const pointValue = TXF_POINT[p.type] || 10;
+const pointValue = TXF_MULT[p.type] || 10;
 const margin = (p.type === 'TXF' || p.type === '大台') ? 135000 : 30000;
 const cost = p.entry_price * pointValue * p.lots;
 const notional = currentPrice * pointValue * p.lots;
@@ -331,7 +331,7 @@ totalValue += margin * p.lots + pnl;
   assets.forEach(a => cashUsed += a.value);
   const cash = 2000000 - cashUsed;
   const pnl = totalValue - totalCost;
-  const pnlPct = totalCost > 0 ? ((pnl / totalCost) * 100).toFixed(2) : 0;
+  const pnlPct = ((pnl / 2000000) * 100).toFixed(2);
   
   document.getElementById('total-value').textContent = Math.round(totalValue).toLocaleString() + ' 元';
 const expoEl = document.getElementById("exposure");
@@ -367,7 +367,7 @@ async function renderPnlDetail() {
     
     const currentPrice = data.market.current_price || 0;
     positions.forEach(p => {
-      const pointValue = TXF_POINT[p.type] || 10;
+      const pointValue = TXF_MULT[p.type] || 10;
       const cost = p.entry_price * pointValue * p.lots;
       const value = currentPrice * pointValue * p.lots;
       const pnl_twd = Math.round((currentPrice - p.entry_price) * pointValue * p.lots);
