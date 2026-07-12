@@ -134,7 +134,7 @@
     <div class="card">
       <div class="label">總市值</div>
       <div class="value blue" id="total-value">—</div>
-      <div class="sub">台幣估算</div>
+      <div class="sub">淨值 · 曝險 <span id="exposure" style="color:var(--gold)">—</span>(<span id="leverage">—</span>倍)</div>
     </div>
     <div class="card">
       <div class="label">總損益</div>
@@ -281,22 +281,24 @@ async function calculateAssets() {
   
   // 抓台指期資料(Firestore 部位 + market_data.json)
   let txfMarginUsed = 0;
+let txfNotional = 0;
   let currentPrice = 0;
   try {
     const market = await window.fetchMarketData();
     if (market && market.market) {
       currentPrice = market.market.current_price;
       const positions = await window.fetchPositions();
-      txfData = { market: market.market, positions };
-      positions.forEach(p => {
-        const pointValue = TXF_POINT[p.type] || 10;
-        const margin = (p.type === 'TXF' || p.type === '大台') ? 135000 : 30000;
-        const cost = p.entry_price * pointValue * p.lots;
-        const value = currentPrice * pointValue * p.lots;
-        txfMarginUsed += margin * p.lots;
-        totalCost += cost;
-        totalValue += value;
-      });
+positions.forEach(p => {
+const pointValue = TXF_POINT[p.type] || 10;
+const margin = (p.type === 'TXF' || p.type === '大台') ? 135000 : 30000;
+const cost = p.entry_price * pointValue * p.lots;
+const notional = currentPrice * pointValue * p.lots;
+const pnl = notional - cost;
+txfMarginUsed += margin * p.lots;
+txfNotional += notional;
+totalCost += margin * p.lots;
+totalValue += margin * p.lots + pnl;
+});
     }
   } catch (e) { console.error(e); }
 
@@ -332,7 +334,15 @@ async function calculateAssets() {
   const pnlPct = totalCost > 0 ? ((pnl / totalCost) * 100).toFixed(2) : 0;
   
   document.getElementById('total-value').textContent = Math.round(totalValue).toLocaleString() + ' 元';
-  const pnlEl = document.getElementById('total-pnl');
+const expoEl = document.getElementById("exposure");
+const levEl = document.getElementById("leverage");
+if (expoEl) expoEl.textContent = Math.round(txfNotional).toLocaleString();
+if (levEl) {
+const lev = txfNotional / 2000000;
+levEl.textContent = lev.toFixed(2);
+levEl.style.color = (lev >= 2 && lev <= 3) ? "var(--green)" : (lev > 3 ? "var(--red)" : "var(--muted)");
+}
+  const pnlEl = document.getElementById("total-pnl");
   pnlEl.className = 'value ' + (pnl >= 0 ? 'red' : 'green');
   pnlEl.textContent = (pnl >= 0 ? '+' : '') + Math.round(pnl).toLocaleString() + ' 元';
   document.getElementById('total-pct').textContent = (pnl >= 0 ? '+' : '') + pnlPct + '%';

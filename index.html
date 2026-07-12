@@ -251,7 +251,8 @@ async function loadDashboard() {
     if (hardFloorEl) {
       if (positions.length > 0) {
         const avgCost = positions.reduce((s,p)=>s+p.entry_price,0)/positions.length;
-        hardFloorEl.textContent = Math.round(avgCost * 1.05).toLocaleString();
+        const ppPct = parseFloat(localStorage.getItem("profit_protect_pct") || "1.0");
+        hardFloorEl.textContent = Math.round(avgCost * (1 + ppPct / 100)).toLocaleString();
       } else {
         hardFloorEl.textContent = '—';
       }
