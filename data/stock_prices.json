@@ -1,11 +1,11 @@
 {
-  "updated_at": "2026-09-10 13:34:58",
+  "updated_at": "2026-09-10 18:35:54",
   "prices": {
     "00685l": {
-      "price": 12.23,
+      "price": 12.26,
       "prev_close": 12.13,
-      "change": 0.1,
-      "change_pct": 0.82
+      "change": 0.13,
+      "change_pct": 1.07
     }
   }
 }
