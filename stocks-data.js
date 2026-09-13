@@ -87,3 +87,23 @@ window.deleteRealizedFS = async function(id) {
   await window.fbReady;
   await deleteDoc(doc(window.fbDb, 'users', 'me', 'realizedPnl', id));
 };
+// ---- 每日資產淨值快照 ----
+function dailySnapshotCol() {
+  return collection(window.fbDb, 'users', 'me', 'dailySnapshots');
+}
+
+window.fetchDailySnapshots = async function() {
+  await window.fbReady;
+
+  const snap = await getDocs(dailySnapshotCol());
+  const list = [];
+
+  snap.forEach(d => list.push({
+    id: d.id,
+    ...d.data()
+  }));
+
+  return list.sort((a, b) =>
+    String(a.date || a.id).localeCompare(String(b.date || b.id))
+  );
+};
