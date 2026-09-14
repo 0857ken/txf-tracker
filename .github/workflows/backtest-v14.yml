@@ -1,0 +1,22 @@
+name: Backtest benchmark v1.4
+
+on:
+  push:
+    branches:
+      - backtest-v1
+    paths:
+      - 'research/backtest_benchmarks_v14.py'
+      - '.github/workflows/backtest-v14.yml'
+
+jobs:
+  benchmark-v14:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: backtest-v1
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.12'
+      - run: python -m pip install --upgrade pip pandas numpy yfinance
+      - run: python research/backtest_benchmarks_v14.py
