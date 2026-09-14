@@ -1,0 +1,19 @@
+name: Backtest 00685L since listing
+on:
+  push:
+    branches: [backtest-v1]
+    paths:
+      - 'research/backtest_00685l_since_listing.py'
+      - '.github/workflows/backtest-00685l-listing.yml'
+jobs:
+  run:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: backtest-v1
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.12'
+      - run: python -m pip install --upgrade pip pandas numpy yfinance
+      - run: python research/backtest_00685l_since_listing.py
