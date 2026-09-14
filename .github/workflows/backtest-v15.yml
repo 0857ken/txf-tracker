@@ -1,0 +1,19 @@
+name: Backtest v1.5 C on TAIEX
+on:
+  push:
+    branches: [backtest-v1]
+    paths:
+      - 'research/backtest_c_on_taiex_v15.py'
+      - '.github/workflows/backtest-v15.yml'
+jobs:
+  run:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: backtest-v1
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.12'
+      - run: python -m pip install --upgrade pip pandas numpy yfinance
+      - run: python research/backtest_c_on_taiex_v15.py
