@@ -1,0 +1,30 @@
+name: Backtest leverage v1.1
+
+on:
+  push:
+    branches:
+      - backtest-v1
+    paths:
+      - 'research/backtest_v1.py'
+      - 'research/backtest_leverage_v11.py'
+      - '.github/workflows/backtest-v11.yml'
+
+jobs:
+  backtest-leverage:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+        with:
+          ref: backtest-v1
+
+      - name: Setup Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: '3.12'
+
+      - name: Install dependencies
+        run: python -m pip install --upgrade pip pandas numpy yfinance
+
+      - name: Run leverage stress test
+        run: python research/backtest_leverage_v11.py
