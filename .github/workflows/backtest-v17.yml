@@ -1,0 +1,25 @@
+name: Backtest v1.7 stress tests
+
+on:
+  push:
+    branches: [backtest-v1]
+    paths:
+      - 'research/backtest_v17_stress.py'
+      - '.github/workflows/backtest-v17.yml'
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  run:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: backtest-v1
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.12'
+      - run: python -m pip install --upgrade pip pandas numpy yfinance
+      - run: python research/backtest_v17_stress.py
