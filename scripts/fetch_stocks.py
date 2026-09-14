@@ -23,6 +23,20 @@ def load_stock_list():
         data = d.to_dict()
         data["id"] = d.id
         stocks.append(data)
+    # 跟單帳本使用獨立庫存，僅將股票代號加入報價；不公開持股或成本。
+    try:
+        mirror = db.collection("users").document("me").collection("followPortfolios").document("default").get()
+        portfolio = mirror.to_dict() if mirror.exists else {}
+        portfolio = portfolio or {}
+        rows = (portfolio.get("snapshot") or {}).get("items", []) + portfolio.get("holdings", [])
+        existing = {str(s.get("symbol", "")).upper() for s in stocks}
+        for row in rows:
+            symbol = str(row.get("symbol", "")).upper()
+            if symbol and symbol not in existing:
+                stocks.append({"symbol": symbol, "market": row.get("market", "TW")})
+                existing.add(symbol)
+    except Exception as exc:
+        print(f"WARNING 跟單報價清單讀取失敗: {exc}", file=sys.stderr)
     return stocks
 
 
@@ -37,7 +51,9 @@ def fetch_price(code, market):
     meta = result["meta"]
     price = meta.get("regularMarketPrice")
     prev = meta.get("chartPreviousClose") or meta.get("previousClose")
-    return price, prev
+    market_time = meta.get("regularMarketTime")
+    as_of = datetime.fromtimestamp(market_time, TW_TZ).strftime("%Y-%m-%d %H:%M:%S") if market_time else None
+    return price, prev, as_of
 
 
 def main():
@@ -52,10 +68,10 @@ def main():
             continue
         market = s.get("market", "TW")
         try:
-            price, prev = fetch_price(code, market)
+            price, prev, as_of = fetch_price(code, market)
             change = round(price - prev, 2) if (price and prev) else 0
             change_pct = round((price - prev) / prev * 100, 2) if prev else 0
-            prices[code] = {"price": price, "prev_close": prev, "change": change, "change_pct": change_pct}
+            prices[code] = {"price": price, "prev_close": prev, "change": change, "change_pct": change_pct, "as_of": as_of}
             print(f"OK {code}: {price}")
         except Exception as e:
             print(f"ERROR {code}: {e}", file=sys.stderr)

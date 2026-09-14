@@ -43,6 +43,7 @@
   button.red { background: rgba(255, 71, 87, 0.7); color: #fff; }
   .range-btn { background: var(--bg3); color: var(--muted); border: 1px solid var(--border); padding: 4px 12px; font-size: 11px; }
   .range-btn.active { background: var(--blue); color: #fff; border-color: var(--blue); }
+@media(max-width:768px){header{flex-wrap:wrap;gap:12px}.nav{flex-wrap:wrap;gap:12px}}
 </style>
 </head>
 <body>
@@ -53,6 +54,7 @@
     <a href="stocks.html" class="active">資產總覽</a>
     <a href="assets.html">200萬計畫</a>
 <a href="strategy.html">策略</a>
+    <a href="follow.html">跟單配置</a>
   </nav>
   <button onclick="loadStocks()" style="background:var(--blue);padding:8px 16px;border-radius:6px">刷新</button>
 </header>

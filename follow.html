@@ -1,0 +1,45 @@
+<!DOCTYPE html>
+<html lang="zh-TW">
+<head>
+<meta charset="UTF-8"><meta name="viewport" content="width=device-width, initial-scale=1">
+<title>跟單配置 · 投資秘書</title>
+<link rel="stylesheet" href="follow.css">
+<script defer src="follow-core.js"></script><script defer src="follow.js"></script>
+<script type="module" src="follow-data.js"></script>
+</head>
+<body>
+<header><a class="logo" href="index.html">TXF TRACKER <span>投資秘書</span></a>
+<nav aria-label="主選單"><a href="index.html">微台期</a><a href="stocks.html">資產總覽</a><a href="assets.html">200萬計畫</a><a href="strategy.html">策略</a><a href="follow.html" aria-current="page">跟單配置</a></nav></header>
+<main>
+<div class="hero"><div><p class="eyebrow">PORTFOLIO MIRROR / 跟單帳本</p><h1>看懂部位，再決定調整。</h1><p class="muted">依朋友完整庫存的市值占比，換算你的目標配置。所有数量以「股」計，1 張＝1,000 股。</p></div><div class="toolbar"><button id="refresh">刷新報價</button><button id="reload">載入雲端</button><button id="export">匯出備份</button></div></div>
+<div id="status" class="notice" role="status" aria-live="polite">正在連接雲端…</div>
+<div class="metrics"><div class="card"><span class="muted">目標總資金</span><strong id="m-budget">100,000</strong><small>包含已投入部位，不是每次新增資金</small></div><div class="card"><span class="muted">入選股票</span><strong id="m-count">—</strong><small id="m-coverage">請匯入朋友完整庫存</small></div><div class="card"><span class="muted">目標保留現金</span><strong id="m-cash">—</strong><small>包含費用預留與零股取整餘額</small></div><div class="card"><span class="muted">前兩檔占目標總資金</span><strong id="m-top">—</strong><small>檔數減少，集中程度也可能提高</small></div></div>
+<section class="card"><h2>配置規則</h2><form id="settings-form" class="form-grid">
+<label>目標總資金（元）<input id="budget" type="number" min="1" step="any" value="100000" required></label>
+<label>朋友占比嚴格大於（%）<input id="threshold" type="number" min="0" max="100" step="0.1" value="5" required></label>
+<label>配置方式<select id="mode"><option value="original">原占比＋保留現金</option><option value="normalized">入選股票重新配滿</option></select></label>
+<label>費用預留（元）<input id="reserve" type="number" min="0" value="500" step="any" required></label>
+<label>小額調整暫緩門檻（元）<input id="minTrade" type="number" min="0" value="500" step="any" required></label>
+<button class="primary" type="submit">儲存規則並重算</button></form><p class="hint">先扣費用預留，再分配金額。小額門檻僅暫緩既有部位的微調；新建倉與完全退出仍列出。這是比例試算，並非自動下單。</p></section>
+<section class="card"><div class="section-head"><div><p class="eyebrow">REBALANCE</p><h2>本次調整清單</h2></div><span id="snapshot-label" class="badge">尚無庫存快照</span></div>
+<div id="allocation-bars" class="bars" aria-label="目標資金比例"></div><p id="plan-note" class="notice">先匯入朋友庫存，再確認你的实际庫存。</p>
+<div class="table-wrap"><table class="responsive"><thead><tr><th>股票</th><th>朋友占比</th><th>我的目標占比</th><th>參考價 / 日期</th><th>目標金額</th><th>目標股數</th><th>實際股數</th><th>調整差額</th></tr></thead><tbody id="plan-body"></tbody></table></div>
+<p class="hint" id="quote-note">報價尚未載入。朋友占比固定依快照價格計算，刷新報價只改變換算股數。</p></section>
+<div class="columns"><section class="card"><div class="section-head"><h2>朋友庫存更新</h2><label class="file-button">匯入 JSON<input id="import" type="file" accept=".json,application/json"></label></div>
+<p class="hint">首次請匯入提供的 9/11 庫存檔。之後可修改下表，或貼上完整 CSV。所有股票都要保留，低於門檻的股票也參與分母。朋友歷史成本未知。</p>
+<label>庫存日期<input id="snapshot-date" type="date" required></label>
+<div class="table-wrap"><table><thead><tr><th>代號</th><th>名稱</th><th>市場</th><th>朋友股數</th><th>快照參考價</th><th></th></tr></thead><tbody id="friend-body"></tbody></table></div>
+<div class="toolbar"><button id="add-friend">＋新增股票</button><button id="save-snapshot" class="primary">儲存庫存並產生調整清單</button></div>
+<details><summary>貼上完整庫存 CSV</summary><p class="hint">每行：代號,名稱,TW或TWO,股數,參考價。數字不要加千分位。</p><textarea id="csv" rows="5" aria-label="完整庫存 CSV" placeholder="代號,名稱,市場,股數,參考價"></textarea><button id="parse-csv">載入草稿</button></details>
+<details><summary>收到朋友買進／賣出通知</summary><form id="friend-trade" class="form-grid compact"><label>股票代號<input id="f-symbol" required maxlength="8"></label><label>方向<select id="f-side"><option value="buy">買進</option><option value="sell">賣出</option></select></label><label>股數<input id="f-shares" type="number" min="1" step="1" required></label><label>通知價格<input id="f-price" type="number" min="0.000001" step="any" required></label><button type="submit">套用到草稿</button></form><p class="hint">會增加／減少該檔總股數，更新該檔參考價；其餘股票價格保留。請核對日期與所有參考價，再儲存快照。這不能推算朋友舊部位的成本。</p></details></section>
+<section class="card"><h2>我的實際庫存</h2><p class="hint">此帳本獨立追蹤這筆跟單資金，不併入「200萬計畫」加總，避免重複計算。若已持有，請填股數；未知成本可留白。空手也請按儲存確認。</p>
+<label>目前可用現金（元）<input id="own-cash" type="number" min="0" step="any" value="100000"></label>
+<div class="table-wrap"><table><thead><tr><th>代號</th><th>實際股數</th><th>均價含買入費用（可空白）</th></tr></thead><tbody id="own-body"></tbody></table></div>
+<div class="toolbar"><button id="add-own">＋新增我的持股</button><button id="save-own" class="primary">儲存並確認我的庫存</button></div>
+<details open><summary>記錄我的實際成交</summary><form id="trade-form" class="form-grid compact">
+<label>成交日期<input id="t-date" type="date" required></label><label>股票代號<input id="t-symbol" required maxlength="8" list="symbols"></label><datalist id="symbols"></datalist>
+<label>方向<select id="t-side"><option value="buy">買進</option><option value="sell">賣出</option></select></label><label>成交股數<input id="t-shares" type="number" min="1" step="1" required></label><label>實際成交價<input id="t-price" type="number" min="0.000001" step="any" required></label><label>實付手續費＋稅（元）<input id="t-fees" type="number" min="0" value="0" step="any" required></label><button type="submit" class="primary">確認成交並更新庫存</button></form><p class="hint">僅記錄已成交交易；不會送出券商委託。實際費稅請依成交明細填寫。</p></details>
+<details><summary>手動補報價</summary><form id="quote-form" class="form-grid compact"><label>代號<input id="q-symbol" required maxlength="8"></label><label>價格<input id="q-price" type="number" min="0.000001" step="any" required></label><label>報價日期<input id="q-date" type="date" required></label><button type="submit">本次套用報價</button></form><p class="hint">僅套用本次畫面；刷新後重新讀取排程報價。缺價股票可用此處補齊。</p></details></section></div>
+<section class="card"><h2>更新與成交紀錄</h2><p class="hint">保存最近 50 次庫存快照、100 次更新摘要及最多 500 筆成交；備份檔含完整現存帳本。</p><div class="columns"><div><h3>庫存／規則更新</h3><div id="history" class="history"></div></div><div><h3>我的成交</h3><div id="trades" class="history"></div></div></div></section>
+<footer>朋友總市值不含未知現金。歷史參考價不是成本，也不是即時可成交價。價格波動不代表朋友有買賣。</footer>
+</main></body></html>
