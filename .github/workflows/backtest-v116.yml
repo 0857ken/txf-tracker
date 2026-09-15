@@ -1,0 +1,25 @@
+name: Backtest v1.16 corrected futures proxy
+
+on:
+  push:
+    branches: [backtest-v1]
+    paths:
+      - 'research/backtest_v116_futures_total_return_proxy.py'
+      - '.github/workflows/backtest-v116.yml'
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  run:
+    runs-on: ubuntu-24.04
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: backtest-v1
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.12'
+      - run: python -m pip install --upgrade pip pandas numpy yfinance requests
+      - run: python research/backtest_v116_futures_total_return_proxy.py
