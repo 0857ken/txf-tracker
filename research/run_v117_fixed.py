@@ -5,6 +5,12 @@ s=p.read_text(encoding='utf-8')
 
 s=s.replace('import io, re, math, time, warnings', 'import io, csv, re, math, time, warnings', 1)
 
+# Official TAIFEX 2020-01-31 adjustment: TX initial/maintenance became 110,000/84,000.
+# The prior draft incorrectly treated the end of the Lunar-New-Year temporary period as
+# a simple reversion to 91,000/70,000; the official announcement instead moved to 110,000/84,000.
+s=s.replace("('2020-01-31', 91000, 70000, '2020 Lunar New Year reversion')",
+            "('2020-01-31',110000, 84000, '2020-01-30 official post-holiday adjustment')", 1)
+
 old="""    try: df=pd.read_csv(io.StringIO(txt),dtype=str)\n    except Exception: return pd.DataFrame()\n    if df.empty: return df\n    df.columns=[str(c).strip() for c in df.columns]\n"""
 new="""    try:\n        rows=list(csv.reader(io.StringIO(txt)))\n        if not rows: return pd.DataFrame()\n        header=[str(c).strip() for c in rows[0]]\n        body=[r[:len(header)] for r in rows[1:] if len(r)>=len(header)]\n        df=pd.DataFrame(body,columns=header,dtype=str)\n    except Exception: return pd.DataFrame()\n    if df.empty: return df\n    df.columns=[str(c).strip() for c in df.columns]\n"""
 if old not in s:
