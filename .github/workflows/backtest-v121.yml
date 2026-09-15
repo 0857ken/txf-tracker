@@ -1,0 +1,26 @@
+name: Backtest v1.21 500% margin reserve
+
+on:
+  workflow_dispatch:
+  push:
+    branches: [backtest-v1]
+    paths:
+      - 'research/backtest_v121_500_margin_reserve.py'
+      - 'research/V121_500_MARGIN_RESERVE_PROTOCOL.md'
+      - '.github/workflows/backtest-v121.yml'
+
+permissions:
+  contents: read
+
+jobs:
+  run:
+    runs-on: ubuntu-24.04
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: backtest-v1
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.12'
+      - run: python -m pip install --upgrade pip pandas numpy requests beautifulsoup4 yfinance
+      - run: python research/backtest_v121_500_margin_reserve.py
