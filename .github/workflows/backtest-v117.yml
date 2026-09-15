@@ -5,6 +5,7 @@ on:
     branches: [backtest-v1]
     paths:
       - 'research/backtest_v117_actual_futures_margin.py'
+      - 'research/run_v117_fixed.py'
       - '.github/workflows/backtest-v117.yml'
 jobs:
   run:
@@ -18,4 +19,4 @@ jobs:
         with:
           python-version: '3.12'
       - run: python -m pip install --upgrade pip pandas numpy requests beautifulsoup4 yfinance
-      - run: python research/backtest_v117_actual_futures_margin.py
+      - run: python research/run_v117_fixed.py
