@@ -1,0 +1,25 @@
+name: Backtest v1.15 futures vs 00685L
+
+on:
+  push:
+    branches: [backtest-v1]
+    paths:
+      - 'research/backtest_v115_futures_vs_00685l.py'
+      - '.github/workflows/backtest-v115.yml'
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  run:
+    runs-on: ubuntu-24.04
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: backtest-v1
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.12'
+      - run: python -m pip install --upgrade pip pandas numpy yfinance
+      - run: python research/backtest_v115_futures_vs_00685l.py
