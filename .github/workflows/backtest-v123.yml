@@ -1,0 +1,25 @@
+name: Backtest v1.23 state allocation audit
+
+on:
+  push:
+    branches: [backtest-v1]
+    paths:
+      - 'research/backtest_v123_state_allocation_audit.py'
+      - '.github/workflows/backtest-v123.yml'
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  run:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: backtest-v1
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.12'
+      - run: python -m pip install --upgrade pip pandas numpy requests beautifulsoup4 yfinance
+      - run: python research/backtest_v123_state_allocation_audit.py
