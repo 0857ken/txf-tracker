@@ -1,0 +1,25 @@
+name: Probe v1.21 intraday 2017-08-03
+
+on:
+  workflow_dispatch:
+  push:
+    branches: [backtest-v1]
+    paths:
+      - 'research/probe_v121_intraday_20170803.py'
+      - '.github/workflows/probe-v121-intraday.yml'
+
+permissions:
+  contents: read
+
+jobs:
+  run:
+    runs-on: ubuntu-24.04
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: backtest-v1
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.12'
+      - run: python -m pip install --upgrade pip pandas numpy requests beautifulsoup4 yfinance
+      - run: python research/probe_v121_intraday_20170803.py
