@@ -1,0 +1,27 @@
+name: Backtest v1.19 futures free-cash yield
+
+on:
+  workflow_dispatch:
+  push:
+    branches: [backtest-v1]
+    paths:
+      - 'research/backtest_v119_cash_yield.py'
+      - 'research/V119_CASH_YIELD_PROTOCOL.md'
+      - '.github/workflows/backtest-v119.yml'
+
+permissions:
+  contents: read
+
+jobs:
+  run:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 25
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: backtest-v1
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.12'
+      - run: python -m pip install --upgrade pip pandas numpy requests beautifulsoup4 yfinance
+      - run: python research/backtest_v119_cash_yield.py
