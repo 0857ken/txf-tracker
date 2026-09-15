@@ -1,0 +1,22 @@
+name: Backtest v1.20 broker-style margin ratio
+
+on:
+  workflow_dispatch:
+  push:
+    branches: [backtest-v1]
+    paths:
+      - 'research/backtest_v120_broker_margin_ratio.py'
+      - '.github/workflows/backtest-v120.yml'
+
+jobs:
+  run:
+    runs-on: ubuntu-24.04
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: backtest-v1
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.12'
+      - run: python -m pip install --upgrade pip pandas numpy requests beautifulsoup4 yfinance
+      - run: python research/backtest_v120_broker_margin_ratio.py
