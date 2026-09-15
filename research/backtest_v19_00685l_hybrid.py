@@ -28,7 +28,7 @@ def add_sig(df):
 
 def tactical_target(sig, bear_cut, ths=None):
     # 100% 00685L while not confirmed bear.
-    # On first confirmed-bear close, cut to bear_cut and freeze prior 60d high as anchor.
+    # On first confirmed-bear close, cut to bear_cut and freeze the prior 60d high as anchor.
     # During bear, scale back to at least 25/50/100% when 0050 drawdown hits thresholds.
     out=[]; anchor=None; prev_bear=False; pos=1.0
     for _,r in sig.iterrows():
@@ -50,18 +50,19 @@ def tactical_target(sig, bear_cut, ths=None):
 
 
 def equity_from_target(sig, asset, target):
-    m=pd.concat([target.rename('target'),asset['open'].rename('open')],axis=1,join='inner').dropna()
-    # signal at close t -> position effective next open
+    # Use adjusted close-to-close returns because some historical 00685L open fields are zero/invalid.
+    # A signal known at close t becomes effective for the next close-to-close interval via shift(1).
+    m=pd.concat([target.rename('target'),asset['close'].rename('close')],axis=1,join='inner').dropna()
+    ret=m['close'].pct_change()
     pos=m['target'].shift(1).fillna(0.0)
-    fwd=m['open'].shift(-1)/m['open']-1.0
-    r=(pos*fwd).dropna()
+    r=(pos*ret).dropna()
     return (1.0+r).cumprod(), pos.loc[r.index]
 
 
-def bh_open(asset):
-    o=asset['open'].dropna()
-    r=(o.shift(-1)/o-1.0).dropna()
-    return (1+r).cumprod()
+def bh_close(asset):
+    c=asset['close'].replace([np.inf,-np.inf],np.nan).dropna()
+    c=c[c>0]
+    return c/c.iloc[0]
 
 
 def c_base(df):
@@ -97,7 +98,7 @@ def c_on_taiex(sig, tx):
 
 
 def met(eq):
-    eq=eq.dropna()
+    eq=eq.replace([np.inf,-np.inf],np.nan).dropna()
     if len(eq)<2: return dict(total=np.nan,cagr=np.nan,mdd=np.nan,calmar=np.nan)
     total=float(eq.iloc[-1]-1)
     days=max((eq.index[-1]-eq.index[0]).days,1)
@@ -124,13 +125,11 @@ L=L[(L.index>=LISTING)&(L.index<=end)]
 T=T[(T.index>=LISTING)&(T.index<=end)]
 
 results=[]
-# trend-cut-only baselines
 for cut in BEAR_CUTS:
     target=tactical_target(S,cut,None)
     eq,pos=equity_from_target(S,L,target)
     m=met(eq)
     results.append(dict(name=f'cut{cut:.2f}_no_rebuy',cut=cut,ths=None,eq=eq,pos=pos,**m))
-# staged re-entry variants
 for cut in BEAR_CUTS:
     for th in THRESHOLDS:
         target=tactical_target(S,cut,th)
@@ -138,12 +137,11 @@ for cut in BEAR_CUTS:
         m=met(eq)
         results.append(dict(name=f'cut{cut:.2f}_{int(th[0]*100)}-{int(th[1]*100)}-{int(th[2]*100)}',cut=cut,ths=th,eq=eq,pos=pos,**m))
 
-# rank by Calmar among MDD <= 40%, then CAGR
 feasible=[r for r in results if r['mdd']>=-0.40]
 feasible=sorted(feasible,key=lambda r:(r['calmar'],r['cagr']),reverse=True)
 allret=sorted(results,key=lambda r:r['cagr'],reverse=True)
 
-bh=bh_open(L); c=c_on_taiex(S,T); taiex=bh_open(T)
+bh=bh_close(L); c=c_on_taiex(S,T); taiex=bh_close(T)
 
 print('V19_BEGIN')
 print(f'end={end.date()} variants={len(results)} feasible_mdd40={len(feasible)}')
@@ -161,7 +159,6 @@ print('|---|---:|---:|---:|---:|')
 for name,eq in [('00685L buy&hold',bh),('Current C 3/3/0.25 -> TAIEX',c),('TAIEX 1x',taiex)]:
     m=met(eq); print(f"|{name}|{p(m['total'])}|{p(m['cagr'])}|{p(m['mdd'])}|{m['calmar']:.2f}|")
 
-# Stress top candidate
 if feasible:
     best=feasible[0]
     print(f"BEST_RULE {best['name']}")
