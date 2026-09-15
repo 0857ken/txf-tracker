@@ -1,0 +1,20 @@
+name: Probe v1.17 TAIFEX endpoints
+on:
+  workflow_dispatch:
+  push:
+    branches: [backtest-v1]
+    paths:
+      - 'research/probe_v117_taifex.py'
+      - '.github/workflows/probe-v117-taifex.yml'
+jobs:
+  run:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: backtest-v1
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.12'
+      - run: python -m pip install requests pandas beautifulsoup4
+      - run: python research/probe_v117_taifex.py
