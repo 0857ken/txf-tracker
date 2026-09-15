@@ -1,0 +1,26 @@
+name: Backtest v1.22 reserve comparison
+
+on:
+  workflow_dispatch:
+  push:
+    branches: [ backtest-v1 ]
+    paths:
+      - 'research/backtest_v122_reserve_compare.py'
+      - 'research/V122_RESERVE_COMPARISON_PROTOCOL.md'
+      - '.github/workflows/backtest-v122.yml'
+
+permissions:
+  contents: read
+
+jobs:
+  run:
+    runs-on: ubuntu-24.04
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: backtest-v1
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.12'
+      - run: python -m pip install --upgrade pip pandas numpy requests beautifulsoup4 yfinance
+      - run: python research/backtest_v122_reserve_compare.py
