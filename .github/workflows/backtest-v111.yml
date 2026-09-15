@@ -1,0 +1,22 @@
+name: Backtest v1.11 recovery walk-forward
+
+on:
+  workflow_dispatch:
+  push:
+    branches: [backtest-v1]
+    paths:
+      - 'research/backtest_v111_recovery_walkforward.py'
+      - '.github/workflows/backtest-v111.yml'
+
+jobs:
+  run:
+    runs-on: ubuntu-24.04
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: backtest-v1
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.12'
+      - run: python -m pip install --upgrade pip pandas numpy yfinance
+      - run: python research/backtest_v111_recovery_walkforward.py
