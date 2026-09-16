@@ -6,6 +6,8 @@
 
 現行 root HTML + Vanilla JS + Chart.js + Firestore，Yahoo Finance 的 0050.TW / ^TWII 日資料；既有 strategy_data.json 有128筆且日期對齊。main 的4個排程 checkout gh-pages；3個行情排程在 push 前均 pull --rebase，daily.yml 廣播 LINE。main / gh-pages 都還保有舊 backend、Railway 設定與過時 README，但現行網站不引用該後端。原樣保留，不依舊 README 部署。
 
+netlify.toml仍設定publish="frontend"；現有Netlify整合的PR預覽會指向舊frontend，不能拿來驗收新root頁面。這次交付的是獨立HTML預覽檔及GitHub驗證artifact，沒有改動Netlify正式部署設定。
+
 三策略：耀的 RS（50/5、九轉、極端乖離）、橘太郎三條線、滾動20日最高月波動網格（含 gridActive 大盤拉回條件）。strategy-calc.js / scripts/strategy_calc.py 與 LINE 全部不修改。assets.html 留有未被引用的錯誤 TXF_POINT 常數，本功能絕不使用。
 
 新增 defense.html / defense.css / defense.js / defense-core.js / defense-data.js / defense-config.js；strategy.html 只增加入口和入口所需樣式。新增 scripts/defense-*.cjs、tools/defense-runner 套件、tests/defense-*.test.cjs 與本組文件。新核心同時供瀏覽器與 Node 使用，避免再增加一套獨立公式。舊 Python 在執行環境完成既有測試與語法檢查，不要求使用者本機 Python。

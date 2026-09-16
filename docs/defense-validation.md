@@ -14,6 +14,10 @@
 
 Node 24.19.0 / Python 3.12.14；45項Node測試及2項既有Python測試通過，沒有跳過測試。所有既有Python腳本通過語法編譯。正式排程預定使用Node22；GitHub工作結果請見PR的Checks。
 
+GitHub PR驗證亦已通過：Node22.23.2執行45項Node測試、2項Python測試與語法編譯，成功產生defense-preview artifact。驗證的程式提交為`a5d89951bfb171282ceea30f98674802ed74d321`，見[完整工作結果](https://github.com/0857ken/txf-tracker/actions/runs/35156884890)。後續此文件補充只更新驗證證據，計算與UI程式不變。
+
+草稿PR：[網站#1](https://github.com/0857ken/txf-tracker/pull/1)／[每日排程#2](https://github.com/0857ken/txf-tracker/pull/2)，均未合併。正式gh-pages在開發期间仍由既有機器人更新行情；這次feature提交未覆蓋那些行情變更。
+
 | 範圍 | 數量 | 結果 |
 |---|---:|---|
 | 第4策略公式、壓測、滑價、Forward及月檢討 | 19 | 通過 |
@@ -57,6 +61,8 @@ python3 -m compileall -q scripts
 ## 預覽與尚待驗收
 
 `node scripts/defense-preview.cjs`產生`test-results/defense-preview.html`，內嵌公開行情與明確標示的示範帳戶，禁止連線雲端；可以核對公式和表單。預覽紀錄只留在開啟檔案的瀏覽器，不能當成每日自動儲存或真實Forward實績。
+
+現有Netlify整合發布的是舊frontend資料夾，其PR預覽不含本頁。請使用這次交付的HTML檔或上方GitHub工作下載的artifact，不要把舊Netlify畫面當成第4策略預覽。
 
 - **手機實際畫面未驗證**：control-browser安全政策拒絕本機預覽URL。沒有繞過政策；JSDOM不執行CSS排版，不能代替iPhone Safari驗收。尚無已驗證的畫面截圖。
 - **正式Firestore、券商帳務、每日排程未實測／未啟動**：沒有讀取Secret、修改安全規則或寫入正式帳戶。資料交易以模擬Firestore驗證，不能據此宣稱正式權限已通過。
