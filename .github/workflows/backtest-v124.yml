@@ -7,6 +7,7 @@ on:
     paths:
       - 'research/V124_OPERATIONAL_ROBUSTNESS_PROTOCOL.md'
       - 'research/backtest_v124_operational_robustness.py'
+      - 'research/backtest_v124_operational_robustness_fix.py'
       - '.github/workflows/backtest-v124.yml'
 
 permissions:
@@ -24,4 +25,4 @@ jobs:
         with:
           python-version: '3.12'
       - run: python -m pip install --upgrade pip pandas numpy requests beautifulsoup4 yfinance
-      - run: python research/backtest_v124_operational_robustness.py
+      - run: python research/backtest_v124_operational_robustness_fix.py
