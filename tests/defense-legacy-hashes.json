@@ -1,0 +1,22 @@
+{
+  "base": "57dc4079be23abc9899e76f0bd58166eec08fa7d",
+  "files": {
+    "strategy-calc.js": "12ce5d67b1e3d256f02d74ffea7d324eb0d032b41e38fe4d5952e6272c3a5364",
+    "scripts/strategy_calc.py": "ffaef3551897465dd45e2091586fd5bb250b2c41c01e6b9b76afb0ee9e1620f0",
+    "scripts/line_summary.py": "6a1b6e8a7ba12b36d8d7e688c658a5585df4bbd33e7bc0d5e153163e4fbc526c",
+    "firebase-init.js": "8df7842c3a33f267a3164f155804244e3d730fee6d236af76fcafb13ed529eb1",
+    "positions.js": "a86e920717133f1a8a3e1641947ac9b2d090480d5a1385860fbf61b3d09260b6",
+    "stocks-data.js": "e66e3e97240787f99f47294c88d2683733b22d4ecee28ffd16bedb100b2b6feb",
+    "index.html": "19e02a392fce1248dc43ecabd65ef4040a8265e1429146357d8dda7e9ed813ff",
+    "stocks.html": "ff138c244f03b9306eaa80fb6f1523701d5f2a91dc318cd5eb5c3a485bcff1cf",
+    "assets.html": "e204e055948739f3ad8ac508a4f3a09967fdec788648866030774861f2a83c67",
+    "follow.html": "83aee2a0ddc99c6ccd0857207919fd4d5ac15f569f0e852bcdb9d99c8aac09aa",
+    "follow.js": "f39ef32241f528f87aa46489812e3994506a1ec810fbbe4984291fa785f6bed1",
+    "follow-core.js": "d978d0f3133b11eaab7033f998c762842b5750e6daaf98837774b8831c4cbc67",
+    "follow-data.js": "0dc8dbf6a9f023e553e5819b6d3e78524481284247a46ae060ac874cf6ca5ca5",
+    "scripts/fetch_market.py": "341a2d6aafa987fd5ffae2741532b244c7103c25f7aacb60bb6899c74048a741",
+    "scripts/fetch_strategy.py": "91cc43c0d5f8419262629d29754546b3bc37f98120d2ab199e30cc1d6d3692e0",
+    "scripts/fetch_stocks.py": "ecfbfa42728b3bd3e5dfcd80982db27b319381ffe803d728d6117f41c8cdbe0a"
+  },
+  "strategyScripts": "2f36abdcd837785d9dca87a89206110f97ce81d95167c8c1c789846def512cc0"
+}

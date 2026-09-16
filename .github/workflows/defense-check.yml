@@ -1,0 +1,36 @@
+name: 第4策略隔離驗證
+on:
+  push:
+    branches: ['feature/0050-defense-forward']
+  pull_request:
+    branches: [gh-pages]
+permissions:
+  contents: read
+jobs:
+  verify:
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.12'
+      - name: Core, transaction, and existing UI regression tests
+        run: |
+          npm ci --prefix tools/defense-runner --ignore-scripts --no-audit --no-fund
+          node scripts/defense-preview.cjs
+          node --test tests/*.test.cjs
+      - name: Existing Python tests and syntax
+        run: |
+          python -m unittest discover -s tests -p 'test_*.py'
+          python -m compileall -q scripts
+      - name: Produce isolated demonstration preview
+        run: node scripts/defense-preview.cjs
+      - uses: actions/upload-artifact@v4
+        with:
+          name: defense-preview
+          path: test-results/defense-preview.html
+          retention-days: 14
