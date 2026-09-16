@@ -1,0 +1,24 @@
+name: Backtest v1.26 combined operational candidate
+on:
+  workflow_dispatch:
+  push:
+    branches: [backtest-v1]
+    paths:
+      - 'research/V126_COMBINED_OPERATIONAL_CANDIDATE_PROTOCOL.md'
+      - 'research/backtest_v126_combined_candidate.py'
+      - '.github/workflows/backtest-v126.yml'
+permissions:
+  contents: read
+jobs:
+  run:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 30
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: backtest-v1
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.12'
+      - run: python -m pip install --upgrade pip pandas numpy requests beautifulsoup4 yfinance
+      - run: python research/backtest_v126_combined_candidate.py
