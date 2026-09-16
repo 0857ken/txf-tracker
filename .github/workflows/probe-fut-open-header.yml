@@ -4,6 +4,7 @@ on:
     branches: [backtest-v1]
     paths:
       - 'research/probe_fut_open_header.py'
+      - 'research/probe_fut_open_parser.py'
       - '.github/workflows/probe-fut-open-header.yml'
   workflow_dispatch:
 permissions:
@@ -18,5 +19,5 @@ jobs:
       - uses: actions/setup-python@v5
         with:
           python-version: '3.12'
-      - run: python -m pip install requests
-      - run: python research/probe_fut_open_header.py
+      - run: python -m pip install requests pandas numpy
+      - run: python research/probe_fut_open_parser.py
