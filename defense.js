@@ -57,11 +57,13 @@
       currentIndex: price.market.current_price, currentIndexDate: price.trend.dates.at(-1), currentIndexUpdatedAt: price.updated_at};
   }
   function demoAccount() {
-    return {revision: 0, asof: now(), equityDate: market.date, equity: 800000, outside: 1200000,
-      indexAtEquity: market.index, initialMargin: 155000, maintenanceMargin: 118000,
-      positions: [{product: 'MTX', month: market.date.slice(0, 7), lots: 1, mark: market.index},
-        {product: 'TMF', month: market.date.slice(0, 7), lots: 4, mark: market.index}],
-      nextRollDate: market.date, lastAppliedState: 'nonbear:2', lastCleanupMonth: market.date.slice(0, 7)};
+    if (window.DEFENSE_REALISTIC_ACCOUNT) return C.clone(window.DEFENSE_REALISTIC_ACCOUNT);
+    return {revision: 0, asof: now(), equityDate: market.date, equity: 1450000, outside: 550000,
+      indexAtEquity: market.index, initialMargin: 280400, maintenanceMargin: 215200,
+      positions: [{product: 'MTX', month: '2026-10', lots: 1, mark: null},
+        {product: 'TMF', month: '2026-10', lots: 3, mark: null}],
+      marginReference: {checkedOn: '2026-09-17', source: 'https://www.taifex.com.tw/cht/5/indexMarging'},
+      nextRollDate: '2026-10-20', lastAppliedState: 'nonbear:2', lastCleanupMonth: market.date.slice(0, 7)};
   }
   function renderToday() {
     const s = C.signal(market.target), x = snapshot;
@@ -118,14 +120,15 @@
       '</div><div class="stress-index">' + fmt(r.currentIndex, 2) + ' → ' + fmt(r.scenarioIndex, 2) + ' 點</div>' +
       '<div class="stress-pair"><div><div class="label">期貨壓力損益</div><div class="value red">' + money(r.totalPnl) +
       '</div></div><div><div class="label">壓力後總策略權益</div><div class="value">' + money(r.total) + '</div></div></div>' +
-      keys([['帳戶剩餘權益', money(r.equity)], ['相對目前總權益回撤', fmt(r.drawdownPct, 2) + '%'],
+      keys([['期貨帳戶剩餘權益', money(r.equity)], ['期貨帳戶負權益缺口', money(r.equityDeficit)], ['相對目前總權益回撤', fmt(r.drawdownPct, 2) + '%'],
         ['預估風險指標', r.ratio === null ? '無部位' : fmt(r.ratio, 1) + '%']]) +
-      '<div class="funding-callout"><small>若跌破500%，補回550%需要</small><strong>' + money(r.topUp) +
-      '</strong>' + (r.fundingShortfall > 0 ? '<small class="red">場外資金不足 ' + money(r.fundingShortfall) + '</small>' : '<small>場外備用資金可支應 ' + money(r.availableTransfer) + '</small>') + '</div>' +
+      '<div class="funding-callout"><small>補至550%所需入金（未取整）</small><strong>' + fmt(r.to550, 2) + ' 元' +
+      '</strong>' + (!r.reserveSufficient ? '<small class="red">場外資金不足 · 缺口 ' + fmt(r.shortfallTo550, 2) + ' 元</small>' : '<small>場外資金足夠</small>') +
+      '<small>' + (r.below500 ? '已跌破500%，需緊急補款' : '未跌破500%，不觸發緊急補款') + '</small></div>' +
       '<details><summary>完整壓測明細</summary>' + keys([['下跌點數', fmt(-r.pointChange, 2)],
         ['TX 壓力損益', money(r.pnl.TX)], ['MTX 壓力損益', money(r.pnl.MTX)], ['TMF 壓力損益', money(r.pnl.TMF)],
-        ['場外資金（補款前）', money(r.outside)], ['原始保證金（不變）', money(snapshot.initialMargin)],
-        ['維持保證金（不變）', money(snapshot.maintenanceMargin)],
+        ['場外資金（補款前）', money(r.outside)], ['原始保證金（不變）', money(r.initialMargin)],
+        ['維持保證金（不變）', money(r.maintenanceMargin)], ['整元入金建議', money(r.suggestedDeposit)],
         ['維持門檻狀態', r.belowMaintenance ? '已低於維持保證金' : r.nearMaintenance ? '接近（已低於原始保證金）' : '尚未接近'],
         ['距維持保證金', money(r.maintenanceBuffer)], ['補款後期貨權益', money(r.equityAfterTransfer)],
         ['補款後場外資金', money(r.outsideAfterTransfer)], ['補款後總策略權益', money(r.equityAfterTransfer + r.outsideAfterTransfer)]]) +
@@ -381,7 +384,7 @@
         localStore = STORE + '-acceptance'; market = example.market;
         state = {account: example.account, snapshots: [], executions: example.orders, events: [], health: null,
           ledgerSeed: example.seed, ledgerInputs: example.days, ledgerRevision: 0, datasetKind: 'synthetic_acceptance'};
-        $('mode-label').textContent = '第二輪合成驗收 · 非真實帳戶'; populateAccount();
+        $('mode-label').textContent = '第三輪合成驗收 · 非真實帳戶'; populateAccount();
       }
     });
     if (config.mode === 'production') await connect();

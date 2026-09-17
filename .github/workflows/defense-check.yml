@@ -44,6 +44,6 @@ jobs:
           name: defense-preview
           path: |
             test-results/defense-preview.html
-            test-results/defense-round2-examples.json
+            test-results/defense-round3-examples.json
             test-results/defense-firestore-example.json
           retention-days: 14

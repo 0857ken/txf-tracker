@@ -96,6 +96,42 @@ async function loadState(db, root) {
     ledgerSeed: opening.exists ? opening.data() : null, ledgerInputs: unpack(inputs), ledgerDays: unpack(ledgerDays),
     ledgerRevision: version.exists ? version.data().revision : 0};
 }
+function errorCode(error) {
+  if (['SETUP_REQUIRED', 'ACCOUNT_CHANGED', 'LEDGER_CHANGED', 'NEWER_OBSERVATION_EXISTS'].includes(error.message)) return error.message;
+  return ({6: 'WRITE_ALREADY_EXISTS', 7: 'WRITE_PERMISSION_DENIED', 14: 'FIRESTORE_UNAVAILABLE'})[error.code] || 'SNAPSHOT_FAILED';
+}
+async function recordJobFailure(db, root, error, now, runId) {
+  const record = {at: now, runId, status: 'error', code: errorCode(error)};
+  // No exception text, credential, balance or portfolio is sent to public job logs.
+  console.error(JSON.stringify({...record, type: 'defense_snapshot_error'}));
+  try {
+    const batch = db.batch();
+    batch.set(db.doc(root + '/jobErrors/' + runId), record);
+    batch.set(db.doc(root + '/state/health'), {lastAttemptAt: now, status: 'error', code: record.code, runId}, {merge: true});
+    await batch.commit();
+  } catch {
+    console.error(JSON.stringify({type: 'defense_error_log_fallback', at: now, runId, code: record.code, firestoreErrorRecordWritten: false}));
+  }
+  return record;
+}
+async function runSnapshotJob({db, root, market, now, runId = crypto.randomUUID(), persist = persistPlan}) {
+  try {
+    const quotes = typeof market === 'function' ? await market() : market;
+    for (let attempt = 0; attempt < 3; attempt++) {
+      const state = await loadState(db, root), plan = planDaily({...state, market: quotes, now});
+      try {
+        const result = await persist(db, root, plan, state.account.revision || 0);
+        await db.doc(root + '/market/latest').set(quotes);
+        return {status: 'ok', date: plan.observation.date, ...result, issues: plan.observation.quality.length};
+      } catch (error) {
+        if (!['ACCOUNT_CHANGED', 'LEDGER_CHANGED'].includes(error.message) || attempt === 2) throw error;
+      }
+    }
+  } catch (error) {
+    const record = await recordJobFailure(db, root, error, new Date().toISOString(), runId);
+    throw new Error(record.code);
+  }
+}
 async function main() {
   const args = process.argv.slice(2), now = new Date().toISOString();
   if (!args.includes('--write')) {
@@ -119,30 +155,11 @@ async function main() {
   initializeApp({credential: cert(JSON.parse(key))});
   const db = getFirestore();
   const root = 'users/me/' + (scope === 'production' ? 'defenseStrategies/' + config.strategyId : 'defensePreviews/' + config.previewId);
-  try {
-    const market = await fetchMarket(now);
-    for (let attempt = 0; attempt < 3; attempt++) {
-      const state = await loadState(db, root);
-      const plan = planDaily({...state, market, now});
-      try {
-        const result = await persistPlan(db, root, plan, state.account.revision || 0);
-        await db.doc(root + '/market/latest').set(market);
-        // Only identifiers and quality counts are logged; no balance, positions or credential content.
-        console.log(JSON.stringify({status: 'ok', date: plan.observation.date, ...result, issues: plan.observation.quality.length}));
-        return;
-      } catch (error) {
-        if (!['ACCOUNT_CHANGED', 'LEDGER_CHANGED'].includes(error.message) || attempt === 2) throw error;
-      }
-    }
-  } catch (error) {
-    const code = ['SETUP_REQUIRED', 'ACCOUNT_CHANGED', 'LEDGER_CHANGED', 'NEWER_OBSERVATION_EXISTS'].includes(error.message) ? error.message : 'SNAPSHOT_FAILED';
-    await db.doc(root + '/state/health').set({lastAttemptAt: now, status: 'error', code}, {merge: true});
-    throw new Error(code);
-  }
+  console.log(JSON.stringify(await runSnapshotJob({db, root, market: () => fetchMarket(now), now})));
 }
 if (require.main === module) main().catch(error => {
   const safe = ['SETUP_REQUIRED', 'ACCOUNT_CHANGED', 'LEDGER_CHANGED', 'NEWER_OBSERVATION_EXISTS', 'SNAPSHOT_FAILED',
     'WRITE_DISABLED', 'PRODUCTION_GUARD', 'CREDENTIAL_UNAVAILABLE', 'DRY_RUN_REQUIRES_FIXTURE'].includes(error.message) ? error.message : 'DEFENSE_JOB_FAILED';
   console.error(safe); process.exitCode = 1;
 });
-module.exports = {digest, planDaily, persistPlan, loadState};
+module.exports = {digest, planDaily, persistPlan, loadState, runSnapshotJob, recordJobFailure};

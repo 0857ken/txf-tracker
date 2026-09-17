@@ -5,7 +5,7 @@
   else root.DefenseCore = api;
 })(typeof globalThis !== 'undefined' ? globalThis : this, function () {
   'use strict';
-  const VERSION = 'forward-candidate-v2';
+  const VERSION = 'forward-candidate-v3';
   const START = '2026-09-16';
   const CAPITAL = 2000000;
   const MULT = Object.freeze({TX: 200, MTX: 50, TMF: 10});
@@ -61,9 +61,8 @@
     for (const k of ['close', 'ma10', 'ma20', 'ma60', 'ma60Lag20']) number(v[k], k, Number.MIN_VALUE);
     const bear = v.close < v.ma60 && v.ma60 < v.ma60Lag20;
     if (!bear) return {...v, valid: true, bear, target: 2, state: 'nonbear:2', reason: '未確認空頭 · 2.0x'};
-    // Explicit second-round boundary: touching/exceeding MA20 has precedence.
-    // This also resolves overlapping MA10/MA20 conditions without a missing state.
-    const target = v.close >= v.ma20 ? 1.5 : v.close <= v.ma10 ? 0.5 : 1;
+    // Round 3 user-confirmed ordering, including crossed MA10/MA20.
+    const target = v.close >= v.ma20 ? 1.5 : v.close > v.ma10 ? 1 : 0.5;
     const overlap = v.close >= v.ma20 && v.close <= v.ma10;
     return {...v, valid: true, bear, target, state: 'bear:' + target,
       overlap, boundaryPolicy: 'MA20-first', reason: '確認空頭 · ' + target.toFixed(1) + 'x'};
@@ -104,10 +103,12 @@
     assert(initialMargin >= maintenanceMargin, '保證金次序錯誤');
     const ratio = initialMargin > 0 ? equity / initialMargin * 100 : null;
     const below500 = initialMargin > 0 && equity < 5 * initialMargin;
-    const to550 = initialMargin > 0 ? Math.max(0, Math.ceil(5.5 * initialMargin - equity)) : 0;
-    const topUp = below500 ? to550 : 0, availableTransfer = Math.min(outside, topUp);
+    const to550 = initialMargin > 0 ? Math.max(0, 5.5 * initialMargin - equity) : 0;
+    const suggestedDeposit = Math.ceil(to550); // Explicit whole-dollar execution amount, not the risk comparison.
+    const topUp = below500 ? suggestedDeposit : 0, availableTransfer = Math.min(outside, topUp);
     return {ratio, below500, approaching: ratio !== null && ratio >= 500 && ratio < 550,
-      topUp, to550, availableTransfer, fundingShortfall: topUp - availableTransfer,
+      topUp, to550, suggestedDeposit, availableTransfer, fundingShortfall: topUp - availableTransfer,
+      reserveSufficient: outside >= to550, shortfallTo550: Math.max(0, to550 - outside), equityDeficit: Math.max(0, -equity),
       equityAfterTransfer: equity + availableTransfer, outsideAfterTransfer: outside - availableTransfer,
       maintenanceBuffer: equity - maintenanceMargin,
       belowMaintenance: maintenanceMargin > 0 && equity < maintenanceMargin,
@@ -128,6 +129,8 @@
       const equity = account.equity + totalPnl, total = equity + account.outside;
       return {change, currentIndex: index, scenarioIndex: index + pointChange, pointChange, pnl, totalPnl, contractPnl,
         basis: 'actual-contracts-fixed', holdingsFixed: true, intradaySignalsApplied: false,
+        initialMargin: account.initialMargin, maintenanceMargin: account.maintenanceMargin,
+        marginAssumption: '持倉不變、保證金不變；不假設跌價後自動降低保證金',
         equity, outside: account.outside, total, drawdownPct: before > 0 ? (before - total) / before * 100 : null,
         ...risk(equity, account.outside, account.initialMargin, account.maintenanceMargin)};
     });

@@ -48,6 +48,16 @@ test('round2 acceptance sample renders distinct futures books and review without
     assert.deepEqual(errors, []);
   } finally { dom.window.close(); }
 });
+test('realistic stress cards expose raw restore amounts and two reserve-shortfall warnings', async () => {
+  const {dom,d,w} = await page();
+  try {
+    const rows = w.DefenseUI.getSnapshot().stress;
+    assert.equal(rows[0].initialMargin,280400); assert.equal(rows[0].maintenanceMargin,215200);
+    assert.equal(rows.filter(r => !r.reserveSufficient).length,2);
+    assert.equal((d.getElementById('stress-content').textContent.match(/場外資金不足/g)||[]).length,2);
+    assert.match(d.getElementById('stress-content').textContent,/275,595.60/);
+  } finally {dom.window.close();}
+});
 test('account and funding form flows recompute known 490→550 funding gap and conserve total equity on transfer', async () => {
   const {dom, w, d} = await page();
   try {

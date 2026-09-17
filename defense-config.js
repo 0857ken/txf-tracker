@@ -5,7 +5,7 @@
     strategyId: '0050-defense-v1',
     previewId: '0050-defense-candidate-v1',
     forwardStart: '2026-09-16',
-    formulaVersion: 'forward-candidate-v2',
+    formulaVersion: 'forward-candidate-v3',
     capitalBase: 2000000,
     noTradeBand: 0.05,
     safetyPercent: 500,

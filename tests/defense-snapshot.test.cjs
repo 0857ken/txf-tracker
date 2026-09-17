@@ -4,6 +4,7 @@ const {planDaily, persistPlan} = require('../scripts/defense-snapshot.cjs');
 const {yahoo, fetchMarket} = require('../scripts/defense-quotes.cjs');
 const F = require('./defense-fixtures.cjs');
 const {parseFutures} = require('../scripts/defense-quotes.cjs');
+const {recordJobFailure} = require('../scripts/defense-snapshot.cjs');
 function fakeDb(account) {
   const data = new Map([['root/state/account', account]]);
   function ref(path) { return {path, collection(name) { return {doc: id => ref(path + '/' + name + '/' + id)}; }}; }
@@ -66,4 +67,16 @@ test('stale market is observation only; future ledger input cannot become a form
   const p = planDaily({...input(), now: '2026-09-17T07:00:00Z'});
   assert.equal(p.observation.kind, 'observation_only'); assert.equal(p.daily.length, 0);
   assert.throws(() => planDaily({...input(), ledgerInputs: [{valuationAt: '2026-09-18T13:45:00+08:00'}]}), /未來/);
+});
+test('write failures keep sanitized audit records; failed error writes fall back to job logs', async () => {
+  const messages = [], writes = []; const original = console.error; console.error = x => messages.push(JSON.parse(x));
+  try {
+    const db = {doc: p => p, batch: () => ({set: (p,v) => writes.push([p,v]), commit: async () => {}})};
+    await recordJobFailure(db,'acceptance/root',{code:7,message:'private credential must not be logged'},'2026-09-17T04:00:00Z','run-1');
+    assert.equal(writes.length,2); assert.equal(writes[0][1].code,'WRITE_PERMISSION_DENIED');
+    const broken = {doc: p => p, batch: () => ({set: () => {}, commit: async () => {throw new Error('offline');}})};
+    await recordJobFailure(broken,'acceptance/root',{code:14},'2026-09-17T04:00:00Z','run-2');
+    assert.equal(messages.at(-1).firestoreErrorRecordWritten,false);
+    assert.ok(!JSON.stringify(messages).includes('private credential'));
+  } finally {console.error = original;}
 });

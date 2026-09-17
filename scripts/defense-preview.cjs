@@ -3,9 +3,8 @@ const fs = require('node:fs'), path = require('node:path');
 const root = path.resolve(__dirname, '..');
 const read = name => fs.readFileSync(path.join(root, name), 'utf8');
 const strategy = JSON.parse(read('data/strategy_data.json'));
-const market = {date: strategy.target.at(-1).date, index: strategy.benchmark_close.at(-1),
-  target: strategy.target, updatedAt: strategy.updated_at.replace(' ', 'T') + '+08:00',
-  closed: true, source: 'Repo行情 · 獨立示範預覽，非真實帳戶'};
+const realistic = require('../tests/defense-realistic-fixture.cjs');
+const market = realistic.market();
 let html = read('defense.html');
 html = html.replace('<link rel="stylesheet" href="defense.css">', () => '<style>' + read('defense.css') + '</style>');
 html = html.replace(/  <script defer src="defense-(?:config|core|ledger|ledger-ui)\.js"><\/script>\n/g, '')
@@ -15,8 +14,9 @@ const script = code => '<script>\n' + code.replace(/<\/script/gi, '<\\/script') 
 html = html.replace('</body>', () => script(read('defense-config.js').replace(/mode: '(preview|production)'/, "mode: 'preview'")) +
   script(read('defense-core.js')) + script(read('defense-ledger.js')) + script(read('defense-ledger-ui.js')) +
   script('window.DEFENSE_INLINE_DATA=' + JSON.stringify(market).replace(/</g, '\\u003c') + ';') +
+  script('window.DEFENSE_REALISTIC_ACCOUNT=' + JSON.stringify(realistic.account()).replace(/</g, '\\u003c') + ';') +
   script('window.DEFENSE_ACCEPTANCE_EXAMPLE=' + JSON.stringify({...require('../tests/defense-ledger-fixtures.cjs').sample(),
-    market: require('../tests/defense-fixtures.cjs').market(), account: require('../tests/defense-fixtures.cjs').account()}).replace(/</g, '\\u003c') + ';') +
+    market: realistic.market(), account: realistic.account()}).replace(/</g, '\\u003c') + ';') +
   script(read('defense.js')) + '</body>');
 const output = path.join(root, 'test-results/defense-preview.html');
 fs.mkdirSync(path.dirname(output), {recursive: true}); fs.writeFileSync(output, html);
