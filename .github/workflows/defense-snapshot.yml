@@ -40,7 +40,7 @@ jobs:
         with:
           node-version: '22'
       - name: Validate formulas and snapshot transactions
-        run: node --test tests/defense-core.test.cjs tests/defense-snapshot.test.cjs
+        run: node --test tests/defense-core.test.cjs tests/defense-ledger.test.cjs tests/defense-snapshot.test.cjs
       - name: Dry-run with explicit synthetic fixture
         if: github.event_name != 'schedule' && !inputs.write
         run: |
