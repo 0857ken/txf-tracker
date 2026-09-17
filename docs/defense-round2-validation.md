@@ -1,5 +1,7 @@
 # 第4策略第二輪驗證
 
+> 歷史紀錄：本頁20,000點／100,000保證金範例不能作為目前可成立的保證金帳戶。第三輪已撤下其實務驗收用途；請使用[第三輪驗證](defense-round3-validation.md)的當期保證金、修正數值及真實Firestore證據。
+
 2026-09-17；僅feature/0050-defense-forward與feature/0050-defense-automation，未合併main／gh-pages。原16個重要檔案與原strategy.html內JavaScript的回歸比對通過，三個舊策略未改動。
 
 ## 完成與限制
