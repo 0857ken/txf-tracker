@@ -19,8 +19,8 @@
   const keys = rows => '<dl class="key-list">' + rows.map(([k, v]) => '<div class="key-row"><dt>' + escape(k) + '</dt><dd>' + escape(v) + '</dd></div>').join('') + '</dl>';
   const empty = (title, text) => '<div class="card empty"><strong>' + escape(title) + '</strong>' + escape(text) + '</div>';
   const STORE = 'txf-defense-preview-v1';
-  let state = {account: null, snapshots: [], executions: [], events: [], health: null};
-  let market = null, snapshot = null, connected = false, adapter = null, busy = false, pendingOrderId = crypto.randomUUID();
+  let state = {account: null, snapshots: [], executions: [], events: [], health: null, ledgerSeed: null, ledgerInputs: [], ledgerDays: [], ledgerRevision: 0};
+  let market = null, snapshot = null, connected = false, adapter = null, busy = false, pendingOrderId = crypto.randomUUID(), ledgerUI = null, localStore = STORE;
   function notice(message, error = false) {
     $('notice').textContent = message;
     $('notice').classList.toggle('error', error);
@@ -33,7 +33,7 @@
     finally { busy = false; document.querySelectorAll('button').forEach(b => { b.disabled = false; }); }
   }
   function persistLocal(next) {
-    try { localStorage.setItem(STORE, JSON.stringify(next)); }
+    try { localStorage.setItem(localStore, JSON.stringify(next)); }
     catch { throw new Error('瀏覽器無法儲存預覽資料，請先匯出紀錄；這次未儲存'); }
     state = next;
   }
@@ -59,8 +59,8 @@
   function demoAccount() {
     return {revision: 0, asof: now(), equityDate: market.date, equity: 800000, outside: 1200000,
       indexAtEquity: market.index, initialMargin: 155000, maintenanceMargin: 118000,
-      positions: [{product: 'MTX', month: market.date.slice(0, 7), lots: 1, mark: null},
-        {product: 'TMF', month: market.date.slice(0, 7), lots: 4, mark: null}],
+      positions: [{product: 'MTX', month: market.date.slice(0, 7), lots: 1, mark: market.index},
+        {product: 'TMF', month: market.date.slice(0, 7), lots: 4, mark: market.index}],
       nextRollDate: market.date, lastAppliedState: 'nonbear:2', lastCleanupMonth: market.date.slice(0, 7)};
   }
   function renderToday() {
@@ -84,7 +84,7 @@
     const x = snapshot;
     if (!x) { $('positions-content').innerHTML = empty('先核對你的策略帳戶', '第4策略不會自動把其他策略或主頁持倉算進來。'); return; }
     const parts = x.positions.map(p => keys([['商品／月份', p.product + ' · ' + p.month], ['持倉', p.lots + ' 口'],
-      ['參考價', p.mark === null ? '加權指數代理' : fmt(p.mark, 2)]])).join('<div class="divider"></div>');
+      ['參考價', p.mark === null ? '缺少期貨價格' : fmt(p.mark, 2)]])).join('<div class="divider"></div>');
     $('positions-content').innerHTML = '<div class="card"><div class="metrics">' +
       metric('目標－實際差距', fmt(x.decision.gap, 3) + 'x', '正值需增加曝險') +
       metric('±0.05x band', x.decision.insideBand === null ? '待確認' : x.decision.insideBand ? '範圍內' : '範圍外', '訊號改變／換倉仍須執行', x.decision.insideBand ? 'green' : 'gold') +
@@ -92,7 +92,7 @@
       '</div><div class="pill-values"><span>TX ' + x.lots.TX + ' 口</span><span>MTX ' + x.lots.MTX + ' 口</span><span>TMF ' + x.lots.TMF + ' 口</span></div>' +
       keys([['訊號是否尚待執行', x.decision.signalChanged ? '是（band內也需核對調倉）' : '否'],
         ['下一次換倉日', x.nextRollDate || '尚未指定'], ['期貨帳戶核對時間', localTime(x.accountAsOf).replace('T', ' ')],
-        ['權益來源', x.equitySource === 'broker_confirmed' ? '使用者券商核對值' : '加權指數差額估值']]) +
+        ['權益來源', x.equitySource === 'broker_confirmed' ? '使用者券商核對值' : x.equitySource === 'futures_mtm' ? '逐合約期貨MTM估值' : '最後核對值（待更新）']]) +
       '<details><summary>逐筆合約</summary>' + (parts || '<p class="muted">目前無部位。</p>') + '</details></div>';
   }
   function renderFunding() {
@@ -102,7 +102,7 @@
     $('funding-content').innerHTML = '<div class="card"><div class="metrics">' +
       metric('目前風險指標', r.ratio === null ? '無部位' : fmt(r.ratio, 1) + '%', '期貨權益 ÷ 原始保證金', r.below500 ? 'red' : r.approaching ? 'gold' : 'green') +
       metric('跌破500%需補款', money(r.topUp), '補到550%，不是只補到500%', r.below500 ? 'red' : '') +
-      metric('期貨帳戶權益', money(x.equity), x.equitySource === 'index_proxy' ? '估值，尚待券商核對' : '已核對') +
+      metric('期貨帳戶權益', money(x.equity), x.equitySource === 'broker_confirmed' ? '已核對' : '非即時券商值，請核對') +
       metric('場外備用資金', money(x.outside), '可立即轉入') +
       '</div>' + keys([['所需原始保證金', money(x.initialMargin)], ['所需維持保證金', money(x.maintenanceMargin)],
         ['500%安全線', r.below500 ? '低於安全線' : r.ratio === null ? '無部位，不適用' : '未跌破'],
@@ -147,7 +147,9 @@
         ['方向', o.side === 'buy' ? '買' : '賣'], ['下單時間', localTime(o.orderedAt).replace('T', ' ')],
         ['第一筆委託價', fmt(o.firstLimit, 2)], ['arrival中間價（理論參考）', fmt(o.arrivalMid, 2)],
         ['arrival可成交五檔均價', fmt(o.arrivalExecutable, 2)], ['實際成交均價', fmt(o.averageFill, 2)], ['成交口數', o.filledLots + ' 口'],
+        ['最終成交時間', localTime(o.finalFillAt).replace('T', ' ')], ['最終一筆成交價', fmt(o.finalFillPrice, 2)],
         ['arrival slippage', fmt(o.arrivalSlippage, 2) + ' 點'], ['相對可成交價滑價', fmt(o.touchSlippage, 2) + ' 點'],
+        ['至最終成交等待', fmt(o.lastFillSeconds, 2) + ' 秒'],
         ['平均等待成交', fmt(o.averageWaitSeconds, 2) + ' 秒'], ['最終追價點數', fmt(o.chasePoints, 2)],
         ['最大改價追幅', fmt(o.maxChasePoints, 2)], ['手續費／交易稅', money(o.fee) + ' / ' + money(o.tax)],
         ['換月價差現金量（另列）', money(o.rollSpreadCash)], ['滑價成本', money(o.arrivalCost)]]) +
@@ -170,6 +172,7 @@
       escape(series[0].date + ' → ' + series.at(-1).date) + ' · 已核對權益的累積報酬</p>';
   }
   function renderForward() {
+    if (state.ledgerSeed && ledgerUI) { ledgerUI.renderForward(); return; }
     const series = C.forwardSeries(state.snapshots, state.events), valid = series.filter(x => x.performanceEligible), last = valid.at(-1);
     const stats = C.executionStats(state.executions.filter(o => o.tradeDate >= C.START));
     if (!last) { $('forward-content').innerHTML = empty('等待真正 Forward 紀錄', '起算日為2026/09/16；首次有券商核對快照後建立基準，不回填示範或歷史回測。'); return; }
@@ -178,18 +181,18 @@
       '<div class="metrics">' + metric('累積報酬', pct(last.cumulativeReturn), valid.length + '日已核對') +
       metric('最近每日報酬', pct(last.dailyReturn), '缺核對日不偽填0%') + metric('觀測最大回撤', pct(mdd), '資料缺口可能低估回撤') +
       metric('最低觀測風險指標', fmt(risks.length ? Math.min(...risks) : null, 1) + '%') + '</div>' + chart(valid) +
-      keys([['最近策略權益', money(last.totalEquity)], ['理想參考權益', money(last.theoryEquity)], ['實際－理想參考', money(last.comparisonGap)],
-        ['理想參考累積報酬', pct(last.theoryCumulativeReturn)],
+      keys([['最近策略權益', money(last.totalEquity)], ['期貨理論權益', money(last.theoryEquity)], ['實際－理論', money(last.comparisonGap)],
+        ['期貨理論累積報酬', pct(last.theoryCumulativeReturn)],
         ['理論／實際曝險', fmt(last.theoryExposure, 3) + 'x / ' + fmt(last.actualExposure, 3) + 'x'],
         ['實際手續費', money(stats.fee)], ['實際交易稅', money(stats.tax)], ['滑價成本', money(stats.slippageCost)],
         ['補款次數', String(state.events.filter(e => e.kind === 'margin_topup' && e.amount > 0 && e.date >= C.START).length)],
         ['換倉執行成本', money(stats.rollExecutionCost)]]) +
-      '<p class="meta">理論參考採前期收盤訊號＋加權指數，無費稅、允許分數點值；未計入期貨基差與可成交性。實際費稅已在券商權益內，報酬不重複扣除。</p></div>';
+      '<p class="meta">請建立下方逐合約期貨帳本以比較理論／實際；不再提供指數代理理論曲線。實際費稅已在券商權益內，報酬不重複扣除。</p></div>';
   }
   function eventName(kind) {
     return {signal_change: '訊號改變', risk_below500: '跌破500%', data_quality: '資料品質',
       margin_topup: '補款', monthly_cleanup: '月初整理', external_flow: '策略外資金流',
-      account_update: '帳戶核對', rebalance: '調倉', roll: '換倉', abnormal_slippage: '異常滑價', rule_violation: '規則違反'}[kind] || kind;
+      account_update: '帳戶核對', ledger_input: '日終帳本輸入', ledger_seed: '期初帳本建立', rebalance: '調倉', roll: '換倉', abnormal_slippage: '異常滑價', rule_violation: '規則違反'}[kind] || kind;
   }
   function renderHistory() {
     const health = state.health, s = [...state.snapshots].sort((a, b) => b.date.localeCompare(a.date));
@@ -210,7 +213,9 @@
       escape((e.date || '') + ' · ' + eventName(e.kind)) + (C.finite(e.amount) ? ' · ' + money(e.amount) : '') + '</li>').join('') + '</ul></div>';
   }
   function renderReview() {
-    const month = $('review-month').value, r = C.monthlyReview(state.snapshots, state.executions, state.events, month);
+    const month = $('review-month').value, r = state.ledgerSeed && ledgerUI
+      ? window.DefenseLedger.monthlyReview(ledgerUI.data(), state.executions, state.events, month, state.snapshots)
+      : C.monthlyReview(state.snapshots, state.executions, state.events, month);
     $('review-content').innerHTML = '<div class="card"><p class="muted">' + escape(r.reviewCycle) + '</p><div class="metrics">' +
       metric('月初權益', money(r.openingEquity), r.coverageStart || '待資料') + metric('月底／最新權益', money(r.endingEquity), r.coverageEnd || '待資料') +
       metric('本月報酬', pct(r.monthlyReturn), r.partialMonth ? '首次基準起的部分月份' : '扣除外部資金流') +
@@ -223,8 +228,8 @@
         ['本月滑價總成本', money(r.execution.slippageCost)],
         ['平均／中位數滑價', fmt(r.execution.mean, 2) + ' / ' + fmt(r.execution.median, 2) + ' 點'],
         ['P95／最大滑價', fmt(r.execution.p95, 2) + ' / ' + fmt(r.execution.max, 2) + ' 點'],
-        ['理想參考月報酬', pct(r.theoreticalReturn)], ['實際－理想參考報酬差', pct(r.returnGap)],
-        ['理想參考權益', money(r.theoreticalEquity)], ['實際－理想參考', money(r.comparisonGap)],
+        ['期貨理論月報酬', pct(r.theoreticalReturn)], ['實際－理論報酬差', pct(r.returnGap)],
+        ['期貨理論權益', money(r.theoreticalEquity)], ['實際－理論', money(r.comparisonGap)],
         ['需核對規則事件', r.potentialViolations.length + ' 筆'], ['本月異常事件', r.exceptions.length + ' 筆']]) +
       '<p class="meta">「需核對」代表快照觀測到待處理狀態，須搭配成交與補款時間判斷，不直接認定違規。無觀測資料時不宣稱沒有違規。</p>' +
       '<details><summary>規則與異常事件明細</summary><ul class="event-list">' +
@@ -234,7 +239,7 @@
   }
   function render() {
     snapshot = state.account ? C.buildSnapshot(market, state.account, now()) : null;
-    renderToday(); renderPositions(); renderFunding(); renderStress(); renderExecutions(); renderForward(); renderHistory(); renderReview();
+    renderToday(); renderPositions(); renderFunding(); renderStress(); renderExecutions(); renderForward(); renderHistory(); renderReview(); ledgerUI?.render();
   }
   function positionInput(p = {product: 'TMF', month: market.date.slice(0, 7), lots: 0, mark: null}) {
     const row = document.createElement('div'); row.className = 'position-input';
@@ -306,10 +311,11 @@
       const f = e.target, time = isoTime(f.elements.orderedAt.value), files = [...f.elements.screenshots.files];
       const parseLines = (s, fill) => s.trim() ? s.trim().split(/\n+/).map(line => {
         const a = line.split(/[,，]/).map(x => x.trim());
-        if (a.length < (fill ? 3 : 2) || a.length > (fill ? 5 : 2)) throw new Error('改價／成交每行欄位數有誤');
+        if (a.length < (fill ? 3 : 2) || a.length > (fill ? 7 : 2)) throw new Error('改價／成交每行欄位數有誤');
         if (a[1] === '' || (fill && a[2] === '')) throw new Error('成交價與口數不可留空');
         return fill ? {at: isoTime(a[0]), price: Number(a[1]), lots: Number(a[2]),
-          fee: a[3] === undefined || a[3] === '' ? null : Number(a[3]), tax: a[4] === undefined || a[4] === '' ? null : Number(a[4])}
+          fee: a[3] === undefined || a[3] === '' ? null : Number(a[3]), tax: a[4] === undefined || a[4] === '' ? null : Number(a[4]),
+          nearPrice: a[5] === undefined || a[5] === '' ? null : Number(a[5]), farPrice: a[6] === undefined || a[6] === '' ? null : Number(a[6])}
           : {at: isoTime(a[0]), price: Number(a[1])};
       }) : [];
       const raw = {id: pendingOrderId, kind: f.elements.kind.value, product: f.elements.product.value, side: f.elements.side.value,
@@ -329,7 +335,7 @@
         const events = [...state.events, event];
         if (C.finite(raw.abnormalThreshold) && result.arrivalSlippage > raw.abnormalThreshold)
           events.push({...event, id: raw.id + '-slippage', kind: 'abnormal_slippage', detail: {arrivalSlippage: result.arrivalSlippage, threshold: raw.abnormalThreshold}});
-        persistLocal({...state, executions: [...state.executions, raw], events});
+        persistLocal({...state, executions: [...state.executions, raw], events, ledgerRevision: (state.ledgerRevision || 0) + 1});
       }
       pendingOrderId = crypto.randomUUID(); f.reset(); $('execution-details').open = false;
       render(); notice('成交紀錄已儲存。請依實際成交核對持倉與帳戶，避免把紀錄動作當成已更新部位。');
@@ -352,6 +358,32 @@
     setupForms();
     $('review-month').value = C.twDate(now()).slice(0, 7);
     market = await publicMarket();
+    ledgerUI = window.DefenseLedgerUI.mount({getState: () => state, getMarket: () => market, renderAll: render, notice, task,
+      modeLabel: () => connected && config.mode === 'production' ? '正式資料：實際成交MTM與理論策略分列' : '開發驗收資料，不是真實Forward實績',
+      saveSeed: async seed => {
+        if (connected) { await adapter.saveLedgerSeed(seed); state = {...state, ...await adapter.load()}; }
+        else persistLocal({...state, ledgerSeed: seed, ledgerRevision: (state.ledgerRevision || 0) + 1,
+          events: [...state.events, {id: crypto.randomUUID(), kind: 'ledger_seed', date: C.twDate(seed.at), at: now()}]});
+      },
+      saveDay: async day => {
+        if (connected) { await adapter.saveLedgerDay(day, state.ledgerRevision || 0); state = {...state, ...await adapter.load()}; }
+        else {
+          const prior = (state.ledgerInputs || []).find(d => d.date === day.date);
+          if (JSON.stringify(prior) === JSON.stringify(day)) return;
+          persistLocal({...state, ledgerInputs: [...(state.ledgerInputs || []).filter(d => d.date !== day.date), day],
+            ledgerRevision: (state.ledgerRevision || 0) + 1, events: [...state.events,
+              {id: crypto.randomUUID(), kind: 'ledger_input', date: day.date, at: now(), detail: {before: prior || null, after: day}}]});
+        }
+      },
+      loadExample: async () => {
+        if (connected) throw new Error('已連接雲端，不載入示範覆蓋資料');
+        const example = C.clone(window.DEFENSE_ACCEPTANCE_EXAMPLE); if (!example) throw new Error('本頁未附合成範例');
+        localStore = STORE + '-acceptance'; market = example.market;
+        state = {account: example.account, snapshots: [], executions: example.orders, events: [], health: null,
+          ledgerSeed: example.seed, ledgerInputs: example.days, ledgerRevision: 0, datasetKind: 'synthetic_acceptance'};
+        $('mode-label').textContent = '第二輪合成驗收 · 非真實帳戶'; populateAccount();
+      }
+    });
     if (config.mode === 'production') await connect();
     else {
       let saved;
@@ -362,7 +394,7 @@
     }
     $('connect').addEventListener('click', () => task(connect));
     $('refresh').addEventListener('click', () => task(async () => {
-      market = await publicMarket();
+      market = localStore === STORE ? await publicMarket() : C.clone(window.DEFENSE_ACCEPTANCE_EXAMPLE.market);
       if (connected) { state = {...state, ...await adapter.load()}; if (state.market && state.market.date >= market.date) market = state.market; }
       render(); populateAccount(); notice('已重新載入行情與本策略紀錄。');
     }));
@@ -370,7 +402,8 @@
     $('add-position').addEventListener('click', () => positionInput());
     $('review-month').addEventListener('change', () => task(async () => renderReview()));
     $('export-data').addEventListener('click', () => {
-      const blob = new Blob([JSON.stringify({mode: connected ? config.mode : 'demo', schemaVersion: 1, exportedAt: now(), ...state}, null, 2)], {type: 'application/json'});
+      const blob = new Blob([JSON.stringify({mode: connected ? config.mode : 'demo', schemaVersion: 1, exportedAt: now(), ...state,
+        computedLedger: ledgerUI.data()}, null, 2)], {type: 'application/json'});
       const a = document.createElement('a'); a.href = URL.createObjectURL(blob); a.download = 'defense-records-' + C.twDate(now()) + '.json'; a.click(); setTimeout(() => URL.revokeObjectURL(a.href), 1000);
     });
     window.DefenseUI = {getState: () => C.clone(state), getSnapshot: () => C.clone(snapshot)};

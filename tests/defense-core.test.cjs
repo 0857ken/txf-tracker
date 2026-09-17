@@ -18,8 +18,8 @@ test('all fixed regimes, strict MA60 comparisons and MA10 equality', () => {
   assert.equal(C.classify({...v, close: 95}).target, 1.5);
   assert.equal(C.classify({...v, close: 100}).target, 2);
   assert.equal(C.classify({...v, ma60Lag20: 100}).target, 2);
-  assert.equal(C.classify({...v, close: 90}).valid, false);
-  assert.equal(C.classify({...v, close: 95, ma10: 96, ma20: 90}).valid, false);
+  assert.equal(C.classify({...v, close: 90}).target, 1.5);
+  assert.equal(C.classify({...v, close: 95, ma10: 96, ma20: 90}).target, 1.5);
 });
 test('band is inclusive; signal changes and rollover override it; pending state persists across days', () => {
   const s = C.classify({close: 100, ma10: 90, ma20: 95, ma60: 99, ma60Lag20: 110});
@@ -67,10 +67,10 @@ test('unknown symbols, blank/bad margins, fractional lots fail closed; zero posi
   C.stress(20000, a).forEach(r => { assert.equal(r.ratio, null); assert.equal(r.totalPnl, 0); assert.equal(r.topUp, 0); });
   assert.equal(C.product('MXF'), 'MTX'); assert.equal(C.product('TXF'), 'TX');
 });
-test('mark-to-index estimate is not broker-confirmed actual; expired roll day remains due', () => {
+test('missing futures quotes never use spot PnL; expired roll day remains due', () => {
   const a = {...F.account(), equityDate: '2026-09-15', indexAtEquity: 19000, nextRollDate: '2026-09-15'};
   const s = C.buildSnapshot(F.market(), a, '2026-09-16T06:01:00Z');
-  assert.equal(s.equity, 880000); assert.equal(s.equitySource, 'index_proxy');
+  assert.equal(s.equity, 550000); assert.equal(s.equitySource, 'last_confirmed');
   assert.equal(s.performanceEligible, false); assert.equal(s.decision.rollDue, true);
   assert.throws(() => C.buildSnapshot({...F.market(), date: '2026-09-17'}, F.account(), '2026-09-16T06:01:00Z'), /晚於今日/);
 });
@@ -134,11 +134,11 @@ test('missing broker day is not actual performance; daily vs multi-day interval 
   assert.equal(s[1].cumulativeReturn, null); close(s[2].intervalReturn, -0.1); assert.equal(s[2].dailyReturn, null);
   close(s[2].drawdown, 0.1);
 });
-test('ideal reference applies prior exposure to today move, not today signal (no look-ahead)', () => {
+test('Forward never creates theoretical futures performance from a spot-index move', () => {
   const a = perf('2026-09-16', 2000000), b = perf('2026-09-17', 1900000, true, 19000);
   b.signal = {...b.signal, target: 0.5, state: 'bear:0.5'};
-  const s = C.forwardSeries([a, b]); assert.equal(s[1].theoryEquity, 1800000);
-  close(s[1].theoryExposure, 0.5);
+  const s = C.forwardSeries([a, b]); assert.equal(s[1].theoryEquity, null);
+  assert.equal(s[1].theoryExposure, null);
 });
 test('monthly return uses prior month end, cash-flow-adjusted drawdown and marks partial coverage', () => {
   const rows = [perf('2026-09-30', 100), perf('2026-10-01', 110), perf('2026-10-02', 99)];

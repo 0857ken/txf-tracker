@@ -8,6 +8,8 @@
   <link rel="stylesheet" href="defense.css">
   <script defer src="defense-config.js"></script>
   <script defer src="defense-core.js"></script>
+  <script defer src="defense-ledger.js"></script>
+  <script defer src="defense-ledger-ui.js"></script>
   <script defer src="defense.js"></script>
 </head>
 <body>
@@ -16,7 +18,7 @@
     <nav aria-label="主選單"><a href="index.html">台指期</a><a href="stocks.html">資產總覽</a><a href="assets.html">200萬計畫</a><a href="strategy.html">三策略</a><a href="follow.html">跟單配置</a></nav>
   </header>
   <main>
-    <div class="release-bar"><span id="mode-label">開發預覽 · 示範資料</span><span class="mono">CANDIDATE V1</span></div>
+    <div class="release-bar"><span id="mode-label">開發預覽 · 示範資料</span><span class="mono">ROUND 02</span></div>
     <div class="title-row"><div><div class="eyebrow">STRATEGY 04</div><h1>0050訊號 <span class="times">×</span><br class="mobile-break"> 台指期防守反攻</h1><p>收盤確認訊號，守住資金安全線。</p></div><button id="connect" class="secondary">連接測試資料</button></div>
     <div id="notice" class="notice" role="status" aria-live="polite">預覽使用獨立示範帳戶；未連接正式持倉。</div>
     <nav class="section-menu" aria-label="第4策略功能">
@@ -44,7 +46,7 @@
             <label>所需維持保證金（總額）<input name="maintenanceMargin" type="number" min="0" step="1" inputmode="numeric" required></label>
             <label>下一次預計換倉日<input name="nextRollDate" type="date"></label>
           </div>
-          <p class="muted">每筆按商品、月份填寫。多單正口數、空單負口數；未填期貨參考價時以加權指數估計曝險。</p>
+          <p class="muted">每筆按商品、月份填寫。多單正口數、空單負口數；未填期貨參考價時不計算實際曝險，不用指數代替。</p>
           <div id="position-inputs"></div><button type="button" id="add-position" class="secondary">＋ 增加合約</button>
           <label class="checkbox"><input name="acknowledge" type="checkbox">我已按成交紀錄核對完成本次訊號調倉</label>
           <button type="submit" class="primary">儲存帳戶與核對紀錄</button>
@@ -86,8 +88,8 @@
           <h3>下單當下五檔</h3><div id="book-inputs"></div>
           <label>每次改價（每行：台灣日期時間, 價格）
             <textarea name="revisions" rows="3" placeholder="2026-09-16T13:20:02, -18"></textarea></label>
-          <label>每筆成交（每行：台灣日期時間, 價格, 口數, 實際手續費, 實際交易稅）
-            <textarea name="fills" rows="4" required placeholder="2026-09-16T13:20:05, -18, 1, 38, 46"></textarea><small>換倉費稅填兩腿合計。未知費稅留空，不當作0。</small></label>
+          <label>每筆成交（每行：台灣日期時間, 價格, 口數, 手續費, 稅, 近月成交價, 遠月成交價）
+            <textarea name="fills" rows="4" required placeholder="2026-09-16T13:31:05, -18, 1, 38, 46, 20000, 19982"></textarea><small>一般調倉只填前五欄。換倉費稅填兩腿合計；雙帳本需最後兩欄分腿價。未知費稅留空，不當作0。</small></label>
           <label>下單前五檔＋成交截圖（選填）<input name="screenshots" type="file" accept="image/png,image/jpeg,image/webp" multiple><small id="attachment-note">連接測試資料後可保存原始截圖。</small></label>
           <label>備註<textarea name="note" rows="2" maxlength="2000"></textarea></label>
           <p class="muted">arrival slippage＝成交均價相對下單時中間價的不利偏移；正數較差、負數改善。另列可成交五檔參考。正逆價差不直接計為滑價。</p>
@@ -98,6 +100,34 @@
     </section>
     <section id="forward" aria-labelledby="forward-title"><div class="section-heading"><h2 id="forward-title"><span>06</span> Forward 績效</h2><span class="badge blue">2026.09.16 起</span></div>
       <div id="forward-content"></div>
+      <div id="ledger-tools" class="card">
+        <h3>逐合約期貨雙帳本</h3>
+        <p class="muted">0050只負責訊號。理論與實際損益都使用TX／MTX／TMF合約價格，沒有資料就等待，不以加權指數補造。</p>
+        <button id="load-ledger-example" class="secondary" type="button" hidden>查看第二輪合成驗收範例（獨立示範）</button>
+        <details id="ledger-seed-details"><summary>① 建立一次期初帳本</summary>
+          <form id="ledger-seed-form"><p class="muted">從上方已核對帳戶複製權益、場外現金及逐合約期貨價。建立後不覆寫期初，以免重算過往實績。</p>
+            <label>期初帳本時間（台灣）<input name="at" type="datetime-local" step="1" required></label>
+            <div class="form-grid"><label>TX 單邊理論手續費<input name="feeTX" type="number" min="0" step="0.01" value="38" required></label><label>MTX 單邊理論手續費<input name="feeMTX" type="number" min="0" step="0.01" value="19" required></label><label>TMF 單邊理論手續費<input name="feeTMF" type="number" min="0" step="0.01" value="16" required></label><label>理論交易稅率（小數）<input name="taxRate" type="number" min="0" max="0.01" step="0.000001" value="0.00002" required></label></div>
+            <label>期初核對來源<input name="source" required placeholder="例如：券商當日權益及持倉報表"></label>
+            <p class="muted">費用是帳本假設，可在建立前核對；理論稅依每腿名目金額精算，實際稅以成交紀錄為準。</p><button type="submit" class="primary">核對並建立期初</button>
+          </form>
+        </details>
+        <details id="ledger-day-details"><summary>② 核對日終行情與實際成交</summary>
+          <form id="ledger-day-form">
+            <div class="form-grid"><label>交易日<input name="date" type="date" required></label><label>理論目標合約月份<input name="targetMonth" type="month" required></label><label>0050訊號確認時間<input name="signalAt" type="datetime-local" step="1" required></label><label>理論可成交報價時間<input name="referenceAt" type="datetime-local" step="1" required></label><label>期貨日終估值時間<input name="valuationAt" type="datetime-local" step="1" required></label><label>期貨行情來源<input name="source" required placeholder="券商報價截圖／期交所結算價"></label><label>策略外淨入金<input name="externalFlow" type="number" step="0.01" value="0" required></label><label>實際場外轉入期貨<input name="actualTransfer" type="number" step="0.01" value="0" required></label><label>券商日結權益（選填）<input name="brokerEquity" type="number" step="0.01"></label><label>日結場外資金（選填）<input name="brokerOutside" type="number" min="0" step="0.01"></label></div>
+            <p class="muted">每筆合約填報價時間的委買／委賣，以及日終估值價。到期近月與遠月必須分列；日終價不可冒充較早時間的成交價。每口保證金填券商實際要求。</p>
+            <div id="ledger-quote-inputs"></div><button id="ledger-add-quote" class="secondary" type="button">＋ 增加月份／商品</button>
+            <label class="checkbox"><input name="roll" type="checkbox">當日執行換倉（強制，不受band限制）</label>
+            <label>跨月價差報價（每行：商品, 近月, 遠月, 委買價差, 委賣價差, 近月分腿參考價）<textarea name="spreads" rows="2" placeholder="MTX, 2026-09, 2026-10, -22, -20, 20250"></textarea></label>
+            <label class="checkbox"><input name="monthlyCleanup" type="checkbox">本月首次550%資金整理（理論帳本）</label>
+            <label class="checkbox"><input name="actualComplete" type="checkbox" required>已核對當日成交完整；沒有成交亦已確認</label>
+            <p class="muted">實際成交由⑤讀取。當日訊號使用上方行情同日的0050收盤與MA；歷史日可用下方完整JSON匯入。</p>
+            <button type="submit" class="primary">驗證並保存此日日終輸入</button>
+          </form>
+        </details>
+        <details><summary>進階：匯入日終輸入JSON</summary><p class="muted">只匯入一日行情／MA／資金流，不覆蓋原成交或期初帳本。保存與表單使用同一驗證及版本檢查。</p><label>日終JSON檔<input id="ledger-import" type="file" accept="application/json,.json"></label></details>
+      </div>
+      <div id="ledger-rows"></div>
       <details class="card explanation"><summary>歷史研究／回測（獨立）</summary><p>本頁不重新最佳化參數。歷史研究尚未匯入；不把2026/09/16之前的回測或示範資料加入真實Forward曲線。</p></details>
     </section>
     <section id="history" aria-labelledby="history-title"><div class="section-heading"><h2 id="history-title"><span>07</span> 每日風控歷史</h2><button id="export-data" class="text-button">匯出紀錄 ↓</button></div><div id="history-content"></div></section>

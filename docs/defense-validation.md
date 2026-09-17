@@ -1,5 +1,7 @@
 # 第4策略第一輪驗收紀錄
 
+> 這是保留的第一輪歷史紀錄。第二輪已更改MA20邊界、移除指數代理理論帳本並完成Firestore emulator實寫驗證；目前結果請看 [第二輪驗證](defense-round2-validation.md)。以下第一輪限制不可當作第二輪現況。
+
 日期：2026-09-16。開發範圍為兩個 feature branch，正式 main / gh-pages 未由本次工作修改。
 
 ## 已完成

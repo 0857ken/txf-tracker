@@ -3,6 +3,7 @@ const test = require('node:test'), assert = require('node:assert/strict');
 const {planDaily, persistPlan} = require('../scripts/defense-snapshot.cjs');
 const {yahoo, fetchMarket} = require('../scripts/defense-quotes.cjs');
 const F = require('./defense-fixtures.cjs');
+const {parseFutures} = require('../scripts/defense-quotes.cjs');
 function fakeDb(account) {
   const data = new Map([['root/state/account', account]]);
   function ref(path) { return {path, collection(name) { return {doc: id => ref(path + '/' + name + '/' + id)}; }}; }
@@ -53,4 +54,16 @@ test('Yahoo parser excludes unclosed current bar, aligns target/index, missing d
   const fetcher = async () => ({ok: true, json: async () => structuredClone(body)});
   const early = await yahoo('0050.TW', '2026-09-16T04:00:00Z', fetcher); assert.equal(early.at(-1).date, '2026-09-15');
   const m = await fetchMarket('2026-09-16T06:00:00Z', fetcher); assert.equal(m.date, '2026-09-16'); assert.equal(m.index, 101);
+});
+test('official futures parser selects exact day/month/day-session settlement and rejects duplicates', () => {
+  const row = {Date: '20260916', Contract: 'MTX', 'ContractMonth(Week)': '202609', TradingSession: '一般', SettlementPrice: '20123', Last: '29999'};
+  const r = parseFutures([row, {...row, TradingSession: '盤後'}, {...row, 'ContractMonth(Week)': '202609W3'}, {...row, Date: '20260915'}], '2026-09-16');
+  assert.equal(r.length, 1); assert.equal(r[0].mark, 20123); assert.equal(r[0].month, '2026-09');
+  assert.throws(() => parseFutures([row, row], '2026-09-16'), /重複/);
+  assert.throws(() => parseFutures([row], '2026-09-17'), /尚無/);
+});
+test('stale market is observation only; future ledger input cannot become a formal snapshot', () => {
+  const p = planDaily({...input(), now: '2026-09-17T07:00:00Z'});
+  assert.equal(p.observation.kind, 'observation_only'); assert.equal(p.daily.length, 0);
+  assert.throws(() => planDaily({...input(), ledgerInputs: [{valuationAt: '2026-09-18T13:45:00+08:00'}]}), /未來/);
 });

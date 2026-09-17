@@ -1,7 +1,7 @@
 import './firebase-init.js';
 import {doc, collection, getDoc, getDocs, runTransaction, writeBatch} from 'https://www.gstatic.com/firebasejs/12.14.0/firebase-firestore.js';
 
-const C = window.DefenseCore, config = window.DefenseConfig;
+const C = window.DefenseCore, L = window.DefenseLedger, config = window.DefenseConfig;
 function timeout(p, ms = 15000) {
   let timer;
   return Promise.race([p, new Promise((_, reject) => { timer = setTimeout(() => reject(new Error('連線逾時，請保留輸入再重試')), ms); })])
@@ -26,13 +26,43 @@ async function ready() {
 }
 export async function load() {
   await ready();
-  const [account, snapshots, executions, events, health, market] = await timeout(Promise.all([
+  const [account, snapshots, executions, events, health, market, opening, inputs, ledgerDays, version] = await timeout(Promise.all([
     getDoc(ref('state', 'account')), getDocs(col('dailySnapshots')), getDocs(col('executions')),
-    getDocs(col('events')), getDoc(ref('state', 'health')), getDoc(ref('market', 'latest'))]));
+    getDocs(col('events')), getDoc(ref('state', 'health')), getDoc(ref('market', 'latest')),
+    getDoc(ref('ledgerSettings', 'opening')), getDocs(col('ledgerInputs')), getDocs(col('ledgerDaily')), getDoc(ref('state', 'ledgerVersion'))]));
   const list = s => s.docs.map(d => ({...d.data(), id: d.id}));
   return {account: account.exists() ? account.data() : null, snapshots: list(snapshots),
     executions: list(executions), events: list(events), health: health.exists() ? health.data() : null,
-    market: market.exists() ? market.data() : null};
+    market: market.exists() ? market.data() : null, ledgerSeed: opening.exists() ? opening.data() : null,
+    ledgerInputs: list(inputs), ledgerDays: list(ledgerDays), ledgerRevision: version.exists() ? version.data().revision : 0};
+}
+export async function saveLedgerSeed(raw) {
+  await ready(); const value = L.normalizeSeed(raw);
+  return timeout(runTransaction(window.fbDb, async tx => {
+    const [prior, version] = await Promise.all([tx.get(ref('ledgerSettings', 'opening')), tx.get(ref('state', 'ledgerVersion'))]);
+    if (prior.exists()) throw new Error('期初帳本已建立，不能覆寫已開始的Forward；更正須另留版本');
+    tx.set(ref('ledgerSettings', 'opening'), value);
+    tx.set(ref('state', 'ledgerVersion'), {revision: (version.exists() ? version.data().revision : 0) + 1});
+    return value;
+  }));
+}
+export async function saveLedgerDay(raw, expectedRevision) {
+  await ready(); const at = new Date().toISOString(), operationId = crypto.randomUUID();
+  return timeout(runTransaction(window.fbDb, async tx => {
+    const [opening, version, prior] = await Promise.all([tx.get(ref('ledgerSettings', 'opening')),
+      tx.get(ref('state', 'ledgerVersion')), tx.get(ref('ledgerInputs', C.date(raw.date)))]);
+    if (!opening.exists()) throw new Error('請先建立期初帳本');
+    const revision = version.exists() ? version.data().revision : 0;
+    if (revision !== expectedRevision) throw new Error('另一裝置已更新帳本或成交，請重新載入');
+    const value = L.validateDay(raw, opening.data());
+    if (C.timestamp(value.valuationAt) > Date.now()) throw new Error('不得保存尚未發生的日終行情');
+    if (prior.exists() && JSON.stringify(prior.data()) === JSON.stringify(value)) return value;
+    tx.set(ref('ledgerInputs', value.date), value);
+    tx.set(ref('state', 'ledgerVersion'), {revision: revision + 1});
+    tx.set(ref('events', operationId), {kind: 'ledger_input', date: value.date, at,
+      detail: {before: prior.exists() ? prior.data() : null, after: value}});
+    return value;
+  }));
 }
 export async function saveAccount(value, expectedRevision, event = null, operationId = crypto.randomUUID()) {
   await ready();
@@ -85,8 +115,10 @@ export async function saveExecution(raw, attachments = []) {
     const executionRef = ref('executions', raw.id);
     const existing = await tx.get(executionRef);
     if (existing.exists()) return existing.data();
+    const version = await tx.get(ref('state', 'ledgerVersion'));
     const value = {...raw, attachments: metadata, recordedAt: new Date().toISOString(), formulaVersion: C.VERSION};
     tx.set(executionRef, value);
+    tx.set(ref('state', 'ledgerVersion'), {revision: (version.exists() ? version.data().revision : 0) + 1});
     tx.set(ref('events', raw.id), {kind: raw.kind === 'roll' ? 'roll' : 'rebalance', at: raw.orderedAt, date: raw.tradeDate,
       executionId: raw.id, detail: {product: raw.product, lots: analyzed.filledLots}});
     const threshold = raw.abnormalThreshold;

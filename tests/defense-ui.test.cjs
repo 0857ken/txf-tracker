@@ -33,6 +33,21 @@ test('preview DOM creates eight sections, four stress cards and no fabricated Fo
     assert.deepEqual(errors, []);
   } finally { dom.window.close(); }
 });
+test('round2 acceptance sample renders distinct futures books and review without polluting saved preview', async () => {
+  const {dom, w, d, errors} = await page();
+  try {
+    const prior = w.localStorage.getItem('txf-defense-preview-v1');
+    d.getElementById('load-ledger-example').click();
+    await until(() => w.DefenseUI.getState().datasetKind === 'synthetic_acceptance');
+    await until(() => !d.getElementById('load-ledger-example').disabled);
+    assert.equal(d.querySelectorAll('.ledger-day').length, 4);
+    assert.match(d.getElementById('forward-content').textContent, /理論累積報酬/);
+    assert.match(d.getElementById('review-content').textContent, /期貨理論月報酬/);
+    assert.equal(w.DefenseUI.getState().snapshots.length, 0);
+    assert.equal(w.localStorage.getItem('txf-defense-preview-v1'), prior);
+    assert.deepEqual(errors, []);
+  } finally { dom.window.close(); }
+});
 test('account and funding form flows recompute known 490→550 funding gap and conserve total equity on transfer', async () => {
   const {dom, w, d} = await page();
   try {

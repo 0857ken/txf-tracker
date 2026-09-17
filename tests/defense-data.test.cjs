@@ -2,6 +2,7 @@
 const test = require('node:test'), assert = require('node:assert/strict'), vm = require('node:vm');
 const fs = require('node:fs'), path = require('node:path'), crypto = require('node:crypto');
 const C = require('../defense-core.js'), F = require('./defense-fixtures.cjs');
+const L = require('../defense-ledger.js'), LF = require('./defense-ledger-fixtures.cjs');
 function setup(mode = 'preview', hostname = 'preview.invalid') {
   let resolveReady, reads = 0;
   const db = new Map(), ready = new Promise(r => { resolveReady = r; });
@@ -16,13 +17,13 @@ function setup(mode = 'preview', hostname = 'preview.invalid') {
   };
   const writeBatch = () => { const writes = []; return {set: (r, v) => writes.push([r.path, structuredClone(v)]),
     commit: async () => { writes.forEach(([p, v]) => db.set(p, v)); }}; };
-  const context = vm.createContext({window: {DefenseCore: C, DefenseConfig: {mode, strategyId: '0050-defense-v1',
+  const context = vm.createContext({window: {DefenseCore: C, DefenseLedger: L, DefenseConfig: {mode, strategyId: '0050-defense-v1',
     previewId: '0050-defense-candidate-v1'}, fbReady: ready, fbDb: {}},
     location: {hostname, pathname: '/txf-tracker/defense.html'}, doc, collection, getDoc, getDocs, runTransaction, writeBatch,
     setTimeout, clearTimeout, Blob, crypto: {randomUUID: crypto.randomUUID, subtle: crypto.webcrypto.subtle},
-    Uint8Array, btoa, atob, console});
+    Date: class extends Date { static now() { return Date.parse('2026-09-17T12:00:00Z'); } }, Uint8Array, btoa, atob, console});
   const source = fs.readFileSync(path.resolve(__dirname, '../defense-data.js'), 'utf8')
-    .replace(/^import .*$/gm, '').replace(/^export /gm, '') + '\nglobalThis.api={load,saveAccount,saveExecution,loadAttachment};';
+    .replace(/^import .*$/gm, '').replace(/^export /gm, '') + '\nglobalThis.api={load,saveAccount,saveExecution,loadAttachment,saveLedgerSeed,saveLedgerDay};';
   vm.runInContext(source, context);
   return {db, api: context.api, resolveReady, reads: () => reads, root: 'users/me/defensePreviews/0050-defense-candidate-v1'};
 }
@@ -62,4 +63,16 @@ test('execution save is idempotent; screenshot bytes round-trip with hash, no pu
   assert.equal(s.db.size, count);
   assert.equal([...s.db.keys()].filter(p => p.includes('/events/')).length, 2);
   assert.ok([...s.db.keys()].every(p => p.startsWith(s.root + '/')));
+});
+test('ledger adapter protects opening, rejects stale/future inputs and keeps one daily document on retry', async () => {
+  const s = setup(); s.resolveReady('test-user');
+  await s.api.saveLedgerSeed(LF.seed());
+  await assert.rejects(s.api.saveLedgerSeed(LF.seed()), /不能覆寫/);
+  await s.api.saveLedgerDay(LF.day(), 1);
+  const size = s.db.size;
+  await s.api.saveLedgerDay(LF.day(), 2);
+  assert.equal(s.db.size, size);
+  await assert.rejects(s.api.saveLedgerDay(LF.day(), 1), /另一裝置/);
+  await assert.rejects(s.api.saveLedgerDay(LF.day('2026-09-18'), 2), /尚未發生/);
+  const state = await s.api.load(); assert.equal(state.ledgerInputs.length, 1); assert.equal(state.ledgerRevision, 2);
 });

@@ -5,7 +5,7 @@
   else root.DefenseCore = api;
 })(typeof globalThis !== 'undefined' ? globalThis : this, function () {
   'use strict';
-  const VERSION = 'forward-candidate-v1';
+  const VERSION = 'forward-candidate-v2';
   const START = '2026-09-16';
   const CAPITAL = 2000000;
   const MULT = Object.freeze({TX: 200, MTX: 50, TMF: 10});
@@ -61,14 +61,12 @@
     for (const k of ['close', 'ma10', 'ma20', 'ma60', 'ma60Lag20']) number(v[k], k, Number.MIN_VALUE);
     const bear = v.close < v.ma60 && v.ma60 < v.ma60Lag20;
     if (!bear) return {...v, valid: true, bear, target: 2, state: 'nonbear:2', reason: '未確認空頭 · 2.0x'};
-    const candidates = [];
-    if (v.close <= v.ma10) candidates.push(0.5);
-    if (v.close > v.ma10 && v.close < v.ma20) candidates.push(1);
-    if (v.close > v.ma20) candidates.push(1.5);
-    if (candidates.length !== 1) return {...v, valid: false, bear, target: null, state: 'boundary',
-      reason: candidates.length ? 'MA線交錯，固定規則同時命中兩個級距，待確認' : '收盤恰等於MA20，固定規則未指定此邊界'};
-    const target = candidates[0];
-    return {...v, valid: true, bear, target, state: 'bear:' + target, reason: '確認空頭 · ' + target.toFixed(1) + 'x'};
+    // Explicit second-round boundary: touching/exceeding MA20 has precedence.
+    // This also resolves overlapping MA10/MA20 conditions without a missing state.
+    const target = v.close >= v.ma20 ? 1.5 : v.close <= v.ma10 ? 0.5 : 1;
+    const overlap = v.close >= v.ma20 && v.close <= v.ma10;
+    return {...v, valid: true, bear, target, state: 'bear:' + target,
+      overlap, boundaryPolicy: 'MA20-first', reason: '確認空頭 · ' + target.toFixed(1) + 'x'};
   }
   function signal(rows) {
     const v = indicators(rows);
@@ -105,7 +103,7 @@
     number(initialMargin, '原始保證金', 0); number(maintenanceMargin, '維持保證金', 0);
     assert(initialMargin >= maintenanceMargin, '保證金次序錯誤');
     const ratio = initialMargin > 0 ? equity / initialMargin * 100 : null;
-    const below500 = ratio !== null && ratio < 500;
+    const below500 = initialMargin > 0 && equity < 5 * initialMargin;
     const to550 = initialMargin > 0 ? Math.max(0, Math.ceil(5.5 * initialMargin - equity)) : 0;
     const topUp = below500 ? to550 : 0, availableTransfer = Math.min(outside, topUp);
     return {ratio, below500, approaching: ratio !== null && ratio >= 500 && ratio < 550,
@@ -123,22 +121,25 @@
     account.positions.forEach(p => { lots[p.product] += p.lots; });
     return [-0.05, -0.10, -0.15, -0.20].map(change => {
       const pointChange = index * change, pnl = {};
+      const contractPnl = account.positions.map(p => ({...p, multiplier: MULT[p.product],
+        pnl: pointChange * p.lots * MULT[p.product]}));
       Object.keys(MULT).forEach(k => { pnl[k] = pointChange * lots[k] * MULT[k]; });
       const totalPnl = Object.values(pnl).reduce((s, v) => s + v, 0);
       const equity = account.equity + totalPnl, total = equity + account.outside;
-      return {change, currentIndex: index, scenarioIndex: index + pointChange, pointChange, pnl, totalPnl,
+      return {change, currentIndex: index, scenarioIndex: index + pointChange, pointChange, pnl, totalPnl, contractPnl,
+        basis: 'actual-contracts-fixed', holdingsFixed: true, intradaySignalsApplied: false,
         equity, outside: account.outside, total, drawdownPct: before > 0 ? (before - total) / before * 100 : null,
         ...risk(equity, account.outside, account.initialMargin, account.maintenanceMargin)};
     });
   }
   function decision(s, actual, lastAppliedState, rollDue) {
-    number(actual, '實際曝險');
-    const gap = s.valid ? s.target - actual : null;
+    if (actual !== null) number(actual, '實際曝險');
+    const gap = s.valid && actual !== null ? s.target - actual : null;
     const insideBand = gap !== null ? Math.abs(gap) <= 0.05 + 1e-12 : null;
     const signalChanged = s.valid && lastAppliedState !== s.state;
     return {gap, insideBand, signalChanged, rollDue,
-      rebalanceRequired: s.valid && (signalChanged || !insideBand),
-      tradeRequired: Boolean(rollDue || (s.valid && (signalChanged || !insideBand)))};
+      rebalanceRequired: s.valid && (signalChanged || insideBand === false),
+      tradeRequired: Boolean(rollDue || (s.valid && (signalChanged || insideBand === false)))};
   }
   function buildSnapshot(market, rawAccount, now) {
     timestamp(now);
@@ -150,26 +151,34 @@
     assert(a.equityDate <= market.date, '帳戶日期晚於行情，無法倒推估值');
     const pointValue = a.positions.reduce((sum, p) => sum + p.lots * MULT[p.product], 0);
     const indexDelta = index - a.indexAtEquity;
-    const estimatedPnl = indexDelta * pointValue;
-    const equity = a.equity + estimatedPnl, accountNow = {...a, equity};
     const confirmed = a.equityDate === market.date && Math.abs(indexDelta) < 1e-9;
+    const futures = new Map((market.futures || []).filter(q => q.date === market.date && finite(q.mark))
+      .map(q => [product(q.product) + ':' + q.month, q]));
+    const contractsAvailable = a.positions.length > 0 && a.positions.every(p => p.mark !== null && futures.has(p.product + ':' + p.month));
+    const estimatedPnl = !confirmed && contractsAvailable ? a.positions.reduce((n, p) =>
+      n + (futures.get(p.product + ':' + p.month).mark - p.mark) * p.lots * MULT[p.product], 0) : 0;
+    const equity = a.equity + estimatedPnl, accountNow = {...a, equity};
+    const equitySource = confirmed ? 'broker_confirmed' : contractsAvailable ? 'futures_mtm' : 'last_confirmed';
     let notional = 0, grossNotional = 0;
     const lots = {TX: 0, MTX: 0, TMF: 0};
     a.positions.forEach(p => {
-      const mark = p.mark === null ? index : p.mark + indexDelta;
+      const mark = futures.get(p.product + ':' + p.month)?.mark ?? p.mark;
       const n = p.lots * MULT[p.product] * mark;
       notional += n; grossNotional += Math.abs(n); lots[p.product] += p.lots;
     });
-    const actual = notional / CAPITAL;
+    const marksAvailable = a.positions.every(p => p.mark !== null || futures.has(p.product + ':' + p.month));
+    if (!marksAvailable) { notional = null; grossNotional = null; }
+    const actual = marksAvailable ? notional / CAPITAL : null;
     const rollDue = Boolean(a.positions.length && a.nextRollDate && today >= a.nextRollDate);
     const d = decision(s, actual, a.lastAppliedState, rollDue);
     const r = risk(equity, a.outside, a.initialMargin, a.maintenanceMargin);
     const quality = [];
+    if (!marksAvailable) quality.push('缺少實際期貨參考價，實際曝險暫不計算');
     if (market.date !== today) quality.push('行情非今日收盤：' + market.date);
     if (market.closed !== true) quality.push('0050尚未確認收盤');
     if (!s.valid) quality.push(s.reason);
     if (s.date && s.date !== market.date) quality.push('0050與加權指數日期未對齊');
-    if (!confirmed) quality.push('帳戶權益為指數差額估值，非券商確認');
+    if (!confirmed) quality.push(contractsAvailable ? '帳戶依逐合約期貨價MTM，待券商核對' : '缺逐合約期貨價，權益保留最後核對值，不用指數代算');
     if (!a.nextRollDate && a.positions.length) quality.push('尚未設定換倉日');
     if (a.positions.some(p => p.lots < 0)) quality.push('存在空單，與本策略多頭曝險規則不符');
     const marketValid = market.closed === true && market.date === today && s.date === market.date;
@@ -185,9 +194,9 @@
       source: market.source || 'Yahoo Finance', accountRevision: a.revision || 0,
       accountAsOf: a.asof, equityDate: a.equityDate, positions: a.positions, lots, pointValue,
       capitalBase: CAPITAL, notional, grossNotional, actualExposure: actual,
-      exposureSource: a.positions.every(p => p.mark !== null) && confirmed ? 'futures_marks' : 'index_proxy',
+      exposureSource: marksAvailable ? 'futures_marks' : 'missing_futures_marks',
       equity, outside: a.outside, totalEquity: equity + a.outside, estimatedPnl,
-      equitySource: confirmed ? 'broker_confirmed' : 'index_proxy',
+      equitySource,
       initialMargin: a.initialMargin, maintenanceMargin: a.maintenanceMargin,
       risk: r, decision: d, stress: stress(index, accountNow), labels, quality,
       valuationValid: marketValid, performanceEligible: marketValid && confirmed && today >= START,
@@ -253,6 +262,7 @@
     });
     const arrivalExecutable = remaining === 0 ? executableValue / lots : null;
     return {...o, product: code, filledLots: lots, averageFill: vwap, arrivalMid,
+      finalFillAt: o.fills.at(-1).at, finalFillPrice: o.fills.at(-1).price,
       arrivalExecutable, arrivalSlippage, arrivalCost: arrivalSlippage * mult * lots,
       touchSlippage: arrivalExecutable !== null ? sign * (vwap - arrivalExecutable) : null,
       averageWaitSeconds: wait / lots, firstFillSeconds: (timestamp(o.fills[0].at) - ordered) / 1000,
@@ -305,7 +315,7 @@
   function forwardSeries(snapshots, events = []) {
     const sorted = snapshots.filter(s => s.date >= START).sort((a, b) => a.date.localeCompare(b.date));
     assert(new Set(sorted.map(s => s.date)).size === sorted.length, '每日快照不得有重複日期');
-    let lastActual = null, actualIndex = 1, peak = 1, lastTheory = null, theoryEquity = null, theoryPV = null, theoryState = null, theoryIndex = 1;
+    let lastActual = null, actualIndex = 1, peak = 1;
     const out = [];
     sorted.forEach(s => {
       const r = {...s, dailyReturn: null, intervalReturn: null, cumulativeReturn: null, drawdown: null,
@@ -327,27 +337,13 @@
         r.drawdown = peak > 0 ? 1 - actualIndex / peak : null;
         lastActual = s;
       }
-      if (s.valuationValid && s.signal.valid) {
-        if (theoryEquity === null) {
-          // A genuine account observation anchors the ideal reference. Never seed invented equity.
-          if (s.performanceEligible) { theoryEquity = s.totalEquity; theoryPV = s.signal.target * CAPITAL / s.index; theoryState = s.signal.state; }
-        } else if (lastTheory && s.marketDate > lastTheory.marketDate) {
-          const flow = events.filter(e => e.kind === 'external_flow' && e.date > lastTheory.date && e.date <= s.date)
-            .reduce((sum, e) => sum + number(e.amount, '外部資金流'), 0);
-          const pnl = theoryPV * (s.index - lastTheory.index);
-          r.theoryReturn = theoryEquity > 0 ? pnl / theoryEquity : null;
-          if (r.theoryReturn !== null) theoryIndex *= 1 + r.theoryReturn;
-          theoryEquity += pnl + flow;
-          const actualTheory = theoryPV * s.index / CAPITAL;
-          if (s.signal.state !== theoryState || Math.abs(s.signal.target - actualTheory) > 0.05 + 1e-12 || s.decision.rollDue) {
-            theoryPV = s.signal.target * CAPITAL / s.index; theoryState = s.signal.state;
-          }
-        }
-        if (theoryEquity !== null) {
-          r.theoryEquity = theoryEquity; r.theoryCumulativeReturn = theoryIndex - 1;
-          r.theoryExposure = theoryPV * s.index / CAPITAL; lastTheory = s;
-          if (s.performanceEligible) r.comparisonGap = s.totalEquity - theoryEquity;
-        }
+      // Theory must come from a complete futures ledger, never from a spot-index curve.
+      if (s.ledger?.status === 'complete') {
+        r.theoryEquity = s.ledger.theory.totalEquity;
+        r.theoryReturn = s.ledger.theory.dailyReturn;
+        r.theoryCumulativeReturn = s.ledger.theory.cumulativeReturn;
+        r.theoryExposure = s.ledger.theory.exposure;
+        if (s.performanceEligible) r.comparisonGap = s.totalEquity - r.theoryEquity;
       }
       out.push(r);
     });
@@ -365,7 +361,7 @@
     const stats = executionStats(orders), states = {'0.5': 0, '1': 0, '1.5': 0, '2': 0};
     rows.filter(s => s.valuationValid && s.signal.valid).forEach(s => { states[String(s.signal.target)]++; });
     const risks = rows.map(s => s.risk.ratio).filter(finite);
-    const deviations = rows.filter(s => s.valuationValid && s.signal.valid).map(s => Math.abs(s.actualExposure - s.signal.target));
+    const deviations = rows.filter(s => s.valuationValid && s.signal.valid && finite(s.actualExposure)).map(s => Math.abs(s.actualExposure - s.signal.target));
     const performanceRows = opening ? series.filter(s => s.date >= opening.date && s.date <= (end?.date || '') && s.performanceEligible) : [];
     let index = 1, peak = 1, mdd = 0;
     performanceRows.slice(1).forEach(s => {
@@ -393,7 +389,7 @@
       execution: stats, comparisonGap: end?.comparisonGap ?? null, theoreticalEquity: end?.theoryEquity ?? null,
       exceptions: e.filter(x => ['data_quality', 'risk_below500', 'abnormal_slippage', 'rule_violation'].includes(x.kind)),
       potentialViolations: violations, reviewCycle: '營運每月；核心策略每3–6個月',
-      theoryLabel: '加權指數收盤、前期訊號、無費稅的理想參考；不是期貨可成交回測'};
+      theoryLabel: '完整逐合約期貨帳本；缺少成交／期貨價格時不建立理論淨值'};
   }
   return Object.freeze({VERSION, START, CAPITAL, MULT, finite, clone, number, date, timestamp, twDate, product, mean,
     quantile, indicators, classify, signal, normalizeAccount, risk, stress, decision, buildSnapshot,
