@@ -1,0 +1,60 @@
+name: 第4策略每日風控快照
+
+on:
+  schedule:
+    # 台灣14:15起至16:45；每天執行，重試由輸入雜湊防重複。
+    - cron: '15,45 6-8 * * *'
+  workflow_dispatch:
+    inputs:
+      scope:
+        description: 資料範圍；production另有正式分支與啟用開關檢查
+        type: choice
+        options: [preview, production]
+        default: preview
+      write:
+        description: 寫入所選範圍；預設僅驗證測試資料
+        type: boolean
+        default: false
+
+permissions:
+  contents: read
+
+concurrency:
+  group: defense-snapshot-${{ github.event_name == 'schedule' && 'production' || inputs.scope }}
+  cancel-in-progress: false
+
+jobs:
+  snapshot:
+    if: >-
+      github.event_name == 'schedule' ||
+      (github.event_name == 'workflow_dispatch' &&
+        (inputs.scope == 'preview' || github.ref == 'refs/heads/main'))
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      - name: Checkout matching website code
+        uses: actions/checkout@v4
+        with:
+          ref: ${{ (github.event_name == 'schedule' || inputs.scope == 'production') && 'gh-pages' || 'feature/0050-defense-forward' }}
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+      - name: Validate formulas and snapshot transactions
+        run: node --test tests/defense-core.test.cjs tests/defense-ledger.test.cjs tests/defense-snapshot.test.cjs
+      - name: Dry-run with explicit synthetic fixture
+        if: github.event_name != 'schedule' && !inputs.write
+        run: |
+          mkdir -p test-results
+          node -e "const f=require('./tests/defense-fixtures.cjs');require('fs').writeFileSync('test-results/defense-dry-run.json',JSON.stringify({market:f.market(),account:f.account(),now:'2026-09-16T06:01:00Z'}))"
+          node scripts/defense-snapshot.cjs --fixture test-results/defense-dry-run.json
+      - name: Install isolated Admin SDK
+        if: github.event_name == 'schedule' || inputs.write
+        run: npm ci --prefix tools/defense-runner --omit=dev --ignore-scripts --no-audit --no-fund
+      - name: Save risk observations to Firestore
+        if: github.event_name == 'schedule' || inputs.write
+        env:
+          FIREBASE_KEY: ${{ secrets.FIREBASE_KEY }}
+          DEFENSE_ENABLE_WRITE: 'true'
+          DEFENSE_SCOPE: ${{ github.event_name == 'schedule' && 'production' || inputs.scope }}
+        run: node scripts/defense-snapshot.cjs --write
+      # No LINE messages, no private account JSON in Git, and no write/push to gh-pages.
