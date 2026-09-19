@@ -17,9 +17,9 @@ test('499.999999 and 500.000001 may display 500 but only raw below-500 triggers;
   assert.equal(below.topUp, 50001); assert.equal(equal.topUp, 0); assert.equal(above.topUp, 0); assert.equal(equal.monthlyTransfer, 50000);
 });
 test('integer allocation uses actual contract prices, documented tie rules and all three products', () => {
-  assert.deepEqual(L.selectHoldings(.5, F.quotes('2026-09', 20000, 20000), '2026-09').positions, [{product: 'MTX', month: '2026-09', lots: 1}]);
-  assert.deepEqual(L.selectHoldings(2, F.quotes('2026-09', 20000, 20000), '2026-09').positions, [{product: 'TX', month: '2026-09', lots: 1}]);
-  const p = L.selectHoldings(1.5, F.quotes('2026-09', 23000, 23000), '2026-09');
+  assert.deepEqual(L.selectHoldings(.5, F.quotes('2026-09', 20000, 20000), '2026-09', 2000000).positions, [{product: 'MTX', month: '2026-09', lots: 1}]);
+  assert.deepEqual(L.selectHoldings(2, F.quotes('2026-09', 20000, 20000), '2026-09', 2000000).positions, [{product: 'TX', month: '2026-09', lots: 1}]);
+  const p = L.selectHoldings(1.5, F.quotes('2026-09', 23000, 23000), '2026-09', 2000000);
   assert.ok(p.positions.some(p => p.product === 'TMF')); assert.ok(p.positions.every(p => Number.isInteger(p.lots)));
 });
 test('four-day real-contract ledger: hand-calculated first day, costs, hold band and forced roll', () => {

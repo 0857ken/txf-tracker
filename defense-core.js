@@ -5,7 +5,7 @@
   else root.DefenseCore = api;
 })(typeof globalThis !== 'undefined' ? globalThis : this, function () {
   'use strict';
-  const VERSION = 'forward-candidate-v3';
+  const VERSION = 'forward-candidate-v4-dynamic-equity';
   const START = '2026-09-16';
   const CAPITAL = 2000000;
   const MULT = Object.freeze({TX: 200, MTX: 50, TMF: 10});
@@ -38,6 +38,11 @@
     return ALIASES[value];
   }
   function mean(a) { return a.length ? a.reduce((s, x) => s + x, 0) / a.length : null; }
+  function strategyEquity(equity, outside) {
+    number(equity, '期貨帳戶權益'); number(outside, '場外資金', 0);
+    const total = equity + outside;
+    return total > 0 ? total : null;
+  }
   function quantile(values, q) {
     if (!values.length) return null;
     const a = [...values].sort((x, y) => x - y), p = (a.length - 1) * q, i = Math.floor(p);
@@ -135,14 +140,16 @@
         ...risk(equity, account.outside, account.initialMargin, account.maintenanceMargin)};
     });
   }
-  function decision(s, actual, lastAppliedState, rollDue) {
+  function decision(s, actual, lastAppliedState, rollDue, allocationReady = true) {
     if (actual !== null) number(actual, '實際曝險');
     const gap = s.valid && actual !== null ? s.target - actual : null;
     const insideBand = gap !== null ? Math.abs(gap) <= 0.05 + 1e-12 : null;
     const signalChanged = s.valid && lastAppliedState !== s.state;
-    return {gap, insideBand, signalChanged, rollDue,
-      rebalanceRequired: s.valid && (signalChanged || insideBand === false),
-      tradeRequired: Boolean(rollDue || (s.valid && (signalChanged || insideBand === false)))};
+    const actionRequired = Boolean(rollDue || (s.valid && (signalChanged || insideBand === false)));
+    return {gap, insideBand, signalChanged, rollDue, allocationReady,
+      rebalanceRequired: allocationReady && s.valid && (signalChanged || insideBand === false),
+      actionRequired, tradeRequired: allocationReady && actionRequired,
+      blockedReason: allocationReady ? null : 'valuation-unavailable'};
   }
   function buildSnapshot(market, rawAccount, now) {
     timestamp(now);
@@ -171,17 +178,24 @@
     });
     const marksAvailable = a.positions.every(p => p.mark !== null || futures.has(p.product + ':' + p.month));
     if (!marksAvailable) { notional = null; grossNotional = null; }
-    const actual = marksAvailable ? notional / CAPITAL : null;
+    const valuedEquity = strategyEquity(equity, a.outside);
+    const equityValuationAvailable = confirmed || a.positions.length === 0 || contractsAvailable;
+    const allocationReady = equityValuationAvailable && marksAvailable && valuedEquity !== null && s.valid;
+    const allocationStatus = allocationReady ? 'ready' : 'valuation-unavailable';
+    const actual = allocationReady ? notional / valuedEquity : null;
+    const targetNotional = allocationReady ? valuedEquity * s.target : null;
     const rollDue = Boolean(a.positions.length && a.nextRollDate && today >= a.nextRollDate);
-    const d = decision(s, actual, a.lastAppliedState, rollDue);
+    const d = decision(s, actual, a.lastAppliedState, rollDue, allocationReady);
     const r = risk(equity, a.outside, a.initialMargin, a.maintenanceMargin);
     const quality = [];
     if (!marksAvailable) quality.push('缺少實際期貨參考價，實際曝險暫不計算');
+    if (valuedEquity === null) quality.push('總策略權益小於或等於0，停止配口');
     if (market.date !== today) quality.push('行情非今日收盤：' + market.date);
     if (market.closed !== true) quality.push('0050尚未確認收盤');
     if (!s.valid) quality.push(s.reason);
     if (s.date && s.date !== market.date) quality.push('0050與加權指數日期未對齊');
     if (!confirmed) quality.push(contractsAvailable ? '帳戶依逐合約期貨價MTM，待券商核對' : '缺逐合約期貨價，權益保留最後核對值，不用指數代算');
+    if (!allocationReady) quality.push('allocationStatus = valuation-unavailable；保留最後確認資料，不提供即時調整口數');
     if (!a.nextRollDate && a.positions.length) quality.push('尚未設定換倉日');
     if (a.positions.some(p => p.lots < 0)) quality.push('存在空單，與本策略多頭曝險規則不符');
     const marketValid = market.closed === true && market.date === today && s.date === market.date;
@@ -196,7 +210,9 @@
       marketDate: market.date, marketUpdatedAt: market.updatedAt, index, signal: s,
       source: market.source || 'Yahoo Finance', accountRevision: a.revision || 0,
       accountAsOf: a.asof, equityDate: a.equityDate, positions: a.positions, lots, pointValue,
-      capitalBase: CAPITAL, notional, grossNotional, actualExposure: actual,
+      capitalBase: CAPITAL, capitalBasePurpose: 'forward-opening-and-performance-benchmark-only',
+      strategyEquity: valuedEquity, targetNotional, allocationStatus,
+      notional, grossNotional, actualExposure: actual,
       exposureSource: marksAvailable ? 'futures_marks' : 'missing_futures_marks',
       equity, outside: a.outside, totalEquity: equity + a.outside, estimatedPnl,
       equitySource,
@@ -394,7 +410,7 @@
       potentialViolations: violations, reviewCycle: '營運每月；核心策略每3–6個月',
       theoryLabel: '完整逐合約期貨帳本；缺少成交／期貨價格時不建立理論淨值'};
   }
-  return Object.freeze({VERSION, START, CAPITAL, MULT, finite, clone, number, date, timestamp, twDate, product, mean,
+  return Object.freeze({VERSION, START, CAPITAL, MULT, finite, clone, number, date, timestamp, twDate, product, mean, strategyEquity,
     quantile, indicators, classify, signal, normalizeAccount, risk, stress, decision, buildSnapshot,
     analyzeExecution, executionStats, automaticEvents, transfer, forwardSeries, monthlyReview});
 });

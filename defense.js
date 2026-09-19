@@ -71,8 +71,8 @@
       : badge('請核對帳戶', 'gold');
     $('today-content').innerHTML = '<div class="card hero"><div class="hero-heading"><h3>' + escape(s.reason || '資料待核對') +
       '</h3><div class="badges">' + badges + '</div></div><div class="metrics">' +
-      metric('目標曝險', s.valid ? fmt(s.target, 1) + 'x' : '待確認', '固定本金 200 萬元', 'gold') +
-      metric('實際曝險', x ? fmt(x.actualExposure, 3) + 'x' : '—', x?.exposureSource === 'futures_marks' ? '已核對期貨參考價' : '加權指數代理估計', 'blue') +
+      metric('目標曝險', s.valid ? fmt(s.target, 1) + 'x' : '待確認', x?.allocationStatus === 'ready' ? '動態總權益 ' + money(x.strategyEquity) : '估值尚未完整', 'gold') +
+      metric('實際曝險', C.finite(x?.actualExposure) ? fmt(x.actualExposure, 3) + 'x' : '—', x?.allocationStatus === 'ready' ? '期貨名目值 ÷ 動態總權益' : '不使用固定本金代算', 'blue') +
       metric('加權指數', fmt(market.index, 2), market.date + ' 收盤') +
       metric('0050 收盤', fmt(s.close, 2), s.date || '') +
       '</div><div class="meta">資料日 ' + escape(market.date) + ' · 更新 ' + escape(localTime(market.updatedAt).replace('T', ' ')) +
@@ -88,11 +88,12 @@
     const parts = x.positions.map(p => keys([['商品／月份', p.product + ' · ' + p.month], ['持倉', p.lots + ' 口'],
       ['參考價', p.mark === null ? '缺少期貨價格' : fmt(p.mark, 2)]])).join('<div class="divider"></div>');
     $('positions-content').innerHTML = '<div class="card"><div class="metrics">' +
-      metric('目標－實際差距', fmt(x.decision.gap, 3) + 'x', '正值需增加曝險') +
+      metric('目標－實際差距', fmt(x.decision.gap, 3) + 'x', x.allocationStatus === 'ready' ? '正值需增加曝險' : '估值不可用，暫停建議調整口數') +
       metric('±0.05x band', x.decision.insideBand === null ? '待確認' : x.decision.insideBand ? '範圍內' : '範圍外', '訊號改變／換倉仍須執行', x.decision.insideBand ? 'green' : 'gold') +
-      metric('淨名目曝險', money(x.notional)) + metric('總策略權益', money(x.totalEquity), '期貨權益＋場外資金') +
+      metric('目標名目曝險', money(x.targetNotional), '動態總權益 × 目標倍數') + metric('淨名目曝險', money(x.notional)) +
+      metric('決策總權益', money(x.strategyEquity), '期貨權益＋場外資金') + metric('配口狀態', x.allocationStatus === 'ready' ? '可計算' : 'valuation-unavailable', x.allocationStatus === 'ready' ? '動態權益資料完整' : '保留最後核對值，不產生調整建議', x.allocationStatus === 'ready' ? 'green' : 'gold') +
       '</div><div class="pill-values"><span>TX ' + x.lots.TX + ' 口</span><span>MTX ' + x.lots.MTX + ' 口</span><span>TMF ' + x.lots.TMF + ' 口</span></div>' +
-      keys([['訊號是否尚待執行', x.decision.signalChanged ? '是（band內也需核對調倉）' : '否'],
+      keys([['訊號是否尚待執行', x.decision.signalChanged ? (x.allocationStatus === 'ready' ? '是（band內也需核對調倉）' : '是（待估值完整後執行）') : '否'],
         ['下一次換倉日', x.nextRollDate || '尚未指定'], ['期貨帳戶核對時間', localTime(x.accountAsOf).replace('T', ' ')],
         ['權益來源', x.equitySource === 'broker_confirmed' ? '使用者券商核對值' : x.equitySource === 'futures_mtm' ? '逐合約期貨MTM估值' : '最後核對值（待更新）']]) +
       '<details><summary>逐筆合約</summary>' + (parts || '<p class="muted">目前無部位。</p>') + '</details></div>';

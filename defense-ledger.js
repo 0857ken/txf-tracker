@@ -4,7 +4,7 @@
   else root.DefenseLedger = factory(root.DefenseCore);
 })(typeof globalThis !== 'undefined' ? globalThis : this, function (C) {
   'use strict';
-  const VERSION = 'futures-ledger-v1';
+  const VERSION = 'futures-ledger-v2-dynamic-equity';
   const key = p => C.product(p.product) + ':' + p.month;
   const sum = a => a.reduce((s, v) => s + v, 0);
   function check(ok, text) { if (!ok) throw new Error(text); }
@@ -57,16 +57,18 @@
     const price = signedLots > 0 ? q.ask : q.bid;
     positive(price, '缺少期貨可成交參考價：' + key(q)); return price;
   }
-  function exposure(positions, qm, reference = false) {
+  function exposure(positions, qm, strategyEquity, reference = false) {
+    positive(strategyEquity, '動態總策略權益');
     return sum(positions.map(p => { const q = quote(qm, p); const price = reference ? (positive(q.bid, '委買') + positive(q.ask, '委賣')) / 2 : q.mark;
-      return p.lots * C.MULT[p.product] * price; })) / C.CAPITAL;
+      return p.lots * C.MULT[p.product] * price; })) / strategyEquity;
   }
-  function selectHoldings(target, quotes, targetMonth) {
+  function selectHoldings(target, quotes, targetMonth, strategyEquity) {
     check([0.5, 1, 1.5, 2].includes(target), '目標曝險不是固定四級');
+    positive(strategyEquity, '動態總策略權益');
     const qs = Object.keys(C.MULT).map(p => quotes.find(q => q.product === p && q.month === targetMonth));
     check(qs.every(Boolean), '理論配口須有TX／MTX／TMF同月份報價');
     const notionals = qs.map(q => C.MULT[q.product] * executable(q, 1));
-    const targetValue = target * C.CAPITAL, toleranceValue = notionals[2];
+    const targetValue = target * strategyEquity, toleranceValue = notionals[2];
     const bounds = notionals.map(n => Math.ceil((targetValue + toleranceValue) / n));
     check(bounds[0] * bounds[1] * bounds[2] < 1000000, '報價異常，配口範圍過大');
     let best = null;
@@ -83,14 +85,30 @@
     }
     check(best, '無法配置整數口數');
     return {positions: best.counts.map((lots, i) => ({product: qs[i].product, month: targetMonth, lots})).filter(p => p.lots),
-      notional: best.value, exposure: best.value / C.CAPITAL,
+      notional: best.value, exposure: best.value / strategyEquity, strategyEquity, targetNotional: targetValue,
       policy: '最接近目標；等距取不超標，再取總口數較少。只做整數配口，不最佳化策略參數。'};
   }
+  function decisionValuation(previous, day, qm) {
+    const outside = previous.outside + (day.externalFlow || 0);
+    check(outside >= 0, '外部提領超過場外資金');
+    const carryMtm = sum(previous.positions.map(p => {
+      const q = quote(qm, p), mid = (positive(q.bid, '委買') + positive(q.ask, '委賣')) / 2;
+      return p.lots * C.MULT[p.product] * (mid - p.mark);
+    }));
+    const futuresEquity = previous.equity + carryMtm;
+    const total = futuresEquity + outside;
+    positive(total, '決策時動態總策略權益');
+    return {futuresEquity, outside, strategyEquity: total, carryMtm,
+      timing: 'previous positions MTM at reference quote, before current trades/fees/internal transfer'};
+  }
   function theoreticalTrades(previous, day, seed) {
-    const qm = quoteMap(day), currentExposure = exposure(previous.positions, qm, true);
+    const qm = quoteMap(day), valuation = decisionValuation(previous, day, qm);
+    const currentExposure = exposure(previous.positions, qm, valuation.strategyEquity, true);
     const decision = C.decision(day.signal, currentExposure, previous.lastAppliedState, Boolean(day.roll));
-    const selection = decision.tradeRequired ? selectHoldings(day.signal.target, day.quotes, day.targetMonth)
-      : {positions: previous.positions.map(p => ({product: p.product, month: p.month, lots: p.lots})), exposure: currentExposure, policy: 'band內且訊號未變，保留持倉'};
+    const selection = decision.tradeRequired ? selectHoldings(day.signal.target, day.quotes, day.targetMonth, valuation.strategyEquity)
+      : {positions: previous.positions.map(p => ({product: p.product, month: p.month, lots: p.lots})), exposure: currentExposure,
+        strategyEquity: valuation.strategyEquity, targetNotional: valuation.strategyEquity * day.signal.target,
+        policy: 'band內且訊號未變，保留持倉'};
     if (!day.roll) check(previous.positions.every(p => p.month === day.targetMonth), '合約月份改變必須明確指定換倉');
     const deltas = new Map(previous.positions.map(p => [key(p), {...p, lots: -p.lots}]));
     for (const p of selection.positions) deltas.set(key(p), {...p, lots: (deltas.get(key(p))?.lots || 0) + p.lots});
@@ -122,7 +140,7 @@
       const q = quote(qm, p), price = executable(q, p.lots);
       add(p, p.lots, price, 'signal', (price - (q.bid + q.ask) / 2) * p.lots * C.MULT[p.product]);
     }
-    return {trades, decision, selection, rollGroups};
+    return {trades, decision, selection, rollGroups, valuation};
   }
   function actualTradesFromExecutions(orders, date) {
     const trades = [];
@@ -189,7 +207,9 @@
       slippageCost: sum(trades.map(t => t.slippageCost || 0)), transfer, externalFlow: day.externalFlow || 0,
       preTransferRisk, risk: C.risk(equity, outside, initialMargin, maintenanceMargin), monthlyCleanup,
       lastCleanupMonth: monthlyCleanup ? day.date.slice(0, 7) : previous.lastCleanupMonth || null,
-      exposure: exposure(positions, qm), trades, contractPnl: Object.fromEntries(contractPnl),
+      exposure: totalEquity > 0 ? exposure(positions, qm, totalEquity) : null,
+      allocationStatus: totalEquity > 0 ? 'ready' : 'valuation-unavailable',
+      trades, contractPnl: Object.fromEntries(contractPnl),
       lastAppliedState: theoretical ? day.signal.state : null,
       source: theoretical ? 'futures-theory' : 'actual-fills-and-futures-marks'};
   }
@@ -224,6 +244,9 @@
           status: 'complete', formulaVersion: VERSION, signal: d.signal, targetExposure: d.signal.target,
           theoreticalLots: plan.selection.positions, actualLots: nextActual.positions,
           allocationPolicy: plan.selection.policy, decision: plan.decision, rollGroups: plan.rollGroups,
+          decisionStrategyEquity: plan.valuation.strategyEquity,
+          decisionFuturesEquity: plan.valuation.futuresEquity, decisionOutsideCash: plan.valuation.outside,
+          targetNotional: plan.selection.targetNotional,
           theory: nextTheory, actual: nextActual, gap: nextActual.totalEquity - nextTheory.totalEquity,
           returnGap: nextActual.cumulativeReturn - nextTheory.cumulativeReturn,
           priceSources: d.quotes.map(q => ({contract: key(q), source: q.source})),
@@ -262,5 +285,6 @@
         return warnings;
       })], reviewCycle: base.reviewCycle + '；未券商對帳者為待核對MTM，非已驗證實績'};
   }
-  return Object.freeze({VERSION, key, normalizeSeed, validateDay, selectHoldings, theoreticalTrades, actualTradesFromExecutions, markBook, buildLedger, monthlyReview});
+  return Object.freeze({VERSION, key, normalizeSeed, validateDay, exposure, selectHoldings, decisionValuation,
+    theoreticalTrades, actualTradesFromExecutions, markBook, buildLedger, monthlyReview});
 });

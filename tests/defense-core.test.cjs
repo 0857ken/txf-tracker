@@ -57,7 +57,7 @@ test('all four stress levels scale current lots, not post-crash target exposure;
   const x = C.buildSnapshot(F.market(), a, '2026-09-16T06:01:00Z');
   assert.equal(x.actualExposure, 3.3); assert.equal(x.totalEquity, 2000000);
   const richer = C.buildSnapshot(F.market(), {...a, outside: 9450000}, '2026-09-16T06:01:00Z');
-  assert.equal(richer.actualExposure, 3.3);
+  assert.equal(richer.actualExposure, .66); assert.equal(richer.strategyEquity, 10000000);
 });
 test('unknown symbols, blank/bad margins, fractional lots fail closed; zero positions have N/A risk', () => {
   assert.throws(() => C.normalizeAccount({...F.account(), positions: [{product: 'bad', lots: 1, month: '2026-09'}]}), /未知/);
