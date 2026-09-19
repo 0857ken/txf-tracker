@@ -1,0 +1,51 @@
+name: Isolated research - Phase A exact-rule parity
+
+on:
+  push:
+    branches: [feature/forward-backtest-parity]
+    paths:
+      - '.github/workflows/phase-a-forward-parity.yml'
+      - 'scripts/phase-a-exact-parity.py'
+      - 'scripts/phase-a-js-parity.cjs'
+      - 'docs/forward-backtest-phase-a-protocol.md'
+
+permissions:
+  contents: read
+
+concurrency:
+  group: phase-a-forward-parity
+  cancel-in-progress: false
+
+jobs:
+  parity:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 45
+    steps:
+      - name: Checkout isolated research branch
+        uses: actions/checkout@v4
+        with:
+          ref: feature/forward-backtest-parity
+          path: forward
+      - name: Checkout frozen v1.26 research baseline
+        uses: actions/checkout@v4
+        with:
+          ref: backtest-v1
+          path: baseline
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.12'
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+      - name: Install original research dependencies
+        run: python -m pip install --upgrade pip pandas numpy requests beautifulsoup4 yfinance
+      - name: Run integrity gates and Phase A
+        run: python forward/scripts/phase-a-exact-parity.py --baseline-root baseline --output phase-a-artifact
+      - name: Upload traceable manifest and reports only
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: phase-a-parity-${{ github.run_id }}
+          path: phase-a-artifact/
+          if-no-files-found: warn
+          retention-days: 30
