@@ -1,0 +1,61 @@
+name: Isolated research - Phase C v1.27 allocator
+
+on:
+  push:
+    branches: [feature/v127-margin-aware]
+    paths:
+      - '.github/workflows/phase-c-v127-research.yml'
+      - 'defense-core.js'
+      - 'defense-ledger.js'
+      - 'scripts/phase-a-exact-parity.py'
+      - 'scripts/phase-a-js-parity.cjs'
+      - 'scripts/phase-c-v127-backtest.py'
+      - 'tests/defense-phase-c.test.cjs'
+      - 'docs/v127-capital-margin-aware-protocol.md'
+
+permissions:
+  contents: read
+
+concurrency:
+  group: phase-c-v127-margin-aware
+  cancel-in-progress: false
+
+jobs:
+  compare:
+    if: github.repository == '0857ken/txf-tracker' && github.ref == 'refs/heads/feature/v127-margin-aware'
+    runs-on: ubuntu-24.04
+    timeout-minutes: 60
+    steps:
+      - name: Checkout isolated Phase C branch
+        uses: actions/checkout@v4
+        with:
+          ref: feature/v127-margin-aware
+          path: forward
+      - name: Checkout frozen v1.26 baseline
+        uses: actions/checkout@v4
+        with:
+          ref: backtest-v1
+          path: baseline
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.12'
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+      - name: Install original research dependencies
+        run: python -m pip install --upgrade pip pandas numpy requests beautifulsoup4 yfinance
+      - name: Run allocator and full JavaScript regression tests
+        working-directory: forward
+        run: |
+          node scripts/defense-preview.cjs
+          node --test tests/*.test.cjs
+      - name: Run frozen-data integrity gates and historical comparison
+        run: python forward/scripts/phase-c-v127-backtest.py --baseline-root baseline --output phase-c-v127-artifact
+      - name: Upload comparison reports only
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: phase-c-v127-${{ github.run_id }}
+          path: phase-c-v127-artifact/
+          if-no-files-found: warn
+          retention-days: 30

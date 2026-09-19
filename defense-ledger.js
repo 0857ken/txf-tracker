@@ -4,7 +4,7 @@
   else root.DefenseLedger = factory(root.DefenseCore);
 })(typeof globalThis !== 'undefined' ? globalThis : this, function (C) {
   'use strict';
-  const VERSION = 'futures-ledger-v2-dynamic-equity';
+  const VERSION = 'futures-ledger-v3-v127-margin-aware';
   const key = p => C.product(p.product) + ':' + p.month;
   const sum = a => a.reduce((s, v) => s + v, 0);
   function check(ok, text) { if (!ok) throw new Error(text); }
@@ -49,6 +49,7 @@
     });
     check(new Set(d.quotes.map(key)).size === d.quotes.length, '每日逐合約行情不可重複');
     C.number(d.externalFlow || 0, '外部淨入金'); C.number(d.actualTransfer || 0, '實際帳戶間移轉');
+    if (d.transferableOutsideCash != null) C.number(d.transferableOutsideCash, '可立即轉入場外資金', 0);
     return d;
   }
   function quoteMap(day) { return new Map(day.quotes.map(q => [key(q), q])); }
@@ -62,31 +63,61 @@
     return sum(positions.map(p => { const q = quote(qm, p); const price = reference ? (positive(q.bid, '委買') + positive(q.ask, '委賣')) / 2 : q.mark;
       return p.lots * C.MULT[p.product] * price; })) / strategyEquity;
   }
-  function selectHoldings(target, quotes, targetMonth, strategyEquity) {
+  function selectHoldings(target, quotes, targetMonth, strategyEquity, funding = {}) {
     check([0.5, 1, 1.5, 2].includes(target), '目標曝險不是固定四級');
-    positive(strategyEquity, '動態總策略權益');
+    const unavailable = allocationStatus => ({positions: [], notional: null, exposure: null,
+      exposureError: null, strategyEquity: C.finite(strategyEquity) ? strategyEquity : null,
+      targetNotional: C.finite(strategyEquity) ? target * strategyEquity : null,
+      allocationStatus, executionReady: false, requiredInitialMargin: null,
+      requiredMaintenanceMargin: null, required500Equity: null, required550Equity: null,
+      requiredInternalTopUp: null, safeCandidateCount: 0, withinBandCandidateCount: 0,
+      policy: allocationStatus === 'infeasible' ? '動態總策略權益不大於0，不產生目標口數。'
+        : '必要逐合約估值或保證金資料不可用，不產生目標口數。'});
+    if (!C.finite(strategyEquity)) return unavailable('valuation-unavailable');
+    if (strategyEquity <= 0) return unavailable('infeasible');
+    if (!Array.isArray(quotes) || !/^\d{4}-(0[1-9]|1[0-2])$/.test(targetMonth)) return unavailable('valuation-unavailable');
     const qs = Object.keys(C.MULT).map(p => quotes.find(q => q.product === p && q.month === targetMonth));
-    check(qs.every(Boolean), '理論配口須有TX／MTX／TMF同月份報價');
+    if (!qs.every(Boolean) || qs.some(q => q.stale === true || !C.finite(q.ask) || q.ask <= 0 ||
+      !C.finite(q.initialMargin) || q.initialMargin <= 0 || !C.finite(q.maintenanceMargin) ||
+      q.maintenanceMargin <= 0 || q.initialMargin < q.maintenanceMargin)) return unavailable('valuation-unavailable');
     const notionals = qs.map(q => C.MULT[q.product] * executable(q, 1));
-    const targetValue = target * strategyEquity, toleranceValue = notionals[2];
-    const bounds = notionals.map(n => Math.ceil((targetValue + toleranceValue) / n));
+    const targetValue = target * strategyEquity;
+    const bounds = qs.map(q => Math.floor(strategyEquity / (5.5 * q.initialMargin)));
     check(bounds[0] * bounds[1] * bounds[2] < 1000000, '報價異常，配口範圍過大');
-    let best = null;
+    let best = null, safeCount = 0, withinBandCount = 0;
     for (let tx = 0; tx <= bounds[0]; tx++) for (let mtx = 0; mtx <= bounds[1]; mtx++) {
-      const remain = targetValue - tx * notionals[0] - mtx * notionals[1];
-      const tmf0 = Math.max(0, Math.floor(remain / notionals[2]));
-      for (const tmf of [tmf0, tmf0 + 1]) {
+      for (let tmf = 0; tmf <= bounds[2]; tmf++) {
         const counts = [tx, mtx, tmf], value = sum(counts.map((n, i) => n * notionals[i]));
-        if (value > targetValue + toleranceValue) continue;
-        const rank = [Math.abs(value - targetValue), value > targetValue ? 1 : 0, sum(counts), -tx, -mtx];
+        if (!sum(counts)) continue;
+        const initialMargin = sum(counts.map((n, i) => n * qs[i].initialMargin));
+        const maintenanceMargin = sum(counts.map((n, i) => n * qs[i].maintenanceMargin));
+        const required550Equity = 5.5 * initialMargin;
+        if (required550Equity > strategyEquity + 1e-9) continue;
+        const exposure = value / strategyEquity, error = exposure - target;
+        safeCount++; if (Math.abs(error) <= 0.05 + 1e-12) withinBandCount++;
+        const rank = [Math.abs(error), exposure > target ? 1 : 0, sum(counts), -tx, -mtx];
         const better = !best || rank.some((x, i) => x < best.rank[i] - 1e-8 && rank.slice(0, i).every((a, j) => Math.abs(a - best.rank[j]) < 1e-8));
-        if (better) best = {rank, counts, value};
+        if (better) best = {rank, counts, value, exposure, error, initialMargin, maintenanceMargin, required550Equity};
       }
     }
-    check(best, '無法配置整數口數');
+    if (!best) return {positions: [], notional: null, exposure: null, exposureError: null, strategyEquity,
+      targetNotional: targetValue, allocationStatus: 'margin-limited', executionReady: false,
+      requiredInitialMargin: null, requiredMaintenanceMargin: null, required500Equity: null, required550Equity: null,
+      requiredInternalTopUp: null, safeCandidateCount: 0, withinBandCandidateCount: 0,
+      policy: '550%安全門檻內無任何非零整數組合；不產生目標口數。'};
+    const futuresEquity = funding.decisionTimeFuturesEquity;
+    const availableOutside = funding.transferableOutsideCash ?? funding.outsideCash;
+    const requiredInternalTopUp = C.finite(futuresEquity) ? Math.max(0, best.required550Equity - futuresEquity) : null;
+    const executionReady = requiredInternalTopUp !== null && C.finite(availableOutside) && availableOutside >= requiredInternalTopUp;
     return {positions: best.counts.map((lots, i) => ({product: qs[i].product, month: targetMonth, lots})).filter(p => p.lots),
-      notional: best.value, exposure: best.value / strategyEquity, strategyEquity, targetNotional: targetValue,
-      policy: '最接近目標；等距取不超標，再取總口數較少。只做整數配口，不最佳化策略參數。'};
+      notional: best.value, exposure: best.exposure, exposureError: best.error,
+      strategyEquity, targetNotional: targetValue,
+      allocationStatus: withinBandCount ? 'within-band' : 'granularity-limited',
+      requiredInitialMargin: best.initialMargin, requiredMaintenanceMargin: best.maintenanceMargin,
+      required500Equity: 5 * best.initialMargin, required550Equity: best.required550Equity,
+      requiredInternalTopUp, executionReady,
+      safeCandidateCount: safeCount, withinBandCandidateCount: withinBandCount,
+      policy: 'v1.27：先550%安全過濾；再依絕對曝險誤差、不超標、總口數、TX→MTX→TMF固定順序排名。'};
   }
   function decisionValuation(previous, day, qm) {
     const outside = previous.outside + (day.externalFlow || 0);
@@ -104,11 +135,35 @@
   function theoreticalTrades(previous, day, seed) {
     const qm = quoteMap(day), valuation = decisionValuation(previous, day, qm);
     const currentExposure = exposure(previous.positions, qm, valuation.strategyEquity, true);
-    const decision = C.decision(day.signal, currentExposure, previous.lastAppliedState, Boolean(day.roll));
-    const selection = decision.tradeRequired ? selectHoldings(day.signal.target, day.quotes, day.targetMonth, valuation.strategyEquity)
+    const availableOutside = day.transferableOutsideCash ?? valuation.outside;
+    const best = selectHoldings(day.signal.target, day.quotes, day.targetMonth, valuation.strategyEquity,
+      {decisionTimeFuturesEquity: valuation.futuresEquity, outsideCash: valuation.outside, transferableOutsideCash: availableOutside});
+    const baseDecision = C.decision(day.signal, currentExposure, previous.lastAppliedState, Boolean(day.roll));
+    const normalized = positions => positions.filter(p => p.lots).map(p => [p.product, p.month, p.lots]).sort();
+    const sameAsBest = best.positions.length > 0 && JSON.stringify(normalized(previous.positions)) === JSON.stringify(normalized(best.positions));
+    const currentInitialMargin = previous.positions.every(p => p.lots >= 0 && qm.has(key(p)))
+      ? sum(previous.positions.map(p => p.lots * quote(qm, p).initialMargin)) : Infinity;
+    const currentSafe = 5.5 * currentInitialMargin <= valuation.strategyEquity + 1e-9;
+    const selectable = ['within-band', 'granularity-limited'].includes(best.allocationStatus);
+    const forced = Boolean(day.roll || baseDecision.signalChanged || !currentSafe);
+    const tradeRequired = selectable && !sameAsBest && (forced || baseDecision.insideBand === false);
+    const actionState = !selectable ? best.allocationStatus : tradeRequired ? 'rebalance-to-best-feasible'
+      : sameAsBest && best.allocationStatus === 'granularity-limited' ? 'best-feasible / granularity-limited / no-trade'
+      : 'within-band / no-trade';
+    const decision = {...baseDecision, tradeRequired, rebalanceRequired: tradeRequired,
+      allocationStatus: best.allocationStatus, sameAsBest, currentSafe, actionState,
+      executionReady: best.executionReady, blockedReason: tradeRequired && !best.executionReady ? 'outside-cash-unavailable' : null};
+    const selection = tradeRequired ? best
       : {positions: previous.positions.map(p => ({product: p.product, month: p.month, lots: p.lots})), exposure: currentExposure,
-        strategyEquity: valuation.strategyEquity, targetNotional: valuation.strategyEquity * day.signal.target,
-        policy: 'band內且訊號未變，保留持倉'};
+        exposureError: currentExposure - day.signal.target, strategyEquity: valuation.strategyEquity,
+        targetNotional: valuation.strategyEquity * day.signal.target, allocationStatus: best.allocationStatus,
+        requiredInitialMargin: best.requiredInitialMargin, requiredMaintenanceMargin: best.requiredMaintenanceMargin,
+        required500Equity: best.required500Equity, required550Equity: best.required550Equity,
+        requiredInternalTopUp: best.requiredInternalTopUp,
+        executionReady: best.executionReady, safeCandidateCount: best.safeCandidateCount,
+        withinBandCandidateCount: best.withinBandCandidateCount,
+        policy: actionState};
+    if (tradeRequired && !best.executionReady) check(false, '場外可立即轉入資金不足，禁止建議下單');
     if (!day.roll) check(previous.positions.every(p => p.month === day.targetMonth), '合約月份改變必須明確指定換倉');
     const deltas = new Map(previous.positions.map(p => [key(p), {...p, lots: -p.lots}]));
     for (const p of selection.positions) deltas.set(key(p), {...p, lots: (deltas.get(key(p))?.lots || 0) + p.lots});
@@ -247,6 +302,12 @@
           decisionStrategyEquity: plan.valuation.strategyEquity,
           decisionFuturesEquity: plan.valuation.futuresEquity, decisionOutsideCash: plan.valuation.outside,
           targetNotional: plan.selection.targetNotional,
+          allocationStatus: plan.selection.allocationStatus, executionReady: plan.selection.executionReady,
+          requiredInitialMargin: plan.selection.requiredInitialMargin,
+          requiredMaintenanceMargin: plan.selection.requiredMaintenanceMargin,
+          required500Equity: plan.selection.required500Equity,
+          required550Equity: plan.selection.required550Equity,
+          requiredInternalTopUp: plan.selection.requiredInternalTopUp,
           theory: nextTheory, actual: nextActual, gap: nextActual.totalEquity - nextTheory.totalEquity,
           returnGap: nextActual.cumulativeReturn - nextTheory.cumulativeReturn,
           priceSources: d.quotes.map(q => ({contract: key(q), source: q.source})),

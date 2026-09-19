@@ -25,8 +25,8 @@ test('near-zero positive equity is explicit; zero and negative equity refuse all
   const tiny = L.selectHoldings(.5, quotes, '2026-09', .01);
   assert.equal(tiny.strategyEquity, .01); assert.equal(tiny.targetNotional, .005);
   assert.deepEqual(tiny.positions, []);
-  assert.throws(() => L.selectHoldings(2, quotes, '2026-09', 0), /動態總策略權益/);
-  assert.throws(() => L.selectHoldings(2, quotes, '2026-09', -1), /動態總策略權益/);
+  assert.equal(L.selectHoldings(2, quotes, '2026-09', 0).allocationStatus, 'infeasible');
+  assert.equal(L.selectHoldings(2, quotes, '2026-09', -1).allocationStatus, 'infeasible');
 });
 
 test('negative futures equity is allowed when futures plus outside cash remains positive', () => {
