@@ -14,6 +14,9 @@ No performance result is inferred from unit tests.
 - Prior reported futures input: 30,065 rows, SHA256
   8cdf38ebed9eae1e6bd96ccc79484e1e36beee83ce4ef378c92c5246a00f911b.
   A report is not a substitute for the underlying input dataset.
+- Frozen v1.26 run 35057843114 reported `margin_events 57` and
+  `missing_margin_csv 2`. Phase A must reproduce both counts and must not
+  reinterpret or replace either missing 2020 announcement.
 
 ## Exact rule (ordered)
 
