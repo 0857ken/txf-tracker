@@ -86,7 +86,7 @@ test('cross-module day flow reaches allocator, theoretical trade, 13:45 MTM and 
   const gMargins = {TX: [701000, 538000], MTX: [175250, 134500], TMF: [35050, 26900]}, gPrice = 47428;
   const gQuotes = Object.keys(gMargins).map(product => ({product, month: '2026-09', bid: gPrice, ask: gPrice, mark: gPrice,
     initialMargin: gMargins[product][0], maintenanceMargin: gMargins[product][1], source: 'granularity fixture',
-    margin: {source: 'granularity fixture', effectiveDate: '2026-09-19', fetchedAt: '2026-09-19T08:00:00+08:00', initial: gMargins[product][0], maintenance: gMargins[product][1], fresh: true}}));
+    margin: {source: 'granularity fixture', effectiveDate: '2026-09-16', fetchedAt: '2026-09-16T08:00:00+08:00', initial: gMargins[product][0], maintenance: gMargins[product][1], fresh: true}}));
   const noTradeSeed = L.normalizeSeed({...f.seed, equity: 200000, outside: 800000,
     positions: [{product: 'TMF', month: '2026-09', lots: 2, mark: gPrice}], lastAppliedState: 'bear:1'});
   const noTradeDay = {...d, indicators: {...d.indicators, close: 88, ma10: 85, ma20: 90}, quotes: gQuotes};
