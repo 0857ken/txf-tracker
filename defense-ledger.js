@@ -1,7 +1,7 @@
 (function (root, factory) {
   'use strict';
   if (typeof module !== 'undefined' && module.exports) module.exports = factory(require('./defense-core.js'), require('./defense-governance.js'));
-  else root.DefenseLedger = factory(root.DefenseCore);
+  else root.DefenseLedger = factory(root.DefenseCore, root.DefenseGovernance);
 })(typeof globalThis !== 'undefined' ? globalThis : this, function (C, G) {
   'use strict';
   const VERSION = 'futures-ledger-v3-v127-margin-aware';
