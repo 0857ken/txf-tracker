@@ -23,6 +23,10 @@
         '</select></label><label>合約月份<input class="l-month" type="month" required value="' + esc(q.month || $('ledger-day-form').elements.targetMonth.value) + '"></label>' +
         [['bid', '報價時委買'], ['ask', '報價時委賣'], ['mark', '日終期貨估值價'], ['initialMargin', '每口原始保證金'], ['maintenanceMargin', '每口維持保證金']].map(([k, label]) =>
           '<label>' + label + '<input class="l-' + k + '" type="number" step="0.01" min="0" inputmode="decimal" required value="' + esc(q[k] ?? '') + '"></label>').join('') +
+        '<label>保證金生效日<input class="l-marginEffectiveDate" type="date" value="' + esc(q.margin?.effectiveDate ?? '') + '"></label>' +
+        '<label>保證金抓取時間<input class="l-marginFetchedAt" type="datetime-local" step="1" value="' + esc(q.margin?.fetchedAt ?? '') + '"></label>' +
+        '<label>券商覆寫原始保證金<input class="l-marginOverrideInitial" type="number" min="0" step="0.01" inputmode="decimal" value="' + esc(q.margin?.brokerOverride?.initial ?? '') + '"></label>' +
+        '<label>券商覆寫維持保證金<input class="l-marginOverrideMaintenance" type="number" min="0" step="0.01" inputmode="decimal" value="' + esc(q.margin?.brokerOverride?.maintenance ?? '') + '"></label>' +
         '</div><button type="button" class="text-button">移除此合約</button>';
       row.querySelector('button').addEventListener('click', () => row.remove()); $('ledger-quote-inputs').append(row);
     }
@@ -63,7 +67,15 @@
       const source = f.elements.source.value;
       const quotes = [...document.querySelectorAll('.ledger-quote')].map(row => {
         const q = {product: row.querySelector('.l-product').value, month: row.querySelector('.l-month').value, source};
-        ['bid', 'ask', 'mark', 'initialMargin', 'maintenanceMargin'].forEach(k => { q[k] = value(row.querySelector('.l-' + k)); }); return q;
+        ['bid', 'ask', 'mark', 'initialMargin', 'maintenanceMargin'].forEach(k => { q[k] = value(row.querySelector('.l-' + k)); });
+        const effectiveDate = row.querySelector('.l-marginEffectiveDate').value;
+        const fetchedAt = row.querySelector('.l-marginFetchedAt').value ? iso(row.querySelector('.l-marginFetchedAt').value) : '';
+        const overrideInitial = row.querySelector('.l-marginOverrideInitial').value.trim() ? value(row.querySelector('.l-marginOverrideInitial')) : null;
+        const overrideMaintenance = row.querySelector('.l-marginOverrideMaintenance').value.trim() ? value(row.querySelector('.l-marginOverrideMaintenance')) : null;
+        if (effectiveDate || fetchedAt || overrideInitial !== null || overrideMaintenance !== null) q.margin = {
+          source, effectiveDate, fetchedAt, initial: q.initialMargin, maintenance: q.maintenanceMargin,
+          brokerOverride: overrideInitial === null && overrideMaintenance === null ? null : {initial: overrideInitial, maintenance: overrideMaintenance}};
+        return q;
       });
       const spreads = f.elements.spreads.value.trim() ? f.elements.spreads.value.trim().split(/\n+/).map(line => {
         const a = line.split(/[,，]/).map(x => x.trim()); if (a.length !== 6) throw new Error('跨月價差每行須有6欄');
