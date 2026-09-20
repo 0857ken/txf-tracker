@@ -1,8 +1,8 @@
 (function (root, factory) {
   'use strict';
-  if (typeof module !== 'undefined' && module.exports) module.exports = factory(require('./defense-core.js'));
+  if (typeof module !== 'undefined' && module.exports) module.exports = factory(require('./defense-core.js'), require('./defense-governance.js'));
   else root.DefenseLedger = factory(root.DefenseCore);
-})(typeof globalThis !== 'undefined' ? globalThis : this, function (C) {
+})(typeof globalThis !== 'undefined' ? globalThis : this, function (C, G) {
   'use strict';
   const VERSION = 'futures-ledger-v3-v127-margin-aware';
   const key = p => C.product(p.product) + ':' + p.month;
@@ -31,6 +31,7 @@
   function validateDay(raw, seed) {
     const d = C.clone(raw); C.date(d.date); month(d.targetMonth);
     const signalAt = C.timestamp(d.signalAt), referenceAt = C.timestamp(d.referenceAt), valuationAt = C.timestamp(d.valuationAt);
+    G.validateDecisionWindow({date: d.date, signalAt: d.signalAt, referenceAt: d.referenceAt, valuationAt: d.valuationAt});
     check(C.twDate(d.signalAt) === d.date && C.twDate(d.valuationAt) === d.date, '訊號／估值時間須屬於帳本當日');
     if (d.previousTradingDate) { C.date(d.previousTradingDate); check(d.previousTradingDate < d.date, '前交易日必須早於當日'); }
     check(referenceAt >= signalAt && valuationAt >= referenceAt, '理論成交必須在訊號確認之後，且不得晚於日終估值');
@@ -45,7 +46,10 @@
       if (q.bid != null || q.ask != null) {
         positive(q.bid, '期貨委買'); positive(q.ask, '期貨委賣'); check(q.bid <= q.ask, '期貨買賣報價顛倒');
       }
-      return {...q, product: C.product(q.product), month: month(q.month), source: source(q.source)};
+      const value = {...q, product: C.product(q.product), month: month(q.month), source: source(q.source)};
+      if (q.margin) value.margin = G.validateMarginRecord(q.margin, d.valuationAt);
+      else value.margin = {freshness: 'unknown', fresh: false, reasons: ['missing-margin-provenance']};
+      return value;
     });
     check(new Set(d.quotes.map(key)).size === d.quotes.length, '每日逐合約行情不可重複');
     C.number(d.externalFlow || 0, '外部淨入金'); C.number(d.actualTransfer || 0, '實際帳戶間移轉');
