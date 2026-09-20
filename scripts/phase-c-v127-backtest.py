@@ -7,6 +7,7 @@ import contextlib
 from collections import Counter
 from datetime import datetime, timezone
 import importlib.util
+import hashlib
 import json
 import os
 from pathlib import Path
@@ -19,7 +20,7 @@ import pandas as pd
 
 FUTURES_ROWS = 30065
 FUTURES_SHA = "8cdf38ebed9eae1e6bd96ccc79484e1e36beee83ce4ef378c92c5246a00f911b"
-SIGNAL_SHA = "1398efdf099d4a5884eb631fc5fb205a148ccf11380b75aa07408c1419523fdf"
+PHASE_A_RAW_SIGNAL_SHA = "1398efdf099d4a5884eb631fc5fb205a148ccf11380b75aa07408c1419523fdf"
 MARGIN_STATES = 57
 MISSING_MARGIN_CSV = 2
 BAND = .05
@@ -27,6 +28,28 @@ FLOOR = 5.0
 RESET = 5.5
 SLIP = 1.0
 PRODUCTS = ("TX", "MTX", "TMF")
+SIGNAL_START = "2016-01-04"
+SIGNAL_END = "2026-09-15"
+SIGNAL_ROWS = 2602
+V126_REFERENCE = {
+    "terminal": 32734579.19,
+    "cagr": .44597568,
+    "mdd": -.37750244,
+    "calmar": 1.181385,
+    "sides": 1486,
+    "cost": 252344.95,
+    "mean_exposure_error": .067078,
+    "p95_exposure_error": .196366,
+    "max_exposure_error": .221918,
+    "min_close_risk": 5.00220200,
+    "min_next_open_risk": 4.18974899,
+}
+V126_TOLERANCE = {
+    "terminal": .01, "cagr": 5e-9, "mdd": 5e-9, "calmar": 5e-7,
+    "sides": 0, "cost": .01, "mean_exposure_error": 5e-7,
+    "p95_exposure_error": 5e-7, "max_exposure_error": 5e-7,
+    "min_close_risk": 5e-9, "min_next_open_risk": 5e-9,
+}
 
 
 def load_phase_a(repo: Path):
@@ -34,6 +57,22 @@ def load_phase_a(repo: Path):
     spec = importlib.util.spec_from_file_location("phase_a", path)
     module = importlib.util.module_from_spec(spec); spec.loader.exec_module(module)
     return module
+
+
+def signal_schedule(signal: pd.DataFrame) -> tuple[list[dict], bytes, str]:
+    rows = [{"date": d.strftime("%Y-%m-%d"), "exact_bear": bool(r.exact_bear),
+             "target_x": float(r.exact_target)} for d, r in signal.iterrows()]
+    text = "date,exact_bear,target_x\n" + "".join(
+        f"{r['date']},{str(r['exact_bear']).lower()},{r['target_x']:.1f}\n" for r in rows)
+    raw = text.encode("utf-8")
+    return rows, raw, hashlib.sha256(raw).hexdigest()
+
+
+def baseline_reproduction(actual: dict) -> dict:
+    delta = {k: actual[k] - expected for k, expected in V126_REFERENCE.items()}
+    passed = all(abs(delta[k]) <= V126_TOLERANCE[k] for k in V126_REFERENCE)
+    return {"reference": V126_REFERENCE, "actual": {k: actual[k] for k in V126_REFERENCE},
+            "delta": delta, "tolerance": V126_TOLERANCE, "passed": passed}
 
 
 def fetch_futures_reliably(ns, cache: Path):
@@ -256,11 +295,31 @@ def main():
     margin_gate = {"states": len(events), "missingCsvCount": len(missing)}
     if margin_gate != {"states": MARGIN_STATES, "missingCsvCount": MISSING_MARGIN_CSV}: raise RuntimeError(f"MARGIN_GATE_FAILED {margin_gate}")
     signal, signal_manifest = phase_a.download_signal()
-    if signal_manifest["adjustedCloseSha256"] != SIGNAL_SHA: raise RuntimeError(f"SIGNAL_GATE_FAILED {signal_manifest}")
+    signal_manifest["phaseARawAdjustedCloseSha256"] = PHASE_A_RAW_SIGNAL_SHA
+    signal_manifest["matchesPhaseARawHash"] = signal_manifest["adjustedCloseSha256"] == PHASE_A_RAW_SIGNAL_SHA
+    date_gate = {"rows": len(signal), "start": signal.index.min().strftime("%Y-%m-%d"),
+      "end": signal.index.max().strftime("%Y-%m-%d")}
+    date_gate["passed"] = date_gate == {"rows": SIGNAL_ROWS, "start": SIGNAL_START, "end": SIGNAL_END}
+    if not date_gate["passed"]: raise RuntimeError(f"SIGNAL_RANGE_GATE_FAILED {date_gate}")
+    schedule_rows, schedule_bytes, schedule_sha = signal_schedule(signal)
+    (out / "signal-schedule.csv").write_bytes(schedule_bytes)
+    (out / "signal-schedule.json").write_text(json.dumps(schedule_rows, indent=2), encoding="utf-8")
+    parity = phase_a.js_parity(repo, signal)
+    (out / "python-js-parity.json").write_text(json.dumps(parity, indent=2), encoding="utf-8")
+    if parity["mismatchCount"] != 0: raise RuntimeError(f"PYTHON_JS_PARITY_GATE_FAILED {parity}")
+    target_differences = phase_a.differences(signal)
+    (out / "v126-exact-target-differences.json").write_text(
+      json.dumps({"count": len(target_differences), "rows": target_differences}, indent=2), encoding="utf-8")
+    if target_differences: raise RuntimeError(f"SIGNAL_TARGET_GATE_FAILED count={len(target_differences)}")
     exact = signal.rename(columns={"exact_target": "target_x"})[["close", "ma10", "ma20", "ma60", "ma60_20ago", "exact_bear", "target_x"]]
     with contextlib.redirect_stdout(sys.stderr):
-        old = ns["run_band"](px, exact, events, BAND); new = run_v127(ns, px, exact, events)
+        old = ns["run_band"](px, exact, events, BAND)
         old_stats = core_stats(ns, old.assign(allocation_status="v1.26"), px, events)
+    reproduction = baseline_reproduction(old_stats)
+    (out / "v126-baseline-reproduction.json").write_text(json.dumps(reproduction, indent=2), encoding="utf-8")
+    if not reproduction["passed"]: raise RuntimeError(f"V126_REPRODUCTION_GATE_FAILED {reproduction}")
+    with contextlib.redirect_stdout(sys.stderr):
+        new = run_v127(ns, px, exact, events)
         new_stats = core_stats(ns, new, px, events)
     # v1.26 has no formal allocation statuses.
     old_stats["granularity_limited_days"] = None; old_stats["margin_limited_days"] = None
@@ -269,7 +328,10 @@ def main():
       "mean_exposure_error", "p95_exposure_error", "max_exposure_error", "min_close_risk", "min_next_open_risk", "below500_days")}
     report = {"protocolCommit": "c3c89f950752e56121d8620ef47166312ca67bfc",
       "generatedAt": datetime.now(timezone.utc).isoformat(), "workflowRunId": os.getenv("GITHUB_RUN_ID"),
-      "commitSha": os.getenv("GITHUB_SHA"), "gates": {"futures": futures_gate, "margin": margin_gate, "signal": signal_manifest},
+      "commitSha": os.getenv("GITHUB_SHA"), "gates": {"futures": futures_gate, "margin": margin_gate,
+        "signalRange": date_gate, "signalAudit": signal_manifest, "pythonJsParity": parity,
+        "targetDifferenceCount": len(target_differences), "v126Reproduction": reproduction},
+      "signalScheduleSha256": schedule_sha,
       "exactRuleV126": old_stats, "v127": new_stats, "v127MinusV126": delta,
       "differentHoldingsDays": len(differences), "differenceReasons": dict(reasons)}
     (out / "phase-c-v127-comparison.json").write_text(json.dumps(report, indent=2), encoding="utf-8")

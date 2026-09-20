@@ -12,6 +12,7 @@ on:
       - 'scripts/phase-c-v127-backtest.py'
       - 'tests/defense-phase-c.test.cjs'
       - 'docs/v127-capital-margin-aware-protocol.md'
+      - 'docs/v127-data-integrity-gate-addendum.md'
 
 permissions:
   contents: read
