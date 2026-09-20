@@ -260,6 +260,12 @@
       equity: '', outside: '', initialMargin: '', maintenanceMargin: '', nextRollDate: ''};
     const f = $('account-form');
     ['equityDate', 'equity', 'outside', 'indexAtEquity', 'initialMargin', 'maintenanceMargin', 'nextRollDate'].forEach(k => { f.elements[k].value = a[k] ?? ''; });
+    const mr = a.marginReference || {};
+    f.elements.marginSource.value = mr.source || '';
+    f.elements.marginEffectiveDate.value = mr.effectiveDate || '';
+    f.elements.marginFetchedAt.value = mr.fetchedAt ? localTime(mr.fetchedAt).replace('T', 'T') : '';
+    f.elements.brokerOverrideInitial.value = mr.brokerOverride?.initial ?? '';
+    f.elements.brokerOverrideMaintenance.value = mr.brokerOverride?.maintenance ?? '';
     f.elements.asof.value = localTime(now()); f.elements.externalFlow.value = '0'; f.elements.acknowledge.checked = false;
     $('position-inputs').replaceChildren();
     (a.positions?.length ? a.positions : [{product: 'TMF', month: market.date.slice(0, 7), lots: 0, mark: null}]).forEach(positionInput);
@@ -289,6 +295,19 @@
       const a = {...state.account, asof: isoTime(f.elements.asof.value), equityDate: f.elements.equityDate.value,
         nextRollDate: f.elements.nextRollDate.value || null};
       ['equity', 'outside', 'indexAtEquity', 'initialMargin', 'maintenanceMargin'].forEach(k => { a[k] = n(f.elements[k]); });
+      const marginSource = f.elements.marginSource.value.trim();
+      const marginEffectiveDate = f.elements.marginEffectiveDate.value;
+      const marginFetchedAt = f.elements.marginFetchedAt.value ? isoTime(f.elements.marginFetchedAt.value) : '';
+      const brokerInitial = f.elements.brokerOverrideInitial.value.trim() ? n(f.elements.brokerOverrideInitial) : null;
+      const brokerMaintenance = f.elements.brokerOverrideMaintenance.value.trim() ? n(f.elements.brokerOverrideMaintenance) : null;
+      if (marginSource || marginEffectiveDate || marginFetchedAt || brokerInitial !== null || brokerMaintenance !== null) {
+        const mr = {source: marginSource, effectiveDate: marginEffectiveDate, fetchedAt: marginFetchedAt,
+          initial: a.initialMargin, maintenance: a.maintenanceMargin,
+          brokerOverride: brokerInitial === null && brokerMaintenance === null ? null : {initial: brokerInitial, maintenance: brokerMaintenance}};
+        const checked = window.DefenseGovernance.validateMarginRecord(mr, a.asof);
+        if (!checked.fresh) throw new Error('保證金資料不可視為最新：' + checked.reasons.join('、'));
+        a.marginReference = mr;
+      }
       a.positions = [...document.querySelectorAll('.position-input')].map(row => ({product: row.querySelector('.pos-product').value,
         month: row.querySelector('.pos-month').value, lots: n(row.querySelector('.pos-lots')), mark: n(row.querySelector('.pos-mark'), true)}));
       if (f.elements.acknowledge.checked) {

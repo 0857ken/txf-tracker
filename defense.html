@@ -45,6 +45,11 @@
             <label>本次外部淨入金（元）<input name="externalFlow" type="number" step="0.01" inputmode="decimal" value="0"><small>策略外新投入為正、提領為負；帳戶間轉帳填0。</small></label>
             <label>所需原始保證金（總額）<input name="initialMargin" type="number" min="0" step="1" inputmode="numeric" required></label>
             <label>所需維持保證金（總額）<input name="maintenanceMargin" type="number" min="0" step="1" inputmode="numeric" required></label>
+            <label>保證金資料來源<input name="marginSource" type="text" placeholder="TAIFEX／券商報表"></label>
+            <label>保證金生效日<input name="marginEffectiveDate" type="date"></label>
+            <label>保證金抓取時間（台灣）<input name="marginFetchedAt" type="datetime-local" step="1"></label>
+            <label>券商覆寫原始保證金（選填）<input name="brokerOverrideInitial" type="number" min="0" step="1" inputmode="numeric"></label>
+            <label>券商覆寫維持保證金（選填）<input name="brokerOverrideMaintenance" type="number" min="0" step="1" inputmode="numeric"></label>
             <label>下一次預計換倉日<input name="nextRollDate" type="date"></label>
           </div>
           <p class="muted">每筆按商品、月份填寫。多單正口數、空單負口數；未填期貨參考價時不計算實際曝險，不用指數代替。</p>
