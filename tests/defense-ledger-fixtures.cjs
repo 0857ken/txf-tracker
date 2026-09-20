@@ -5,7 +5,9 @@ function seed() { return {at: '2026-09-16T08:00:00+08:00', equity: 550000, outsi
   fees: {TX: 38, MTX: 19, TMF: 16}, taxRate: 0.00002, lastAppliedState: 'nonbear:2'}; }
 function quotes(month, reference, mark) { return ['TX', 'MTX', 'TMF'].map((product, i) => ({product, month,
   bid: reference, ask: reference, mark, initialMargin: [100000, 25000, 5000][i],
-  maintenanceMargin: [75000, 18750, 3750][i], source: 'SYNTHETIC contract quote, not index'})); }
+  maintenanceMargin: [75000, 18750, 3750][i], source: 'SYNTHETIC contract quote, not index',
+  margin: {source: 'SYNTHETIC margin fixture', effectiveDate: '2026-09-16', fetchedAt: '2026-09-16T08:00:00+08:00',
+    initial: [100000, 25000, 5000][i], maintenance: [75000, 18750, 3750][i], fresh: true}})); }
 function day(date = '2026-09-16', ref = 20000, mark = 20100, month = '2026-09') { return {date,
   previousTradingDate: {'2026-09-16': '2026-09-15', '2026-09-17': '2026-09-16', '2026-09-18': '2026-09-17', '2026-09-21': '2026-09-18'}[date] || null,
   signalDate: date, signalAt: date + 'T13:30:00+08:00', referenceAt: date + 'T13:31:00+08:00', valuationAt: date + 'T13:45:00+08:00',

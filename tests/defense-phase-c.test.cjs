@@ -6,7 +6,8 @@ const PRICE = 47428;
 const margins = {TX: [701000, 538000], MTX: [175250, 134500], TMF: [35050, 26900]};
 const quotes = (month = '2026-10') => Object.keys(C.MULT).map(product => ({product, month,
   bid: PRICE, ask: PRICE, mark: PRICE, initialMargin: margins[product][0], maintenanceMargin: margins[product][1],
-  source: 'PHASE C0 FROZEN ACCEPTANCE FIXTURE'}));
+  source: 'PHASE C0 FROZEN ACCEPTANCE FIXTURE', margin: {source: 'PHASE C0 FROZEN ACCEPTANCE FIXTURE', effectiveDate: '2026-09-19',
+    fetchedAt: '2026-09-19T08:00:00+08:00', initial: margins[product][0], maintenance: margins[product][1], fresh: true}}));
 const funding = (futures = 200000, outside = 800000, transferable = outside) =>
   ({decisionTimeFuturesEquity: futures, outsideCash: outside, transferableOutsideCash: transferable});
 

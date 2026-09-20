@@ -1,9 +1,9 @@
 (function (root, factory) {
   'use strict';
-  const api = factory();
+  const api = factory(typeof require === 'function' ? require('./defense-governance.js') : root.DefenseGovernance);
   if (typeof module !== 'undefined' && module.exports) module.exports = api;
   else root.DefenseCore = api;
-})(typeof globalThis !== 'undefined' ? globalThis : this, function () {
+})(typeof globalThis !== 'undefined' ? globalThis : this, function (G) {
   'use strict';
   const VERSION = 'forward-candidate-v4-dynamic-equity';
   const START = '2026-09-16';
@@ -154,7 +154,9 @@
   function buildSnapshot(market, rawAccount, now) {
     timestamp(now);
     const today = twDate(now), a = normalizeAccount(rawAccount);
-    const s = signal(market.target), index = number(market.index, '加權指數', Number.MIN_VALUE);
+    const signalWindow = G.signalEligibility(now, market.date), eodWindow = G.eodEligibility(now, market.date);
+    const s = signalWindow.eligible ? signal(market.target) : {valid: false, date: market.date, target: null, bear: null, state: 'pending', reason: signalWindow.reason};
+    const index = number(market.index, '加權指數', Number.MIN_VALUE);
     date(market.date);
     assert(market.date <= today, '行情日期晚於今日，停止計算');
     assert(timestamp(a.asof) <= timestamp(now), '帳戶基準時間不可晚於快照時間');
@@ -193,12 +195,14 @@
     if (market.date !== today) quality.push('行情非今日收盤：' + market.date);
     if (market.closed !== true) quality.push('0050尚未確認收盤');
     if (!s.valid) quality.push(s.reason);
+    if (!signalWindow.eligible) quality.push('13:30前不使用當日0050收盤訊號');
+    if (!eodWindow.eligible) quality.push('13:45前不建立正式EOD MTM／snapshot');
     if (s.date && s.date !== market.date) quality.push('0050與加權指數日期未對齊');
     if (!confirmed) quality.push(contractsAvailable ? '帳戶依逐合約期貨價MTM，待券商核對' : '缺逐合約期貨價，權益保留最後核對值，不用指數代算');
     if (!allocationReady) quality.push('allocationStatus = valuation-unavailable；保留最後確認資料，不提供即時調整口數');
     if (!a.nextRollDate && a.positions.length) quality.push('尚未設定換倉日');
     if (a.positions.some(p => p.lots < 0)) quality.push('存在空單，與本策略多頭曝險規則不符');
-    const marketValid = market.closed === true && market.date === today && s.date === market.date;
+    const marketValid = market.closed === true && market.date === today && s.date === market.date && eodWindow.eligible;
     const labels = [];
     if (r.below500) labels.push('需補款');
     if (rollDue) labels.push('需換倉');
@@ -217,7 +221,10 @@
       equity, outside: a.outside, totalEquity: equity + a.outside, estimatedPnl,
       equitySource,
       initialMargin: a.initialMargin, maintenanceMargin: a.maintenanceMargin,
-      risk: r, decision: d, stress: stress(index, accountNow), labels, quality,
+      risk: r, riskReconciliation: G.reconcileBrokerRisk({calculated: {initialMargin: a.initialMargin, maintenanceMargin: a.maintenanceMargin, ratio: r.ratio},
+        broker: {initialMargin: a.brokerReportedInitialMargin, maintenanceMargin: a.brokerReportedMaintenanceMargin,
+          ratio: a.brokerReportedRatio, reportedAt: a.brokerReportedAt}, asOf: now}),
+      signalWindow, eodWindow, decision: d, stress: stress(index, accountNow), labels, quality,
       valuationValid: marketValid, performanceEligible: marketValid && confirmed && today >= START,
       nextRollDate: a.nextRollDate || null, monthCleanupDue: a.lastCleanupMonth !== today.slice(0, 7)};
   }

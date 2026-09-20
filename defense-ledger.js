@@ -112,7 +112,8 @@
     const futuresEquity = funding.decisionTimeFuturesEquity;
     const availableOutside = funding.transferableOutsideCash ?? funding.outsideCash;
     const requiredInternalTopUp = C.finite(futuresEquity) ? Math.max(0, best.required550Equity - futuresEquity) : null;
-    const executionReady = requiredInternalTopUp !== null && C.finite(availableOutside) && availableOutside >= requiredInternalTopUp;
+    const marginFresh = qs.every(q => q.margin?.fresh === true);
+    const executionReady = marginFresh && requiredInternalTopUp !== null && C.finite(availableOutside) && availableOutside >= requiredInternalTopUp;
     return {positions: best.counts.map((lots, i) => ({product: qs[i].product, month: targetMonth, lots})).filter(p => p.lots),
       notional: best.value, exposure: best.exposure, exposureError: best.error,
       strategyEquity, targetNotional: targetValue,
@@ -120,6 +121,7 @@
       requiredInitialMargin: best.initialMargin, requiredMaintenanceMargin: best.maintenanceMargin,
       required500Equity: 5 * best.initialMargin, required550Equity: best.required550Equity,
       requiredInternalTopUp, executionReady,
+      marginFresh,
       safeCandidateCount: safeCount, withinBandCandidateCount: withinBandCount,
       policy: 'v1.27：先550%安全過濾；再依絕對曝險誤差、不超標、總口數、TX→MTX→TMF固定順序排名。'};
   }
@@ -151,13 +153,17 @@
     const selectable = ['within-band', 'granularity-limited'].includes(best.allocationStatus);
     const forced = Boolean(day.roll || baseDecision.signalChanged || !currentSafe);
     const tradeRequired = selectable && !sameAsBest && (forced || baseDecision.insideBand === false);
-    const actionState = !selectable ? best.allocationStatus : tradeRequired ? 'rebalance-to-best-feasible'
+    const blocked = tradeRequired && !best.executionReady;
+    const actionState = !selectable ? best.allocationStatus : blocked ? 'execution-blocked'
+      : tradeRequired ? 'rebalance-to-best-feasible'
       : sameAsBest && best.allocationStatus === 'granularity-limited' ? 'best-feasible / granularity-limited / no-trade'
       : 'within-band / no-trade';
-    const decision = {...baseDecision, tradeRequired, rebalanceRequired: tradeRequired,
+    const decision = {...baseDecision, tradeRequired: blocked ? false : tradeRequired, rebalanceRequired: tradeRequired,
       allocationStatus: best.allocationStatus, sameAsBest, currentSafe, actionState,
       executionReady: best.executionReady, blockedReason: tradeRequired && !best.executionReady ? 'outside-cash-unavailable' : null};
-    const selection = tradeRequired ? best
+    const selection = blocked ? {...best, positions: previous.positions.map(p => ({product: p.product, month: p.month, lots: p.lots})),
+        policy: 'execution blocked: margin provenance or immediately transferable outside cash unavailable'}
+      : tradeRequired ? best
       : {positions: previous.positions.map(p => ({product: p.product, month: p.month, lots: p.lots})), exposure: currentExposure,
         exposureError: currentExposure - day.signal.target, strategyEquity: valuation.strategyEquity,
         targetNotional: valuation.strategyEquity * day.signal.target, allocationStatus: best.allocationStatus,
@@ -167,7 +173,6 @@
         executionReady: best.executionReady, safeCandidateCount: best.safeCandidateCount,
         withinBandCandidateCount: best.withinBandCandidateCount,
         policy: actionState};
-    if (tradeRequired && !best.executionReady) check(false, '場外可立即轉入資金不足，禁止建議下單');
     if (!day.roll) check(previous.positions.every(p => p.month === day.targetMonth), '合約月份改變必須明確指定換倉');
     const deltas = new Map(previous.positions.map(p => [key(p), {...p, lots: -p.lots}]));
     for (const p of selection.positions) deltas.set(key(p), {...p, lots: (deltas.get(key(p))?.lots || 0) + p.lots});

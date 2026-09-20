@@ -28,11 +28,15 @@
 
 換倉日期透過 `rollDate(year, month, tradingDays)` 計算第三個星期三前一個有效 TAIFEX 交易日；沒有交易日曆時 fail closed，不以單純日曆日猜測。
 
+Pre-Production fixture 另外覆蓋：13:29:59／13:30:00／13:44:59／13:45:00 邊界、ISO offset 等價時間、referenceAt 逆序、future-dated／過期 override、券商風險率未更新、一般月／前一日假日／連假／缺日曆，以及完整 signal→allocator→margin→executionReady→trade→MTM→ledger 流程。另有 granularity-limited no-trade 與 stale-margin execution block fixture。
+
 ## 驗證
 
-- Node tests：90/90 passed
+- Node tests：93/93 passed
 - Python tests：4/4 passed
 - Python compile check：passed
 - `git diff --check`：passed
+
+本輪沒有發現 fail-open：13:30 前不使用當日訊號；13:45 前不建立正式 EOD；stale／unknown margin 的 `executionReady` 為 false；券商風險率沒有當期 `reportedAt` 時為 `unavailable`；缺交易日曆時直接停止。未發現其他固定 capital 作為曝險分母的新增使用點。
 
 正式上線前仍需完成：可信 v1.26／v1.27 歷史比較、手機實機 UI、正式 cron schedule、使用者最終批准。

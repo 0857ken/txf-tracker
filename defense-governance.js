@@ -20,6 +20,22 @@
     const d = new Date(parsed(value, '時間') + 8 * 3600000);
     return d.getUTCHours() * 60 + d.getUTCMinutes() + d.getUTCSeconds() / 60;
   }
+  function signalEligibility(now, marketDate) {
+    isoDate(marketDate, '行情');
+    const localDate = twDate(now);
+    if (localDate > marketDate) return {eligible: true, phase: 'post-13:30'};
+    if (localDate < marketDate) return {eligible: false, phase: 'pre-market-date', reason: '行情尚未到交易日'};
+    const eligible = localMinutes(now) >= 13 * 60 + 30;
+    return {eligible, phase: eligible ? 'post-13:30' : 'pre-13:30', reason: eligible ? null : '尚未到台灣13:30'};
+  }
+  function eodEligibility(now, marketDate) {
+    isoDate(marketDate, '行情');
+    const localDate = twDate(now);
+    if (localDate > marketDate) return {eligible: true, phase: 'post-13:45'};
+    if (localDate < marketDate) return {eligible: false, phase: 'pre-market-date', reason: '行情尚未到交易日'};
+    const eligible = localMinutes(now) >= 13 * 60 + 45;
+    return {eligible, phase: eligible ? 'post-13:45' : 'pre-13:45', reason: eligible ? null : '尚未到台灣13:45'};
+  }
   function validateDecisionWindow({date, signalAt, valuationAt, referenceAt}) {
     isoDate(date, '交易');
     fail(twDate(signalAt) === date, '訊號確認時間必須屬於交易日');
@@ -53,17 +69,36 @@
     const ageDays = asOfMs && Number.isFinite(Date.parse(fetchedAt)) ? (asOfMs - Date.parse(fetchedAt)) / DAY : null;
     if (ageDays !== null && ageDays > maxAgeDays) reasons.push('stale-age');
     if (record?.stale === true) reasons.push('marked-stale');
+    const override = record?.brokerOverride;
+    if (override !== null && override !== undefined) {
+      if (!override || typeof override !== 'object' || !override.source || !override.effectiveDate || !override.fetchedAt ||
+        !Number.isFinite(Number(override.initial)) || !Number.isFinite(Number(override.maintenance))) reasons.push('invalid-brokerOverride');
+      else {
+        if (override.effectiveDate > new Date(asOfMs + 8 * 3600000).toISOString().slice(0, 10)) reasons.push('brokerOverride-effective-in-future');
+        if (asOfMs && Date.parse(override.fetchedAt) > asOfMs) reasons.push('brokerOverride-fetched-in-future');
+        if (asOfMs && Number.isFinite(Date.parse(override.fetchedAt)) && (asOfMs - Date.parse(override.fetchedAt)) / DAY > maxAgeDays) reasons.push('brokerOverride-stale-age');
+      }
+    }
     return {...record, source: source || null, ageDays, maxAgeDays,
       freshness: reasons.length ? 'stale' : 'fresh', fresh: reasons.length === 0, reasons};
   }
-  function reconcileBrokerRisk({calculated, broker, tolerance = 0.01}) {
+  function reconcileBrokerRisk({calculated, broker, asOf, tolerance = 0.01, maxAgeHours = 24}) {
     const fields = ['initialMargin', 'maintenanceMargin', 'ratio'];
     const differences = {};
+    const brokerReportedAt = broker?.reportedAt || null;
+    const brokerAgeHours = asOf && brokerReportedAt ? (parsed(asOf, '核對') - parsed(brokerReportedAt, '券商風險率')) / 3600000 : null;
+    const current = Number.isFinite(brokerAgeHours) && brokerAgeHours >= 0 && brokerAgeHours <= maxAgeHours;
+    if (!broker || !Number.isFinite(Number(broker.ratio)) || !brokerReportedAt || !current)
+      return {modelRatio: calculated?.ratio ?? null, brokerReportedRatio: Number.isFinite(Number(broker?.ratio)) ? Number(broker.ratio) : null,
+        brokerReportedAt, difference: null, reconciliationStatus: 'unavailable', brokerAgeHours,
+        tolerance, maxAgeHours, differences: {broker: 'missing-or-not-current'}};
     fields.forEach(field => {
       const a = Number(calculated?.[field]), b = Number(broker?.[field]);
       if (!Number.isFinite(a) || !Number.isFinite(b) || Math.abs(a - b) > tolerance) differences[field] = {calculated: a, broker: b};
     });
-    return {status: Object.keys(differences).length ? 'mismatch' : 'matched', tolerance, differences};
+    return {modelRatio: calculated?.ratio ?? null, brokerReportedRatio: Number(broker.ratio), brokerReportedAt,
+      difference: Number(broker.ratio) - Number(calculated?.ratio), reconciliationStatus: Object.keys(differences).length ? 'mismatch' : 'matched',
+      status: Object.keys(differences).length ? 'mismatch' : 'matched', brokerAgeHours, tolerance, maxAgeHours, differences};
   }
   function thirdWednesday(year, month) {
     const first = new Date(Date.UTC(year, month - 1, 1));
@@ -79,5 +114,5 @@
     }
     throw new Error('找不到第三個星期三前的TAIFEX有效交易日');
   }
-  return Object.freeze({validateDecisionWindow, validateMarginRecord, reconcileBrokerRisk, thirdWednesday, rollDate});
+  return Object.freeze({validateDecisionWindow, signalEligibility, eodEligibility, validateMarginRecord, reconcileBrokerRisk, thirdWednesday, rollDate});
 });
