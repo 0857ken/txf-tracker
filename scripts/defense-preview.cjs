@@ -7,12 +7,12 @@ const realistic = require('../tests/defense-realistic-fixture.cjs');
 const market = realistic.market();
 let html = read('defense.html');
 html = html.replace('<link rel="stylesheet" href="defense.css">', () => '<style>' + read('defense.css') + '</style>');
-html = html.replace(/  <script defer src="defense-(?:config|core|ledger|ledger-ui)\.js"><\/script>\n/g, '')
+html = html.replace(/  <script defer src="defense-(?:config|governance|core|ledger|ledger-ui)\.js"><\/script>\n/g, '')
   .replace(/  <script defer src="defense\.js"><\/script>\n/g, '');
 html = html.replace(/href="(index|stocks|assets|strategy|follow)\.html"/g, 'href="https://0857ken.github.io/txf-tracker/$1.html"');
 const script = code => '<script>\n' + code.replace(/<\/script/gi, '<\\/script') + '\n</script>\n';
 html = html.replace('</body>', () => script(read('defense-config.js').replace(/mode: '(preview|production)'/, "mode: 'preview'")) +
-  script(read('defense-core.js')) + script(read('defense-ledger.js')) + script(read('defense-ledger-ui.js')) +
+  script(read('defense-governance.js')) + script(read('defense-core.js')) + script(read('defense-ledger.js')) + script(read('defense-ledger-ui.js')) +
   script('window.DEFENSE_INLINE_DATA=' + JSON.stringify(market).replace(/</g, '\\u003c') + ';') +
   script('window.DEFENSE_REALISTIC_ACCOUNT=' + JSON.stringify(realistic.account()).replace(/</g, '\\u003c') + ';') +
   script('window.DEFENSE_ACCEPTANCE_EXAMPLE=' + JSON.stringify({...require('../tests/defense-ledger-fixtures.cjs').sample(),

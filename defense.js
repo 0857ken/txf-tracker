@@ -62,7 +62,8 @@
       indexAtEquity: market.index, initialMargin: 280400, maintenanceMargin: 215200,
       positions: [{product: 'MTX', month: '2026-10', lots: 1, mark: null},
         {product: 'TMF', month: '2026-10', lots: 3, mark: null}],
-      marginReference: {checkedOn: '2026-09-17', source: 'https://www.taifex.com.tw/cht/5/indexMarging'},
+      marginReference: {checkedOn: '2026-09-17', source: 'https://www.taifex.com.tw/cht/5/indexMarging',
+        effectiveDate: '2026-08-12', fetchedAt: '2026-09-17T08:00:00+08:00', initial: 280400, maintenance: 215200},
       nextRollDate: '2026-10-20', lastAppliedState: 'nonbear:2', lastCleanupMonth: market.date.slice(0, 7)};
   }
   function renderToday() {

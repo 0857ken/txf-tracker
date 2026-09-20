@@ -10,11 +10,15 @@ function margins(positions) { return positions.reduce((a, p) => ({initialMargin:
 function account(mixed = false) {
   const positions = mixed ? [{product: 'TX', month: '2026-10', lots: 1, mark: null}, {product: 'MTX', month: '2026-10', lots: 2, mark: null}, {product: 'TMF', month: '2026-10', lots: 3, mark: null}]
     : [{product: 'MTX', month: '2026-10', lots: 1, mark: null}, {product: 'TMF', month: '2026-10', lots: 3, mark: null}];
+  const totals = margins(positions);
   return {asof: '2026-09-16T13:45:00+08:00', equityDate: indexReference.date,
     equity: mixed ? 6000000 : 1450000, outside: mixed ? 1500000 : 550000,
-    indexAtEquity: indexReference.close, ...margins(positions), positions, revision: 1,
+    indexAtEquity: indexReference.close, ...totals, positions, revision: 1,
     lastAppliedState: 'nonbear:2', nextRollDate: '2026-10-20',
-    datasetKind: 'synthetic-realistic-acceptance', marginReference, indexReference};
+    datasetKind: 'synthetic-realistic-acceptance',
+    marginReference: {...marginReference, effectiveDate: marginReference.publishedUpdate,
+      fetchedAt: marginReference.checkedOn + 'T08:00:00+08:00', initial: totals.initialMargin,
+      maintenance: totals.maintenanceMargin}, indexReference};
 }
 function market() {
   const s = require('../data/strategy_data.json');
