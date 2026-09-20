@@ -79,7 +79,8 @@
         if (asOfMs && Number.isFinite(Date.parse(override.fetchedAt)) && (asOfMs - Date.parse(override.fetchedAt)) / DAY > maxAgeDays) reasons.push('brokerOverride-stale-age');
       }
     }
-    return {...record, source: source || null, ageDays, maxAgeDays,
+    const rejected = reasons.some(x => x.includes('future'));
+    return {...record, source: source || null, ageDays, maxAgeDays, rejected,
       freshness: reasons.length ? 'stale' : 'fresh', fresh: reasons.length === 0, reasons};
   }
   function reconcileBrokerRisk({calculated, broker, asOf, tolerance = 0.01, maxAgeHours = 24}) {

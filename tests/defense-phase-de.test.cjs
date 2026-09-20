@@ -46,6 +46,8 @@ test('Phase E margin provenance becomes fresh, stale, or unknown explicitly', ()
   const expiredOverride = G.validateMarginRecord({source: 'TAIFEX', effectiveDate: '2026-09-18', fetchedAt: '2026-09-21T08:00:00+08:00', initial: 100, maintenance: 75,
     brokerOverride: {source: 'Broker', effectiveDate: '2026-09-18', fetchedAt: '2026-09-01T08:00:00+08:00', initial: 110, maintenance: 80}}, '2026-09-21T13:45:00+08:00');
   assert.equal(expiredOverride.freshness, 'stale'); assert.ok(expiredOverride.reasons.includes('brokerOverride-stale-age'));
+  const future = G.validateMarginRecord({source: 'TAIFEX', effectiveDate: '2026-09-22', fetchedAt: '2026-09-21T08:00:00+08:00', initial: 100, maintenance: 75}, '2026-09-21T13:45:00+08:00');
+  assert.equal(future.rejected, true); assert.ok(future.reasons.includes('effective-in-future'));
 });
 
 test('Phase E broker risk reconciliation does not hide mismatch', () => {

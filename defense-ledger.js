@@ -49,6 +49,7 @@
       const value = {...q, product: C.product(q.product), month: month(q.month), source: source(q.source)};
       if (q.margin) value.margin = G.validateMarginRecord(q.margin, d.valuationAt);
       else value.margin = {freshness: 'unknown', fresh: false, reasons: ['missing-margin-provenance']};
+      if (value.margin.rejected) check(false, '保證金日期／抓取時間不可在未來');
       return value;
     });
     check(new Set(d.quotes.map(key)).size === d.quotes.length, '每日逐合約行情不可重複');
