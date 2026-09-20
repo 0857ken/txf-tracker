@@ -3,6 +3,9 @@
 Status: implementation and deterministic tests complete; historical comparison blocked by the
 preregistered signal-data integrity gate. No Phase D/E work was started.
 
+The later `v127-data-integrity-gate-addendum.md` supersedes only the raw adjusted-close hash portion
+of this record. The allocator protocol remains unchanged.
+
 ## Traceability
 
 - Branch: `feature/v127-margin-aware`
@@ -58,6 +61,20 @@ Phase A hash and even from each other. They were rejected and were not used for 
 Therefore terminal wealth, CAGR, MDD, Calmar, turnover, cost, historical exposure/risk statistics,
 product-use proportions, and different-holdings dates remain intentionally unreported. Producing
 them from either mismatched series would violate the preregistered gate.
+
+### Addendum rerun, 2026-09-20
+
+Two Yahoo adjusted-close responses with different raw hashes produced the identical canonical
+signal schedule SHA-256
+`f908973ecdb90eaacf8dccf257c3a5306f7d596a2f5942f851f6f85a3b632840`. Both contained 2,602 rows
+from 2016-01-04 through 2026-09-15, had zero Python/JavaScript mismatches, and had zero old-v1.26
+versus exact-rule target differences. This was diagnostic evidence only; raw prices were not added
+to the repository.
+
+The formal yfinance attempt remained blocked by HTTP 429. A subsequent isolated semantic-schedule
+run stopped before baseline reproduction because the unchanged TAIFEX margin parser received HTTP
+403 for an official margin CSV. Because the required 57-state/missing-2 gate could not be completed,
+neither v1.26 reproduction nor v1.27 performance was run.
 
 ## Isolated rerun path
 
