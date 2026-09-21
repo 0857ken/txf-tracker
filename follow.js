@@ -46,6 +46,27 @@
   function readFriends() {
     return [...$('friend-body').rows].map(row=>Object.fromEntries([...row.querySelectorAll('[data-key]')].map(input=>[input.dataset.key,input.value])));
   }
+  function parseQuickUpdate(text, items) {
+    const updates=[];
+    for(const [index,raw] of text.split(/\r?\n/).entries()) {
+      const line=raw.trim(); if(!line) continue;
+      const parts=line.split(/[\s,;，、\t]+/).filter(Boolean);
+      if(parts.length<3) throw new Error(`快速更新第 ${index+1} 行格式錯誤，請填：代號 股數 價格`);
+      const code=C.symbol(parts[0]);
+      const shares=C.number(parts[1],`第 ${index+1} 行股數`,0,true);
+      const price=C.number(parts[2],`第 ${index+1} 行價格`,0.000001);
+      if(updates.some(x=>x.symbol===code)) throw new Error(`快速更新重複代號：${code}`);
+      updates.push({symbol:code,shares,price});
+    }
+    if(!updates.length) throw new Error('請先貼上至少一行快速更新資料');
+    const next=items.map(row=>({...row}));
+    for(const update of updates) {
+      const row=next.find(x=>x.symbol===update.symbol);
+      if(row){row.shares=update.shares;row.price=update.price;}
+      else next.push({symbol:update.symbol,name:update.symbol,market:'TW',shares:update.shares,price:update.price});
+    }
+    return next;
+  }
   function renderOwn() {
     const codes=[...new Set([...(state.snapshot?.items || []).map(x=>x.symbol),...state.holdings.map(x=>x.symbol)])];
     $('own-body').innerHTML=codes.map(code=>{
@@ -143,6 +164,7 @@
   }));
   $('add-friend').addEventListener('click',handle(()=>{renderFriends([...readFriends(),{symbol:'',name:'',shares:0,price:'',market:'TW'}]);dirty=true;}));
   $('friend-body').addEventListener('click',e=>{if(e.target.hasAttribute('data-remove')){e.target.closest('tr').remove();dirty=true;}});
+  $('apply-quick').addEventListener('click',handle(()=>{renderFriends(parseQuickUpdate($('quick-update').value,readFriends()));$('snapshot-date').value=today();$('quick-update').value='';dirty=true;status('快速更新已套用到草稿。請核對表格後按「儲存庫存並產生調整清單」。');}));
   $('parse-csv').addEventListener('click',handle(()=>{const snap=C.parseCSV($('csv').value,$('snapshot-date').value);renderFriends(snap.items);dirty=true;status('CSV 已載入草稿，請核對後按「儲存庫存」。');}));
   $('save-snapshot').addEventListener('click',handle(async()=>{
     const snap=C.snapshot({date:$('snapshot-date').value,items:readFriends()});

@@ -28,6 +28,7 @@
 <div class="columns"><section class="card"><div class="section-head"><h2>朋友庫存更新</h2><label class="file-button">匯入 JSON<input id="import" type="file" accept=".json,application/json"></label></div>
 <p class="hint">首次請匯入提供的 9/11 庫存檔。之後可修改下表，或貼上完整 CSV。所有股票都要保留，低於門檻的股票也參與分母。朋友歷史成本未知。</p>
 <label>庫存日期<input id="snapshot-date" type="date" required></label>
+<details open><summary>手機快速更新（推薦）</summary><p class="hint">每行一檔：代號 股數 價格。可用空白、逗號或 Tab 分隔；只貼有變動的股票即可，例如：<br><code>2368 40000 1005</code><br><code>3715 450000 120</code></p><textarea id="quick-update" rows="4" aria-label="快速更新朋友庫存" placeholder="2368 40000 1005&#10;3715 450000 120"></textarea><div class="toolbar"><button id="apply-quick" type="button">套用快速更新</button></div><p class="hint">套用後會先放入下方表格草稿；請確認日期與內容，再按「儲存庫存並產生調整清單」。新代號會先以代號作名稱、上市作市場，請再核對。</p></details>
 <div class="table-wrap"><table><thead><tr><th>代號</th><th>名稱</th><th>市場</th><th>朋友股數</th><th>快照參考價</th><th></th></tr></thead><tbody id="friend-body"></tbody></table></div>
 <div class="toolbar"><button id="add-friend">＋新增股票</button><button id="save-snapshot" class="primary">儲存庫存並產生調整清單</button></div>
 <details><summary>貼上完整庫存 CSV</summary><p class="hint">每行：代號,名稱,TW或TWO,股數,參考價。數字不要加千分位。</p><textarea id="csv" rows="5" aria-label="完整庫存 CSV" placeholder="代號,名稱,市場,股數,參考價"></textarea><button id="parse-csv">載入草稿</button></details>
