@@ -136,7 +136,7 @@ def allocation(target, equity, d, expiry, prices, margins, point):
                 mm = sum(counts[p] * margins[p][1] for p in PRODUCTS)
                 if RESET * im > equity + 1e-9:
                     continue
-                notional = sum(counts[p] * point[p] * prices[(p, expiry, d)] for p in PRODUCTS)
+                notional = sum(counts[p] * point[p] * prices[(p, expiry, d)] for p in PRODUCTS if counts[p])
                 exposure = notional / equity
                 error = exposure - target
                 rank = (abs(error), int(exposure > target), sum(counts.values()), -tx, -mtx)
