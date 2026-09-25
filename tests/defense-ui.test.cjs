@@ -63,6 +63,11 @@ test('account and funding form flows recompute known 490→550 funding gap and c
   try {
     const f = d.getElementById('account-form');
     for (const [key, value] of Object.entries({equity: '490000', outside: '1000', initialMargin: '100000', maintenanceMargin: '75000'})) f.elements[key].value = value;
+    // This form test is about the funding calculation, so provide fresh synthetic
+    // provenance instead of inheriting the deliberately aging preview margin record.
+    f.elements.marginSource.value = 'synthetic-test-fixture';
+    f.elements.marginEffectiveDate.value = f.elements.equityDate.value;
+    f.elements.marginFetchedAt.value = f.elements.asof.value;
     f.dispatchEvent(new w.Event('submit', {bubbles: true, cancelable: true}));
     await until(() => w.DefenseUI.getSnapshot().risk.topUp === 60000);
     await until(() => !d.querySelector('#transfer-form button[type="submit"]').disabled);
