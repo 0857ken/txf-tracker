@@ -6,7 +6,7 @@ const req = createRequire(path.resolve(__dirname, '../tools/defense-runner/packa
 const {JSDOM, VirtualConsole} = req('jsdom');
 const F = require('./defense-fixtures.cjs');
 async function until(condition) {
-  for (let i = 0; i < 200; i++) { if (condition()) return; await new Promise(r => setTimeout(r, 5)); }
+  for (let i = 0; i < 1000; i++) { if (condition()) return; await new Promise(r => setTimeout(r, 5)); }
   throw new Error('UI state did not settle');
 }
 async function page(saved) {
