@@ -286,7 +286,7 @@ def holdings_differences(old, new, ns, events):
 
 def main():
     parser = argparse.ArgumentParser(); parser.add_argument("--baseline-root", required=True); parser.add_argument("--output", required=True)
-    args = parser.parse_args(); repo = Path(__file__).resolve().parents[1]; out = Path(args.output); out.mkdir(parents=True, exist_ok=True)
+    args = parser.parse_args(); repo = Path(__file__).resolve().parents[1]; out = Path(args.output).resolve(); out.mkdir(parents=True, exist_ok=True)
     phase_a = load_phase_a(repo); ns = phase_a.load_v126(Path(args.baseline_root).resolve())
     with contextlib.redirect_stdout(sys.stderr): px = fetch_futures_reliably(ns, Path("/tmp/phase-c-v127-futures-cache"))
     futures_gate = {"rows": len(px), "sha256": ns["data_hash"](px)}
