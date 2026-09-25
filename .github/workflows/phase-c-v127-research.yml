@@ -11,6 +11,7 @@ on:
       - 'scripts/phase-a-js-parity.cjs'
       - 'scripts/phase-c-v127-backtest.py'
       - 'tests/defense-phase-c.test.cjs'
+      - 'tests/**'
       - 'docs/v127-capital-margin-aware-protocol.md'
       - 'docs/v127-data-integrity-gate-addendum.md'
 
