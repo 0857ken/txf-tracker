@@ -160,7 +160,7 @@ def run_v127(ns, px, sig, events):
     point, comm, tax = ns["POINT"], ns["COMM"], ns["TAX"]
     price = {(r.product, r.expiry, r.date): float(r.close) for r in px.itertuples()}
     rolls = ns["roll_map"](px); expiries = sorted(rolls)
-    dates = sorted(set(px.loc[px.product == "TX", "date"]) &
+    dates = sorted(set(px.loc[px["product"] == "TX", "date"]) &
                    set(sig.loc[(sig.index >= ns["START"]) & (sig.index <= ns["END"])].index))
     fut_cash = ns["START_CAPITAL"]; external = 0.0; holdings = {}; prev_close = {}
     last_target = 2.0; prev_date = None; prev_month = None; first = True
