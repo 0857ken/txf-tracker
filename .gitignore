@@ -1,0 +1,6 @@
+node_modules/
+__pycache__/
+*.pyc
+test-results/
+firestore-debug.log
+firebase-debug.log
