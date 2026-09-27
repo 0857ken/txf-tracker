@@ -1,0 +1,29 @@
+<!doctype html>
+<html lang="zh-TW">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width,initial-scale=1">
+  <title>第四策略・隔離預覽</title>
+  <style>
+    body{margin:0;background:#0a0e1a;color:#e8edf5;font:16px/1.6 -apple-system,sans-serif}
+    main{max-width:700px;margin:auto;padding:24px 20px}
+    h1{font-size:25px}
+    a{display:block;color:#6fb3ff;background:#141925;border:1px solid #283143;border-radius:10px;padding:16px;margin:12px 0;text-decoration:none}
+    p{color:#9caabe}
+  </style>
+</head>
+<body>
+  <main>
+    <p>開發預覽・示範資料 · CANDIDATE V1 · ROUND 03</p>
+    <h1>第四策略・隔離顯示修正版</h1>
+    <p>全部為合成資料，不連接正式Firestore。固定示範時鐘；不同情境的操作紀錄各自保存在此瀏覽器。</p>
+    <a href="defense-preview-normal.html">正常 executionReady</a>
+    <a href="defense-preview-granularity-limited.html">最佳安全組合・不交易</a>
+    <a href="defense-preview-stale-margin.html">保證金過期・停止執行</a>
+    <a href="defense-preview-unknown-margin.html">保證金未知</a>
+    <a href="defense-preview-broker-mismatch.html">券商風險率不一致</a>
+    <a href="defense-preview-roll-reminder.html">換倉提醒</a>
+    <p>畫面已接上既有allocator與governance，核心規則未改。這是尚未合併的本地顯示修正版，不表示正式版已更新。</p>
+  </main>
+</body>
+</html>
