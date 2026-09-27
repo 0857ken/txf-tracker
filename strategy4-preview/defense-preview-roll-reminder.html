@@ -38,7 +38,13 @@
   .mobile-dock a{flex:1;justify-content:center;padding:8px 4px}
 }
 </style>
-<style>.preview-state-links{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:8px;margin:10px 0}.preview-state-links a{font-size:12px;padding:10px;border:1px solid #283143;border-radius:8px;overflow-wrap:anywhere;min-height:44px}.preview-state-links a[aria-current]{border-color:#6fb3ff;color:#e7c16b}@media(min-width:761px){.preview-state-links{display:grid!important}}</style></head>
+<style>.preview-state-links{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:8px;margin:10px 0}.preview-state-links a{font-size:12px;padding:10px;border:1px solid #283143;border-radius:8px;overflow-wrap:anywhere;min-height:44px}.preview-state-links a[aria-current]{border-color:#6fb3ff;color:#e7c16b}@media(min-width:761px){.preview-state-links{display:grid!important}}</style><style>
+.preview-state-banner{border:2px solid;border-radius:10px;padding:12px 14px;margin:0 0 12px;font:700 15px/1.5 var(--sans);overflow-wrap:anywhere}
+.preview-state-banner--normal{color:#60dcad;border-color:#60dcad;background:#60dcad12}
+.preview-state-banner--attention{color:#e7c16b;border-color:#e7c16b;background:#e7c16b17}
+.preview-state-banner--blocked{color:#ff8686;border-color:#ff8686;background:#ff86861a;box-shadow:0 0 0 2px #ff86861a}
+</style>
+</head>
 <body>
   <header class="site-header">
     <a href="index.html" class="brand">TXF TRACKER <span>投資秘書</span></a>
@@ -1822,5 +1828,6 @@ if (!localStorage.getItem("isolated-preview-wiring-v1-roll-reminder")) localStor
 })();
 
 </script>
+<script>(function(){const state={"label":"⚠ 需要換月｜請依建議重新配置合約","severity":"attention"};let observer;function apply(){const hero=document.querySelector('#today-content .hero');if(!hero||hero.querySelector('.preview-state-banner'))return false;const banner=document.createElement('div');banner.className='preview-state-banner preview-state-banner--'+state.severity;banner.setAttribute('role',state.severity==='blocked'?'alert':'status');banner.textContent=state.label;hero.insertBefore(banner,hero.firstChild);observer.disconnect();return true}observer=new MutationObserver(apply);const root=document.getElementById('today-content');if(root)observer.observe(root,{childList:true,subtree:true});apply()})();</script>
 </body>
 </html>
