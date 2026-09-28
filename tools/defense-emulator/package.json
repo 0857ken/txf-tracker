@@ -1,0 +1,7 @@
+{
+  "name": "txf-defense-emulator-tests",
+  "private": true,
+  "devDependencies": {
+    "firebase-tools": "15.30.1"
+  }
+}

@@ -1,0 +1,34 @@
+name: 第4策略第三輪真實Firestore驗收
+on:
+  push:
+    branches: ['feature/0050-defense-forward']
+    paths:
+      - 'tests/defense-live-acceptance.cjs'
+      - '.github/workflows/defense-live-acceptance.yml'
+permissions:
+  contents: read
+jobs:
+  live-acceptance:
+    if: github.repository == '0857ken/txf-tracker' && github.ref == 'refs/heads/feature/0050-defense-forward'
+    runs-on: ubuntu-latest
+    timeout-minutes: 6
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+      - name: Install SDK and verify formulas
+        run: |
+          npm ci --prefix tools/defense-runner --omit=dev --ignore-scripts --no-audit --no-fund
+          node --test tests/defense-round3.test.cjs tests/defense-snapshot.test.cjs
+      - name: Real Firestore isolated writes, replay, events and server write-failure audit
+        env:
+          FIREBASE_KEY: ${{ secrets.FIREBASE_KEY }}
+          DEFENSE_LIVE_ACCEPTANCE: round3-authorized
+        run: node tests/defense-live-acceptance.cjs
+      - uses: actions/upload-artifact@v4
+        with:
+          name: defense-live-round3
+          path: test-results/defense-live-round3.json
+          if-no-files-found: error
+          retention-days: 14
