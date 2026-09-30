@@ -1,8 +1,8 @@
 (function(root,factory){
   'use strict';
-  if(typeof module==='object'&&module.exports)module.exports=factory(require('./frozen/defense-core.js'),require('./frozen/defense-governance.js'),require('./frozen/defense-ledger.js'));
-  else root.OfflineManual=factory(root.DefenseCore,root.DefenseGovernance,root.DefenseLedger);
-})(globalThis,function(C,G,L){
+  if(typeof module==='object'&&module.exports)module.exports=factory(require('./frozen/defense-core.js'),require('./frozen/defense-governance.js'),require('./frozen/defense-ledger.js'),require('./market-data-adapter.js'));
+  else root.OfflineManual=factory(root.DefenseCore,root.DefenseGovernance,root.DefenseLedger,root.MarketDataAdapters);
+})(globalThis,function(C,G,L,A){
   'use strict';
   const KEY='strategy4.offline-manual.v1',PRODUCTS=['TX','MTX','TMF'];
   const DEFAULT_ACCOUNT={strategyEquity:1000000,decisionTimeFuturesEquity:300000,outsideCash:700000,startingPositions:[]};
@@ -126,6 +126,9 @@
     decision.readinessAtSubmission=readiness(decision,at,project(next));
     const event=await append(next,'decision',decision,at);return {state:next,decision:event,savedClose:closeEvent};
   }
+  async function submitThroughAdapter(state,raw,at,adapter=A.ManualMarketDataAdapter){
+    return A.run(adapter,raw,at,(_frame,frozenInput)=>submit(state,frozenInput,at));
+  }
   async function correctClose(state,{tradeDate,close,reason,expectedCloseId},at){
     const next=clone(state),old=activeCloses(next).get(tradeDate);check(old&&old.id===expectedCloseId,'REVISION_CONFLICT');
     check(tradeDate<=today(at)&&Number.isFinite(close)&&close>0&&typeof reason==='string'&&reason.trim().length>=2,'INVALID_CORRECTION');
@@ -150,5 +153,5 @@
     async restore(backup,current){check(backup?.kind==='offline-manual-backup'&&await hash(backup.state)===backup.hash,'INVALID_BACKUP');await verify(backup.state,this.catalog);
       check(current.events.length<=backup.state.events.length&&current.events.every((e,i)=>JSON.stringify(e)===JSON.stringify(backup.state.events[i])),'RESTORE_CONFLICT');await this.save(backup.state);return backup.state;}
   }
-  return {KEY,PRODUCTS,DEFAULT_ACCOUNT,hash,blank,verify,project,importPackage,submit,correctClose,saveAccount,revokeMargin,reconcile,readiness,quoteChecks,mergedHistory,activeCloses,Store,today,packageShape};
+  return {KEY,PRODUCTS,DEFAULT_ACCOUNT,hash,blank,verify,project,importPackage,submit,submitThroughAdapter,correctClose,saveAccount,revokeMargin,reconcile,readiness,quoteChecks,mergedHistory,activeCloses,Store,today,packageShape,adapters:A};
 });

@@ -3,7 +3,7 @@
 <meta http-equiv="Content-Security-Policy" content="default-src 'none'; script-src 'self'; style-src 'self'; connect-src 'none'; img-src 'none'; form-action 'none'; base-uri 'none'; object-src 'none'">
 <title>今日手動輸入 · 第四策略離線預覽</title><link rel="stylesheet" href="style.css"><link rel="stylesheet" href="health.css">
 <script defer src="frozen/defense-governance.js"></script><script defer src="frozen/defense-core.js"></script><script defer src="frozen/defense-ledger.js"></script>
-<script defer src="runtime.js"></script><script defer src="package-catalog.js"></script><script defer src="health.js"></script><script defer src="app.js"></script></head>
+<script defer src="market-data-adapter.js"></script><script defer src="runtime.js"></script><script defer src="package-catalog.js"></script><script defer src="health.js"></script><script defer src="app.js"></script></head>
 <body><main>
 <header><p class="eyebrow">第四策略 · 離線預覽</p><h1>今日手動輸入</h1><p>收盤 → 三商品報價 → 計算。資料僅存此瀏覽器，不下單。<a href="../">返回六種示範情境</a></p></header>
 <p id="system" class="notice" role="status">正在檢查本機資料…</p>
@@ -17,7 +17,7 @@
 <label id="correction-label" hidden>訂正原因（僅更改已保存的今日收盤時必填）<input name="correctionReason" maxlength="300" placeholder="例如：原先誤填參考價，已核對收盤"></label>
 <button id="calculate" type="submit">④ 計算今日策略</button><p id="message" role="status"></p>
 <p class="fine">資料來源：手動券商輸入。輸入時間由裝置自動記錄。</p></form>
-<section id="result-card" class="card"><h2>今日策略結果</h2><p id="ready" class="notice">尚未計算</p><div id="summary" class="summary"></div><p class="fine">「可以執行」僅代表本地資料檢查通過，不代表已下單、已補款或獲准正式上線。</p></section>
+<section id="result-card" class="card"><h2>今日策略結果</h2><p id="ready" class="notice">尚未計算</p><p id="advice-safety" class="advice-safety" role="alert" hidden>僅供參考｜目前資料未通過執行條件，請更新最新行情後重新計算。</p><div id="summary" class="summary"></div><p class="fine">「可以執行」僅代表本地資料檢查通過，不代表已下單、已補款或獲准正式上線。</p></section>
 <section class="card" id="data-health"><h2>離線資料健康狀態</h2><p id="margin-health" class="notice" role="status">保證金資料：尚未初始化</p><div id="health-dates"></div><p id="coverage"></p><p id="bootstrap-date"></p><p class="fine">離線模式無法自動偵測期交所臨時調整保證金；如已知官方有調整，須先更新資料包再執行。</p></section>
 <details class="card" id="management"><summary>資料管理</summary>
 <p>首次匯入初始化包即可開始累積人工收盤。不是每天都要匯入。只接受本版本核實過的資料包；檔案雜湊不等於官方數位簽章。</p>

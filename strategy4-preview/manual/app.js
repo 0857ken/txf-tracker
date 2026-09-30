@@ -29,9 +29,9 @@ function show(){
  if(!accountDirty)for(const k of ['strategyEquity','decisionTimeFuturesEquity','outsideCash'])$('account').elements[k].value=view.account[k];
  const d=view.latest?.payload;
  if(d){const r=O.readiness(d,now(),view),a=d.allocation,positions=a.positions.length?O.PRODUCTS.map(product=>names[product]+' '+(a.positions.find(p=>p.product===product)?.lots||0)+' 口').join('／'):'資料未齊';
- $('ready').className='notice '+(r.executionReady&&!dirty?'ready':'blocked');$('ready').textContent=dirty?'暫停執行｜輸入尚未保存，請重新計算':r.executionReady?'可以執行｜本地預覽，未下單':'暫停執行｜'+message(r.blockers[0]||'ALLOCATION_BLOCKED');
+ $('ready').className='notice '+(r.executionReady&&!dirty?'ready':'blocked');$('ready').textContent=dirty?'暫停執行｜輸入尚未保存，請重新計算':r.executionReady?'可以執行｜本地預覽，未下單':'暫停執行｜'+message(r.blockers[0]||'ALLOCATION_BLOCKED');$('advice-safety').hidden=Boolean(r.executionReady&&!dirty);
  cards([['今日目標曝險',num(d.signal.target)+' 倍'],['建議持倉',positions],['目前持倉','空手（本輪設定）'],['是否需要調整',a.positions.length?'需建立建議持倉':'暫不提供建議'],['需轉入期貨帳戶',a.requiredInternalTopUp==null?'—':'NT$ '+num(a.requiredInternalTopUp)],['500% 安全底線',a.required500Equity==null?'待核實':num(a.required500Equity)+' 元'+(d.account.decisionTimeFuturesEquity<a.required500Equity?'｜建倉前不足':'｜資金足夠')],['550% 目標資金',a.required550Equity==null?'待核實':num(a.required550Equity)+' 元'+(d.account.strategyEquity>=a.required550Equity?'｜總資金足夠':'｜總資金不足')]]);
- }else{$('ready').textContent='尚未計算，或必要歷史資料尚未齊備';$('ready').className='notice';cards([]);}
+ }else{$('ready').textContent='尚未計算，或必要歷史資料尚未齊備';$('ready').className='notice';$('advice-safety').hidden=true;cards([]);}
  $('technical').textContent=JSON.stringify({currentTime:now(),account:view.account,latestDecision:d||null,currentReadiness:d?O.readiness(d,now(),view):null,marginHealth:OfflineHealth.marginHealth(view,now()),audit:state.events},null,2);
  $('audit-history').replaceChildren();
  for(const e of [...state.events].reverse()){const item=document.createElement('li');item.textContent='第 '+e.sequence+' 筆｜'+({'package-import':'資料包匯入',close:e.payload.supersedesId?'收盤訂正':'收盤新增',decision:'策略計算',account:'帳戶設定','margin-revoked':'保證金停用',reconciliation:'盤後對帳'}[e.type]||'稽核紀錄')+'｜'+localTime(e.recordedAt);$('audit-history').append(item);}
@@ -45,7 +45,7 @@ async function transaction(action){
 }
 form.addEventListener('submit',e=>{e.preventDefault();transaction(async current=>{const f=form.elements,quotes=[];
  for(const p of O.PRODUCTS){if(['bid','ask','last','quoteAt'].some(k=>f[p+'_'+k].value)){let at=f[p+'_quoteAt'].value;if(at.length===16)at+=':00';quotes.push({product:p,contractMonth:f.contractMonth.value,session:'regular',bid:Number(f[p+'_bid'].value),ask:Number(f[p+'_ask'].value),last:Number(f[p+'_last'].value),quoteAt:at?at+'+08:00':''});}}
- const r=await O.submit(current,{tradeDate:f.tradeDate.value,close:Number(f.close.value),closeConfirmed:f.closeConfirmed.checked,contractMonth:f.contractMonth.value,quotes,expectedCloseId:closeId,correctionReason:f.correctionReason.value},now());
+ const result=await O.submitThroughAdapter(current,{tradeDate:f.tradeDate.value,close:Number(f.close.value),closeConfirmed:f.closeConfirmed.checked,contractMonth:f.contractMonth.value,quotes,expectedCloseId:closeId,correctionReason:f.correctionReason.value},now(),O.adapters.ManualMarketDataAdapter);const r=result.result||{state:current,blocked:result.code};
  pendingMessage=r.blocked?message(r.blocked):'已追加保存；原始紀錄與舊決策保留。';setTimeout(()=>$('result-card').scrollIntoView({block:'start',behavior:'smooth'}),50);return r.state;});});
 async function readFile(input){const file=input.files[0];if(!file)return null;if(file.size>8*1024*1024)throw new Error('FILE_TOO_LARGE');return JSON.parse(await file.text());}
 $('package-file').addEventListener('change',()=>transaction(async current=>{const p=await readFile($('package-file'));if(!p)return current;const next=p.kind==='eod'?await O.reconcile(current,p,store.catalog,now()):await O.importPackage(current,p,store.catalog,now());pendingMessage='資料包已核實匯入；原始抓取時間未變。';return next;}));
