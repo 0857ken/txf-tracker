@@ -1,0 +1,38 @@
+<!doctype html>
+<html lang="zh-Hant"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1">
+<meta http-equiv="Content-Security-Policy" content="default-src 'none'; script-src 'self'; style-src 'self'; connect-src 'none'; img-src 'none'; form-action 'none'; base-uri 'none'; object-src 'none'">
+<title>今日手動輸入 · 第四策略離線預覽</title><link rel="stylesheet" href="style.css"><link rel="stylesheet" href="health.css">
+<script defer src="frozen/defense-governance.js"></script><script defer src="frozen/defense-core.js"></script><script defer src="frozen/defense-ledger.js"></script>
+<script defer src="runtime.js"></script><script defer src="package-catalog.js"></script><script defer src="health.js"></script><script defer src="app.js"></script></head>
+<body><main>
+<header><p class="eyebrow">第四策略 · 離線預覽</p><h1>今日手動輸入</h1><p>收盤 → 三商品報價 → 計算。資料僅存此瀏覽器，不下單。<a href="../">返回六種示範情境</a></p></header>
+<p id="system" class="notice" role="status">正在檢查本機資料…</p>
+<form id="daily" class="card">
+<h2>① 0050 今日收盤</h2><div class="grid">
+<label>交易日期<input type="date" name="tradeDate" required></label>
+<label>0050 今日收盤價<input name="close" type="number" min="0.01" step="0.01" inputmode="decimal" required placeholder="請依券商收盤畫面填寫"></label></div>
+<label class="check"><input type="checkbox" name="closeConfirmed" required><span>已確認是今日正式收盤，不是參考價。</span></label>
+<h2>② 期貨合約月份</h2><label>共同合約月份<input name="contractMonth" type="text" pattern="[0-9]{6}" maxlength="6" inputmode="numeric" required placeholder="例如：202610"></label>
+<h2>③ 三商品報價</h2><p class="fine">各自填寫券商報價時間，不以填表時間代替。任何一項缺漏或超過 120 秒都會暫停執行。</p><div id="quotes"></div>
+<label id="correction-label" hidden>訂正原因（僅更改已保存的今日收盤時必填）<input name="correctionReason" maxlength="300" placeholder="例如：原先誤填參考價，已核對收盤"></label>
+<button id="calculate" type="submit">④ 計算今日策略</button><p id="message" role="status"></p>
+<p class="fine">資料來源：手動券商輸入。輸入時間由裝置自動記錄。</p></form>
+<section id="result-card" class="card"><h2>今日策略結果</h2><p id="ready" class="notice">尚未計算</p><div id="summary" class="summary"></div><p class="fine">「可以執行」僅代表本地資料檢查通過，不代表已下單、已補款或獲准正式上線。</p></section>
+<section class="card" id="data-health"><h2>離線資料健康狀態</h2><p id="margin-health" class="notice" role="status">保證金資料：尚未初始化</p><div id="health-dates"></div><p id="coverage"></p><p id="bootstrap-date"></p><p class="fine">離線模式無法自動偵測期交所臨時調整保證金；如已知官方有調整，須先更新資料包再執行。</p></section>
+<details class="card" id="management"><summary>資料管理</summary>
+<p>首次匯入初始化包即可開始累積人工收盤。不是每天都要匯入。只接受本版本核實過的資料包；檔案雜湊不等於官方數位簽章。</p>
+<p><a href="bootstrap-2026-09-30.json" download>下載本版本已核實初始化包</a></p>
+<label>初始化資料包匯入／更新資料包<input id="package-file" type="file" accept=".json,application/json"></label>
+<p id="package-status"></p><p class="fine">保證金由原始抓取時間起算 7 日。重新匯入不會延長。純離線無法自動得知臨時休市或新保證金公告。</p>
+<button id="revoke" type="button" class="secondary">已知官方調整：停用目前保證金</button>
+<label>停用原因<input id="revoke-reason" placeholder="請填官方調整或驗證失敗原因"></label>
+<h3>帳戶設定</h3><p class="fine">與行情分開保存。本輪仍以空手為起點；這不是實際成交或持倉追蹤器。</p>
+<form id="account"><div class="grid"><label>策略總資金<input name="strategyEquity" type="number" value="1000000" min="1" required></label><label>期貨帳戶資金<input name="decisionTimeFuturesEquity" type="number" value="300000" min="0" required></label><label>場外可用資金<input name="outsideCash" type="number" value="700000" min="0" required></label></div><p>目前期貨持倉：空手（0 口）</p><button type="submit" class="secondary">保存帳戶設定</button></form>
+<h3>訂正已保存收盤</h3><form id="correction"><label>交易日期<input name="day" type="date" required></label><label>正確收盤價<input name="value" type="number" step="0.01" min="0.01" required></label><label>訂正原因<input name="reason" required minlength="2" maxlength="300"></label><button type="submit" class="secondary">追加訂正版本</button></form>
+<h3>備份與還原</h3><p>資料僅在此裝置；清除網站資料後需還原。還原只接受相同紀錄前綴的完整備份，不覆寫較新或不同分支的紀錄。</p>
+<button id="export" type="button" class="secondary">匯出完整備份</button><label>匯入還原<input id="backup-file" type="file" accept=".json,application/json"></label>
+<details><summary>稽核歷程</summary><ol id="audit-history"></ol></details>
+<p id="manage-message" role="status"></p></details>
+<details class="card" id="technical-details"><summary>查看技術明細</summary><p>包含均線、合約配置、資料來源與各版本原始紀錄。原始決策不因訂正或盤後對帳被覆寫。</p><pre id="technical">尚無資料</pre></details>
+<footer>550% 為正常資金安全目標；500% 為日常安全底線／補款觸發線，不保證隔夜跳空不會瞬間低於 500%。歷史壓測曾見次日開盤約 418.87%。既定策略規則未修改。</footer>
+</main></body></html>

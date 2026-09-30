@@ -1,0 +1,25 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "title": "Offline Manual Bootstrap v1",
+  "type": "object",
+  "required": ["schemaVersion", "kind", "scope", "evidenceAsOf", "priceBasis", "history", "calendar", "contracts", "margins", "evidence", "limitations"],
+  "properties": {
+    "schemaVersion": {"const": 1},
+    "kind": {"const": "bootstrap"},
+    "scope": {"const": "isolated-preview"},
+    "evidenceAsOf": {"type": "string", "format": "date-time"},
+    "priceBasis": {"const": "TWSE-unadjusted-close"},
+    "history": {"type": "array", "minItems": 79, "items": {
+      "type": "object", "required": ["symbol", "tradeDate", "close", "source", "retrievedAt", "rawPayloadHash", "parserVersion"],
+      "properties": {"symbol": {"const": "0050"}, "tradeDate": {"type": "string", "format": "date"}, "close": {"type": "number", "exclusiveMinimum": 0}, "source": {"type": "string", "pattern": "^https://www\\.twse\\.com\\.tw/"}, "retrievedAt": {"type": "string", "format": "date-time"}, "rawPayloadHash": {"$ref": "#/$defs/hash"}, "parserVersion": {"type": "string"}}
+    }},
+    "calendar": {"type": "object", "required": ["from", "through", "signalDays", "futuresDays", "source", "retrievedAt", "rawPayloadHash", "exceptions"], "properties": {
+      "from": {"type": "string", "format": "date"}, "through": {"type": "string", "format": "date"},
+      "signalDays": {"$ref": "#/$defs/days"}, "futuresDays": {"$ref": "#/$defs/days"}, "source": {"type": "string", "format": "uri"}, "retrievedAt": {"type": "string", "format": "date-time"}, "rawPayloadHash": {"$ref": "#/$defs/hash"}, "exceptions": {"type": "array"}
+    }},
+    "contracts": {"type": "array", "minItems": 1, "items": {"type": "object", "required": ["from", "through", "month", "products", "rollDate", "basis"], "properties": {"from": {"type": "string", "format": "date"}, "through": {"type": "string", "format": "date"}, "month": {"type": "string", "pattern": "^[0-9]{4}(0[1-9]|1[0-2])$"}, "products": {"const": ["TX", "MTX", "TMF"]}, "rollDate": {"type": "string", "format": "date"}, "basis": {"type": "string", "minLength": 1}}}},
+    "margins": {"type": "array", "minItems": 3, "maxItems": 3, "items": {"type": "object", "required": ["product", "initial", "maintenance", "source", "effectiveDate", "fetchedAt", "retrievedAt", "rawPayloadHash"], "properties": {"product": {"enum": ["TX", "MTX", "TMF"]}, "initial": {"type": "number", "exclusiveMinimum": 0}, "maintenance": {"type": "number", "exclusiveMinimum": 0}, "source": {"type": "string", "pattern": "^https://www\\.taifex\\.com\\.tw/"}, "effectiveDate": {"type": "string", "format": "date"}, "fetchedAt": {"type": "string", "format": "date-time"}, "retrievedAt": {"type": "string", "format": "date-time"}, "rawPayloadHash": {"$ref": "#/$defs/hash"}}}},
+    "evidence": {"type": "array"}, "limitations": {"type": "array", "items": {"type": "string"}}
+  },
+  "$defs": {"hash": {"type": "string", "pattern": "^[a-f0-9]{64}$"}, "days": {"type": "array", "uniqueItems": true, "items": {"type": "string", "format": "date"}}}
+}

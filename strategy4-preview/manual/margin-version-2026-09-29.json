@@ -1,0 +1,50 @@
+{
+  "schemaVersion": 1,
+  "kind": "margin",
+  "scope": "isolated-preview",
+  "evidenceAsOf": "2026-09-29T16:19:28.178Z",
+  "margins": [
+    {
+      "schemaVersion": 1,
+      "kind": "margin",
+      "purpose": "margin-audit",
+      "product": "TX",
+      "initial": 701000,
+      "maintenance": 538000,
+      "effectiveDate": "2026-08-12",
+      "source": "https://www.taifex.com.tw/enl/eng5/indexMargining?menuid1=12",
+      "retrievedAt": "2026-09-29T10:26:46.429Z",
+      "rawPayloadHash": "6a7b38627aa5154c52733efedf4fec0c0ae563654236949a702b76b9bddfcadd",
+      "parserVersion": "ingestion-poc/1.0.0",
+      "fetchedAt": "2026-09-29T10:26:46.429Z"
+    },
+    {
+      "schemaVersion": 1,
+      "kind": "margin",
+      "purpose": "margin-audit",
+      "product": "MTX",
+      "initial": 175250,
+      "maintenance": 134500,
+      "effectiveDate": "2026-08-12",
+      "source": "https://www.taifex.com.tw/enl/eng5/indexMargining?menuid1=12",
+      "retrievedAt": "2026-09-29T10:26:46.429Z",
+      "rawPayloadHash": "6a7b38627aa5154c52733efedf4fec0c0ae563654236949a702b76b9bddfcadd",
+      "parserVersion": "ingestion-poc/1.0.0",
+      "fetchedAt": "2026-09-29T10:26:46.429Z"
+    },
+    {
+      "schemaVersion": 1,
+      "kind": "margin",
+      "purpose": "margin-audit",
+      "product": "TMF",
+      "initial": 35050,
+      "maintenance": 26900,
+      "effectiveDate": "2026-08-12",
+      "source": "https://www.taifex.com.tw/enl/eng5/indexMargining?menuid1=12",
+      "retrievedAt": "2026-09-29T10:26:46.429Z",
+      "rawPayloadHash": "6a7b38627aa5154c52733efedf4fec0c0ae563654236949a702b76b9bddfcadd",
+      "parserVersion": "ingestion-poc/1.0.0",
+      "fetchedAt": "2026-09-29T10:26:46.429Z"
+    }
+  ]
+}
