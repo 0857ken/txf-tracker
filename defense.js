@@ -109,30 +109,41 @@
     const refExposure = referenceExposure(x), s = C.signal(market.target);
     const refGap = C.finite(refExposure) && s.valid ? s.target - refExposure : null;
     const marginGuide = MG?.sameProduct(x, C.MULT), safeReady = marginGuide?.status === 'ready';
-    const safeAction = safeReady ? (marginGuide.deltaLots === 0 ? '0 口（目前已是550%安全最佳）' :
+    const theoreticalReady = marginGuide && C.finite(marginGuide.rawNearestLots);
+    const theoreticalTarget = theoreticalReady ? marginGuide.product + ' ' + marginGuide.rawNearestLots + ' 口' : '待期貨價格';
+    const theoreticalDelta = theoreticalReady ? (marginGuide.theoreticalDeltaLots === 0 ? '0 口' :
+      (marginGuide.theoreticalDeltaLots > 0 ? '+' : '') + marginGuide.theoreticalDeltaLots + ' 口') : '待期貨價格';
+    const safeAction = safeReady ? (marginGuide.deltaLots === 0 ? '0 口（依目前輸入保證金估算）' :
       (marginGuide.deltaLots > 0 ? '+' : '') + marginGuide.deltaLots + ' 口') : '待逐商品保證金';
     const parts = x.positions.map(p => keys([['商品／月份', p.product + ' · ' + p.month], ['持倉', p.lots + ' 口'],
       ['參考價', p.mark === null ? '缺少期貨價格' : fmt(p.mark, 2)]])).join('<div class="divider"></div>');
     $('positions-content').innerHTML = '<div class="card"><div class="metrics">' +
+      metric('理論目標口數', theoreticalTarget,
+        theoreticalReady ? '只由策略總權益 × 目標曝險 ÷ 單口名目值決定；不使用你輸入的保證金改寫目標' : '需先有單一商品與期貨參考價',
+        'gold') +
+      metric('理論尚差口數', theoreticalDelta,
+        theoreticalReady ? '目前持倉與理論目標的差額；尚未套用500%／550%安全門檻' : '待資料') +
       metric('名目目標差距', x.allocationStatus === 'ready' ? fmt(x.decision.gap, 3) + 'x' : C.finite(refGap) ? fmt(refGap, 3) + 'x*' : '—x',
-        '只代表曝險差距，不等於可直接增加的口數') +
-      metric('550%後可執行調整', safeAction,
-        safeReady ? '先過550%安全門檻，再看目標曝險' : '混合商品或資料不足時不推測配口',
+        '曝險倍數差距，與理論口數一致但不代表可直接成交') +
+      metric('依目前保證金可調整', safeAction,
+        safeReady ? '這一欄才使用你輸入的總保證金換算安全性；不會改寫理論目標口數' : '混合商品或保證金資料不足時不推測安全口數',
         safeReady && marginGuide.deltaLots === 0 ? 'green' : 'gold') +
       metric('±0.05x band', x.decision.insideBand === null ? '待確認' : x.decision.insideBand ? '範圍內' : '範圍外', '訊號改變／換倉仍須執行', x.decision.insideBand ? 'green' : 'gold') +
       metric('目標名目曝險', money(x.targetNotional), '動態總權益 × 目標倍數') + metric('淨名目曝險', money(x.notional)) +
       metric('決策總權益', money(x.strategyEquity), '期貨權益＋場外資金') + metric('估值狀態', x.allocationStatus === 'ready' ? '可計算' : 'valuation-unavailable', x.allocationStatus === 'ready' ? '動態權益資料完整' : '保留最後核對值，不產生調整建議', x.allocationStatus === 'ready' ? 'green' : 'gold') +
       '</div><div class="pill-values"><span>TX ' + x.lots.TX + ' 口</span><span>MTX ' + x.lots.MTX + ' 口</span><span>TMF ' + x.lots.TMF + ' 口</span></div>' +
-      (safeReady ? keys([['名目上最接近目標', marginGuide.product + ' ' + marginGuide.rawNearestLots + ' 口'],
-        ['同商品550%安全上限', marginGuide.product + ' ' + marginGuide.maxSafeLots + ' 口'],
-        ['550%安全最佳', marginGuide.product + ' ' + marginGuide.bestSafeLots + ' 口 · ' + fmt(marginGuide.bestSafeExposure, 3) + 'x'],
-        ['若增加到 ' + marginGuide.nextLots + ' 口', '總策略權益至少需 ' + money(marginGuide.nextRequired550)],
-        ['名目目標口數所需550%權益', money(marginGuide.rawNearestRequired550)]]) : '') +
+      (theoreticalReady ? keys([['理論目標（未套安全門檻）', marginGuide.product + ' ' + marginGuide.rawNearestLots + ' 口 · ' + fmt(marginGuide.theoreticalExposure, 3) + 'x'],
+        ['目前持倉', marginGuide.product + ' ' + marginGuide.currentLots + ' 口'],
+        ['理論差額', (marginGuide.theoreticalDeltaLots > 0 ? '+' : '') + marginGuide.theoreticalDeltaLots + ' 口']]) : '') +
+      (safeReady ? keys([['依目前輸入總保證金推估的550%安全上限', marginGuide.product + ' ' + marginGuide.maxSafeLots + ' 口'],
+        ['依目前輸入總保證金的安全最佳', marginGuide.product + ' ' + marginGuide.bestSafeLots + ' 口 · ' + fmt(marginGuide.bestSafeExposure, 3) + 'x'],
+        ['若增加到 ' + marginGuide.nextLots + ' 口', '按目前每口保證金推估，總策略權益至少需 ' + money(marginGuide.nextRequired550)],
+        ['理論目標口數所需550%權益', '按目前每口保證金推估 ' + money(marginGuide.rawNearestRequired550)]]) : '') +
       keys([['訊號是否尚待執行', x.decision.signalChanged ? (x.allocationStatus === 'ready' ? '是（band內也需核對調倉）' : '是（待估值完整後執行）') : '否'],
         ['下一次換倉日', x.nextRollDate || '尚未指定'], ['期貨帳戶核對時間', localTime(x.accountAsOf).replace('T', ' ')],
         ['權益來源', x.equitySource === 'broker_confirmed' ? '使用者券商核對值' : x.equitySource === 'futures_mtm' ? '逐合約期貨MTM估值' : '最後核對值（待更新）'],
         ['估值待核對原因', valuationIssue(x)]]) +
-      '<p class="meta">550%安全門檻優先於名目曝險差距。同商品配口只在單一多頭商品時，依你本次券商實際總保證金按目前口數換算；混合商品不推測。</p>' +
+      '<p class="meta">理論目標口數先由策略總權益與目標倍數計算；500%／550%只做第二層安全檢查，不改寫理論目標。安全欄位若採你輸入的總保證金換算，會明確標示為估算。</p>' +
       '<details><summary>逐筆合約</summary>' + (parts || '<p class="muted">目前無部位。</p>') + '</details></div>';
   }
   function renderFunding() {
