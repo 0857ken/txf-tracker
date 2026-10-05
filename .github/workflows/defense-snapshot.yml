@@ -1,0 +1,52 @@
+name: 第4策略正式 Forward 每日快照
+
+on:
+  schedule:
+    # 台灣平日 14:15 / 14:45 / 15:15 / 15:45 / 16:15 / 16:45
+    - cron: '15,45 6-8 * * 1-5'
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: strategy4-production-forward-snapshot
+  cancel-in-progress: false
+
+jobs:
+  snapshot:
+    if: github.repository == '0857ken/txf-tracker' && github.ref == 'refs/heads/main'
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      - name: Checkout production website code
+        uses: actions/checkout@v4
+        with:
+          ref: gh-pages
+          fetch-depth: 1
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+
+      - name: Production guard and frozen core check
+        run: |
+          node -e "const c=require('./defense-config.js'); if(c.mode!=='production') throw new Error('Strategy 4 not in production mode')"
+          echo '87a76f6c4fdc2ffea2d58887e451f7e5e5d0ac58a46026ddc1cea022eaacafd8  defense-core.js' | sha256sum -c -
+          echo '249a1c46e69ee05e7e8ef6497bf02ec052bfccc89ee58932e6fa1b4518095513  defense-governance.js' | sha256sum -c -
+          echo '3697671bc785b86830e33b1c26e401c3c699591f2e45795506fdba3dcd35b5a0  defense-ledger.js' | sha256sum -c -
+          node --check scripts/defense-snapshot.cjs
+          node --check scripts/defense-quotes.cjs
+
+      - name: Install isolated Firestore Admin SDK
+        run: npm ci --prefix tools/defense-runner --omit=dev --ignore-scripts --no-audit --no-fund
+
+      - name: Save formal Forward observation
+        env:
+          FIREBASE_KEY: ${{ secrets.FIREBASE_KEY }}
+          DEFENSE_ENABLE_WRITE: 'true'
+          DEFENSE_SCOPE: 'production'
+        run: node scripts/defense-snapshot.cjs --write
+
+      # Read-only public market data + private Firestore snapshot only.
+      # No broker order API, no broker position API, no repository write/push.
