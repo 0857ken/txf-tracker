@@ -25,12 +25,5 @@ jobs:
       - name: Variable defense LINE tests
         run: python -m unittest tests/test_line_summary_variable_defense.py
       - name: Preview current summary block
-        run: |
-          python - <<'PY'
-import importlib.util
-spec=importlib.util.spec_from_file_location("m","scripts/line_summary.py")
-m=importlib.util.module_from_spec(spec);spec.loader.exec_module(m)
-r=m.compute_variable_defense(m.load_json("data/strategy_data.json"),m.load_json("data/fubon_market_data.json"))
-print("\n".join(m.variable_defense_lines(r)))
-PY
+        run: python -c "import importlib.util; s=importlib.util.spec_from_file_location('m','scripts/line_summary.py'); m=importlib.util.module_from_spec(s); s.loader.exec_module(m); r=m.compute_variable_defense(m.load_json('data/strategy_data.json'),m.load_json('data/fubon_market_data.json')); print(chr(10).join(m.variable_defense_lines(r)))"
       - run: git diff --check HEAD~2 HEAD
