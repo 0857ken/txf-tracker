@@ -45,3 +45,52 @@ class VariableDefenseLineSummaryTest(unittest.TestCase):
 
 if __name__ == "__main__":
     unittest.main()
+
+
+class VariableDefenseLotStatusTest(unittest.TestCase):
+    def setUp(self):
+        self.signal = {"ready": True, "target": 2.0}
+
+    def test_100w_two_tmf_at_49949_targets_four_lots(self):
+        account = {
+            "equity": 450000,
+            "outside": 550000,
+            "positions": [{"product": "TMF", "lots": 2, "mark": 49949}],
+        }
+        r = M.defense_lot_status(self.signal, account)
+        self.assertTrue(r["ready"])
+        self.assertEqual(r["target_lots"], 4)
+        self.assertEqual(r["current_lots"], 2)
+        self.assertEqual(r["delta_lots"], 2)
+        self.assertFalse(r["same"])
+        lines = "\n".join(M.defense_lot_lines(r))
+        self.assertIn("策略口數:微台 4口｜目前:2口", lines)
+        self.assertIn("口數核對:⚠️ 少 2 口", lines)
+
+    def test_matching_lots_reports_same(self):
+        account = {
+            "equity": 450000,
+            "outside": 550000,
+            "positions": [{"product": "TMF", "lots": 4, "mark": 49949}],
+        }
+        r = M.defense_lot_status(self.signal, account)
+        self.assertTrue(r["same"])
+        self.assertIn("✅ 與策略相同", "\n".join(M.defense_lot_lines(r)))
+
+    def test_margin_values_do_not_change_theoretical_target_lots(self):
+        a = {
+            "equity": 450000,
+            "outside": 550000,
+            "initialMargin": 140200,
+            "maintenanceMargin": 107600,
+            "positions": [{"product": "TMF", "lots": 2, "mark": 49949}],
+        }
+        b = dict(a)
+        b["initialMargin"] = 999999
+        b["maintenanceMargin"] = 888888
+        self.assertEqual(
+            M.defense_lot_status(self.signal, a)["target_lots"],
+            M.defense_lot_status(self.signal, b)["target_lots"],
+        )
+
+
