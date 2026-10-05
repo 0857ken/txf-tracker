@@ -1,0 +1,28 @@
+name: Lock Strategy 4 Forward Owner
+
+on:
+  push:
+    branches:
+      - acceptance/strategy4-forward-owner-lock-2026-10-05
+
+permissions:
+  contents: read
+
+jobs:
+  lock-owner:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/checkout@v4
+        with:
+          ref: gh-pages
+          path: prod
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+      - name: Install isolated Firebase Admin SDK
+        run: npm ci --prefix prod/tools/defense-runner --omit=dev --ignore-scripts --no-audit --no-fund
+      - name: Lock unique formal Forward account as owner
+        env:
+          FIREBASE_KEY: ${{ secrets.FIREBASE_KEY }}
+        run: node tools/lock-strategy4-forward-owner.cjs
