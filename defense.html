@@ -20,9 +20,10 @@
     <nav aria-label="主選單"><a href="index.html">台指期</a><a href="stocks.html">資產總覽</a><a href="assets.html">200萬計畫</a><a href="strategy.html">三策略</a><a href="follow.html">跟單配置</a></nav>
   </header>
   <main>
-    <div class="release-bar"><span id="mode-label">開發預覽 · Fubon行情／示範帳戶</span><span class="mono">ROUND 03</span></div>
-    <div class="title-row"><div><div class="eyebrow">STRATEGY 04</div><h1>0050訊號 <span class="times">×</span><br class="mobile-break"> 台指期防守反攻</h1><p>收盤確認訊號，守住資金安全線。</p></div><button id="connect" class="secondary">連接測試資料</button></div>
-    <div id="notice" class="notice" role="status" aria-live="polite">0050收盤優先使用Fubon正式唯讀行情；帳戶仍為獨立示範資料，未連接正式持倉。</div>
+    <div class="release-bar"><span id="mode-label">正式 Forward 初始化中</span><span class="mono">PRODUCTION</span></div>
+    <div class="title-row"><div><div class="eyebrow">STRATEGY 04</div><h1>0050訊號 <span class="times">×</span><br class="mobile-break"> 台指期防守反攻</h1><p>收盤確認訊號，守住資金安全線。</p></div><button id="connect" class="secondary">重新連接</button></div>
+    <div id="notice" class="notice" role="status" aria-live="polite">正在連接正式 Forward 資料。</div>
+    <div id="forward-owner-row" class="notice" hidden><span>自動快照 ID：</span><code id="forward-owner-id"></code> <button id="copy-forward-id" class="text-button" type="button">複製 ID</button></div>
     <nav class="section-menu" aria-label="第4策略功能">
       <a href="#today">① 今日狀態</a><a href="#positions">② 持倉曝險</a><a href="#funding">③ 資金風控</a><a href="#stress">④ 下跌壓測</a>
       <a href="#execution">⑤ 交易滑價</a><a href="#forward">⑥ Forward</a><a href="#history">⑦ 風控歷史</a><a href="#review">⑧ 每月檢討</a>

@@ -154,12 +154,17 @@ async function main() {
   if (!key) throw new Error('CREDENTIAL_UNAVAILABLE');
   initializeApp({credential: cert(JSON.parse(key))});
   const db = getFirestore();
-  const root = 'users/me/' + (scope === 'production' ? 'defenseStrategies/' + config.strategyId : 'defensePreviews/' + config.previewId);
+  let root;
+  if (scope === 'production') {
+    const ownerUid = process.env.DEFENSE_OWNER_UID || '';
+    if (!/^[A-Za-z0-9_-]{8,128}$/.test(ownerUid)) throw new Error('OWNER_UID_UNAVAILABLE');
+    root = 'defenseUsers/' + ownerUid + '/strategies/' + config.strategyId;
+  } else root = 'users/me/defensePreviews/' + config.previewId;
   console.log(JSON.stringify(await runSnapshotJob({db, root, market: () => fetchMarket(now), now})));
 }
 if (require.main === module) main().catch(error => {
   const safe = ['SETUP_REQUIRED', 'ACCOUNT_CHANGED', 'LEDGER_CHANGED', 'NEWER_OBSERVATION_EXISTS', 'SNAPSHOT_FAILED',
-    'WRITE_DISABLED', 'PRODUCTION_GUARD', 'CREDENTIAL_UNAVAILABLE', 'DRY_RUN_REQUIRES_FIXTURE'].includes(error.message) ? error.message : 'DEFENSE_JOB_FAILED';
+    'WRITE_DISABLED', 'PRODUCTION_GUARD', 'CREDENTIAL_UNAVAILABLE', 'OWNER_UID_UNAVAILABLE', 'DRY_RUN_REQUIRES_FIXTURE'].includes(error.message) ? error.message : 'DEFENSE_JOB_FAILED';
   console.error(safe); process.exitCode = 1;
 });
 module.exports = {digest, planDaily, persistPlan, loadState, runSnapshotJob, recordJobFailure};
