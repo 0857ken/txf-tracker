@@ -1,0 +1,19 @@
+rules_version = '2';
+
+service cloud.firestore {
+  match /databases/{database}/documents {
+    // Legacy app scope is preserved unchanged so existing portfolio/stocks keep working.
+    match /users/me/{document=**} {
+      allow read, write: if request.auth != null;
+    }
+
+    // Strategy 4 formal Forward data is isolated by the Firebase authenticated UID.
+    match /defenseUsers/{userId}/{document=**} {
+      allow read, write: if request.auth != null && request.auth.uid == userId;
+    }
+
+    match /{document=**} {
+      allow read, write: if false;
+    }
+  }
+}
