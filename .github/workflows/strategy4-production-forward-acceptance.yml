@@ -27,6 +27,37 @@ jobs:
           node --check defense-market.js
           node --check scripts/defense-snapshot.cjs
           node --check scripts/defense-quotes.cjs
+      - name: Firestore production privacy probe from a fresh anonymous identity
+        shell: bash
+        run: |
+          set -euo pipefail
+          umask 077
+          trap 'rm -f /tmp/fb-auth.json' EXIT
+          api_key="$(python3 - <<'PY'
+import re
+s=open('firebase-init.js').read()
+m=re.search(r'apiKey:\s*"([^"]+)"',s)
+if not m: raise SystemExit('firebase api key not found')
+print(m.group(1))
+PY
+)"
+          curl -fsS -X POST \
+            "https://identitytoolkit.googleapis.com/v1/accounts:signUp?key=$api_key" \
+            -H 'Content-Type: application/json' \
+            --data '{"returnSecureToken":true}' > /tmp/fb-auth.json
+          unset api_key
+          token="$(python3 - <<'PY'
+import json
+print(json.load(open('/tmp/fb-auth.json'))['idToken'])
+PY
+)"
+          code="$(curl -sS -o /dev/null -w '%{http_code}' \
+            -H "Authorization: Bearer $token" \
+            'https://firestore.googleapis.com/v1/projects/txf-tracker/databases/(default)/documents/users/me/defenseStrategies/0050-defense-v1/state/account')"
+          unset token
+          echo "fresh_anonymous_production_read_http=$code"
+          test "$code" = "403"
+
       - name: Production Forward tests
         run: |
           node --test tests/defense-production-forward.test.cjs
