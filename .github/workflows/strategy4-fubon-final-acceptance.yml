@@ -1,0 +1,60 @@
+name: Strategy 4 Fubon Final Acceptance
+
+on:
+  push:
+    branches:
+      - acceptance/strategy4-fubon-final-2026-10-05
+
+permissions:
+  contents: read
+
+jobs:
+  isolated-clone-test:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Independent checkout
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - name: Setup Node
+        uses: actions/setup-node@v4
+        with:
+          node-version: '20'
+
+      - name: Setup Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: '3.12'
+
+      - name: Identity and clean checkout
+        run: |
+          echo "commit=$(git rev-parse HEAD)"
+          echo "branch=$(git branch --show-current)"
+          test -z "$(git status --porcelain)"
+
+      - name: Syntax checks
+        run: |
+          node --check defense-market.js
+          node --check defense-core.js
+          node --check defense-governance.js
+          node --check defense-ledger.js
+          node --check defense.js
+          python -m py_compile scripts/*.py
+
+      - name: Strategy 4 Fubon integration tests
+        run: node --test tests/defense-fubon-market.test.cjs
+
+      - name: Existing Node regression tests
+        run: node --test tests/follow-core.test.cjs tests/follow-data.test.cjs tests/offline-manual-preview.test.cjs tests/pluggable-market-adapter.test.cjs
+
+      - name: Existing Python regression test
+        run: python -m unittest tests/test_follow_quotes.py
+
+      - name: Diff whitespace check
+        run: git diff --check HEAD~2 HEAD
+
+      - name: Verify isolated acceptance branch
+        run: |
+          test "$(git branch --show-current)" = "acceptance/strategy4-fubon-final-2026-10-05"
+          echo "Final acceptance checkout stayed isolated."
