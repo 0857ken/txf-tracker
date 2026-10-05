@@ -189,6 +189,12 @@
   </div>
 
   <div class="card">
+    <div class="label">總資產淨值（含已實現 · 每日快照）</div>
+    <div id="snapshot-empty" style="height:220px;display:flex;align-items:center;justify-content:center;color:var(--muted);font-size:13px">尚無每日快照資料</div>
+    <div id="snapshot-chart-wrap" style="height:220px;display:none"><canvas id="snapshot-chart"></canvas></div>
+  </div>
+
+  <div class="card">
     <div class="label">已實現損益（累積曲線）</div>
     <div style="height:200px;margin-bottom:16px"><canvas id="realized-chart"></canvas></div>
     <table class="responsive">
@@ -710,6 +716,83 @@ async function loadRealized() {
   }
 }
 
+async function loadDailySnapshots() {
+  const emptyEl = document.getElementById('snapshot-empty');
+  const wrapEl = document.getElementById('snapshot-chart-wrap');
+
+  try {
+    const records = await window.fetchDailySnapshots();
+    const valid = records.filter(r => Number.isFinite(Number(r.net_worth)));
+
+    if (valid.length === 0) {
+      if (window.dailySnapshotChart) {
+        window.dailySnapshotChart.destroy();
+        window.dailySnapshotChart = null;
+      }
+      emptyEl.textContent = '尚無每日快照資料';
+      emptyEl.style.display = 'flex';
+      wrapEl.style.display = 'none';
+      return;
+    }
+
+    emptyEl.style.display = 'none';
+    wrapEl.style.display = 'block';
+
+    const labels = valid.map(r => r.date || r.id);
+    const values = valid.map(r => Number(r.net_worth));
+
+    const ctx = document.getElementById('snapshot-chart').getContext('2d');
+    if (window.dailySnapshotChart) window.dailySnapshotChart.destroy();
+
+    window.dailySnapshotChart = new Chart(ctx, {
+      type: 'line',
+      data: {
+        labels,
+        datasets: [{
+          label: '總資產淨值',
+          data: values,
+          borderColor: '#2196f3',
+          backgroundColor: 'rgba(33, 150, 243, 0.12)',
+          fill: true,
+          tension: 0.25,
+          pointRadius: valid.length > 60 ? 0 : 2,
+          pointHoverRadius: 4
+        }]
+      },
+      options: {
+        responsive: true,
+        maintainAspectRatio: false,
+        plugins: {
+          legend: { labels: { color: '#c8d8e8' } },
+          tooltip: {
+            callbacks: {
+              label: ctx => '淨值：' + Math.round(ctx.raw).toLocaleString() + ' 元'
+            }
+          }
+        },
+        scales: {
+          x: {
+            ticks: { autoSkip: true, maxRotation: 0, color: '#c8d8e8' },
+            grid: { color: '#2c4258' }
+          },
+          y: {
+            ticks: {
+              color: '#c8d8e8',
+              callback: value => Math.round(value).toLocaleString()
+            },
+            grid: { color: '#2c4258' }
+          }
+        }
+      }
+    });
+  } catch (e) {
+    console.error('Daily snapshots error:', e);
+    emptyEl.textContent = '每日快照載入失敗';
+    emptyEl.style.display = 'flex';
+    wrapEl.style.display = 'none';
+  }
+}
+
 async function editPosition(id, currentLots, currentPrice) {
   const dialog = document.getElementById('edit-dialog');
   const confirmBtn = document.getElementById('dialog-confirm');
@@ -892,10 +975,11 @@ async function deleteAsset(i) {
 }
 
 (function waitInit(){
-  if (window.fetchCustomAssets && window.fetchRealized && window.fetchStocks && window.fetchPositions) {
+  if (window.fetchCustomAssets && window.fetchRealized && window.fetchStocks && window.fetchPositions && window.fetchDailySnapshots) {
     loadCustomAssets();  // 內部會呼叫 calculateAssets
     loadNotifications();
     loadRealized();
+    loadDailySnapshots();
   } else {
     setTimeout(waitInit, 100);
   }
