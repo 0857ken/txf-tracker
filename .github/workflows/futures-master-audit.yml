@@ -30,6 +30,37 @@ jobs:
       - name: Syntax check shared futures module
         run: node --check positions.js
 
+      - name: Compile snapshot writer
+        run: python -m py_compile scripts/snapshot_assets.py
+
+      - name: Read-only snapshot dry run
+        env:
+          FIREBASE_KEY: ${{ secrets.FIREBASE_KEY }}
+        run: |
+          python - <<'PY'
+          import importlib.util, pathlib
+          p = pathlib.Path("scripts/snapshot_assets.py")
+          spec = importlib.util.spec_from_file_location("snapshot_assets", p)
+          m = importlib.util.module_from_spec(spec)
+          spec.loader.exec_module(m)
+
+          db = m.init_db()
+          market = m.load_json("data/market_data.json")
+          prices = m.load_json("data/stock_prices.json")
+          legacy = m.read_collection(db, "positions")
+          futures = m.load_futures_master(db, legacy)
+          stocks = m.read_collection(db, "stocks")
+          customs = m.read_collection(db, "customAssets")
+          realized = m.read_collection(db, "realizedPnl")
+          snap = m.build_snapshot(market, prices, futures, stocks, customs, realized, m.datetime.now(m.TW_TZ))
+
+          assert snap["futures_source"] == "0050-defense-formal"
+          assert snap["positions_count"] == len(futures["positions"])
+          assert snap["schema_version"] == 2
+          assert snap["leverage"] >= 0
+          print("SNAPSHOT_DRY_RUN_OK")
+          PY
+
       - name: Syntax check inline page scripts
         run: |
           python - <<'PY'
