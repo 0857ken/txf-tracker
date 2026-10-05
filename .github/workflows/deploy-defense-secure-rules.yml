@@ -1,0 +1,28 @@
+name: Deploy Strategy 4 Secure Firestore Rules
+
+on:
+  push:
+    branches:
+      - acceptance/firestore-defense-secure-rules-deploy-2026-10-05
+
+permissions:
+  contents: read
+
+jobs:
+  secure-rules:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/checkout@v4
+        with:
+          ref: feature/strategy4-production-forward-2026-10-05
+          path: prod
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+      - name: Install isolated Google/Firebase libraries
+        run: npm ci --prefix prod/tools/defense-runner --omit=dev --ignore-scripts --no-audit --no-fund
+      - name: Deploy guarded rules and verify isolation
+        env:
+          FIREBASE_KEY: ${{ secrets.FIREBASE_KEY }}
+        run: node tools/deploy-defense-secure-rules.cjs
