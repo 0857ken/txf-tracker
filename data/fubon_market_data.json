@@ -1,0 +1,48 @@
+{
+  "schema_version": 1,
+  "source": "Fubon Neo / Fugle Market Data",
+  "collected_at": "2026-10-05 14:40:24",
+  "quote": {
+    "date": "2026-10-05",
+    "type": "EQUITY",
+    "exchange": "TWSE",
+    "market": "TSE",
+    "symbol": "0050",
+    "name": "元大台灣50",
+    "referencePrice": 112.8,
+    "previousClose": 112.8,
+    "openPrice": 115.75,
+    "openTime": 1791162123862235,
+    "highPrice": 116.15,
+    "highTime": 1791162590495962,
+    "lowPrice": 115.25,
+    "lowTime": 1791163466892311,
+    "closePrice": 115.95,
+    "closeTime": 1791178200000000,
+    "avgPrice": 115.89,
+    "change": 3.15,
+    "changePercent": 2.79,
+    "amplitude": 0.8,
+    "lastPrice": 115.95,
+    "lastSize": 1371,
+    "isClose": true,
+    "lastUpdated": 1791178200000000,
+    "serial": 15562722,
+    "total": {
+      "tradeValue": 11277476300,
+      "tradeVolume": 97314,
+      "tradeVolumeAtBid": 31557,
+      "tradeVolumeAtAsk": 60207,
+      "transaction": 18169,
+      "time": 1791178200000000
+    },
+    "lastTrade": {
+      "bid": 115.9,
+      "ask": 115.95,
+      "price": 115.95,
+      "size": 1371,
+      "time": 1791178200000000,
+      "serial": 15562722
+    }
+  }
+}
