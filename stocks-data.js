@@ -107,3 +107,23 @@ window.fetchDailySnapshots = async function() {
     String(a.date || a.id).localeCompare(String(b.date || b.id))
   );
 };
+
+
+// ---- 股票 LINE 警戒狀態 ----
+function stockAlertStateCol() {
+  return collection(window.fbDb, 'users', 'me', 'stockAlertStates');
+}
+
+window.fetchStockAlertStates = async function() {
+  await window.fbReady;
+
+  const snap = await getDocs(stockAlertStateCol());
+  const list = [];
+
+  snap.forEach(d => list.push({
+    id: d.id,
+    ...d.data()
+  }));
+
+  return list;
+};
