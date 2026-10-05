@@ -50,8 +50,8 @@ function fubonTarget() {
   return {target, date:q.date, collectedAt:fubon.collected_at || null};
 }
 
-async function fetchMarket(now, fetcher = fetch) {
-  const live = fubonTarget();
+async function fetchMarket(now, fetcher = fetch, targetProvider = fubonTarget) {
+  const live = targetProvider();
   const benchmark = await yahoo('^TWII', now, fetcher);
   const b = benchmark.find(x => x.date === live.date);
   if (!b) throw new Error('Fubon 0050與加權指數缺少相同日期收盤');
