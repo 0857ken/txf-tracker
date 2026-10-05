@@ -92,5 +92,3 @@ class VariableDefenseLotStatusTest(unittest.TestCase):
             M.defense_lot_status(self.signal, a)["target_lots"],
             M.defense_lot_status(self.signal, b)["target_lots"],
         )
-
-
