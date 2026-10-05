@@ -65,3 +65,14 @@ test('accepted Frozen strategy engines remain byte-identical',()=>{
     assert.equal(actual,hash,name);
   }
 });
+
+
+test('formal strategy dashboard links Strategy 4 to the Fubon-integrated page while keeping account mode preview',()=>{
+  const html=fs.readFileSync(path.join(root,'strategy.html'),'utf8');
+  const config=fs.readFileSync(path.join(root,'defense-config.js'),'utf8');
+  assert.match(html,/href="defense\.html"/);
+  assert.doesNotMatch(html,/href="strategy4-preview\/index\.html"/);
+  assert.match(html,/Fubon 正式唯讀行情/);
+  assert.match(config,/mode:\s*'preview'/);
+  assert.doesNotMatch(config,/mode:\s*'production'/);
+});
