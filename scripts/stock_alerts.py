@@ -209,13 +209,23 @@ def main():
 
         zone = get_zone(price, alert_high, alert_low)
 
-        if thresholds_match(state, alert_high, alert_low):
-            prev_state = state.get("state") or "normal"
-        else:
-            # 門檻被修改時重新武裝，若目前已越界會立即通知一次。
-            prev_state = "normal"
+        has_prior_state = state_snap.exists
+        same_thresholds = thresholds_match(state, alert_high, alert_low)
+        prev_state = state.get("state") if has_prior_state else None
 
-        should_alert = zone in ("high", "low") and zone != prev_state
+        # B 模式：第一次啟用 / 從停用恢復 / 門檻修改時，
+        # 只建立目前 zone，不立即推送。之後真的跨入 high/low 才通知。
+        baseline_only = (
+            not has_prior_state
+            or not same_thresholds
+            or prev_state in (None, "disabled", "unconfigured")
+        )
+
+        should_alert = (
+            not baseline_only
+            and zone in ("high", "low")
+            and zone != prev_state
+        )
 
         update = {
             "symbol": symbol,
@@ -245,7 +255,8 @@ def main():
 
         print(
             f"{symbol}: price={price} zone={zone} "
-            f"prev={prev_state} alert={should_alert}"
+            f"prev={prev_state} baseline_only={baseline_only} "
+            f"alert={should_alert}"
         )
 
     if alerts:
