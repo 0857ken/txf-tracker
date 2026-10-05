@@ -40,6 +40,92 @@ def load_positions():
     return [d.to_dict() for d in docs]
 
 
+def load_json(path):
+    with open(path, encoding="utf-8") as f:
+        return json.load(f)
+
+
+def _mean(values):
+    return sum(values) / len(values) if values else None
+
+
+def compute_variable_defense(strategy, fubon):
+    """以正式 Fubon 0050 收盤套用 Frozen 第4策略規則，供每日 LINE 概要。"""
+    rows = [{"date": r["date"], "close": float(r["close"])} for r in strategy.get("target", [])]
+    quote = (fubon or {}).get("quote") or {}
+
+    valid_fubon = (
+        (fubon or {}).get("schema_version") == 1
+        and quote.get("symbol") == "0050"
+        and quote.get("isClose") is True
+        and isinstance(quote.get("date"), str)
+        and len(quote["date"]) == 10
+        and isinstance(quote.get("closePrice"), (int, float))
+        and quote["closePrice"] > 0
+    )
+    if not rows or not valid_fubon:
+        return {"ready": False, "reason": "Fubon 0050 收盤尚未確認"}
+
+    qdate, qclose = quote["date"], float(quote["closePrice"])
+    if qdate < rows[-1]["date"]:
+        return {"ready": False, "reason": "Fubon 0050 收盤資料落後"}
+
+    if qdate == rows[-1]["date"]:
+        rows[-1]["close"] = qclose
+    else:
+        rows.append({"date": qdate, "close": qclose})
+
+    if len(rows) < 80:
+        return {"ready": False, "reason": "0050 歷史資料不足 80 個交易日"}
+
+    closes = [r["close"] for r in rows]
+    ma10 = _mean(closes[-10:])
+    ma20 = _mean(closes[-20:])
+    ma60 = _mean(closes[-60:])
+    ma60_lag20 = _mean(closes[-80:-20])
+
+    bear = qclose < ma60 and ma60 < ma60_lag20
+    if not bear:
+        target = 2.0
+        state = "非確認空頭"
+    elif qclose >= ma20:
+        target = 1.5
+        state = "確認空頭"
+    elif qclose > ma10:
+        target = 1.0
+        state = "確認空頭"
+    else:
+        target = 0.5
+        state = "確認空頭"
+
+    return {
+        "ready": True,
+        "date": qdate,
+        "close": qclose,
+        "state": state,
+        "bear": bear,
+        "target": target,
+        "ma10": ma10,
+        "ma20": ma20,
+        "ma60": ma60,
+        "ma60_lag20": ma60_lag20,
+    }
+
+
+def variable_defense_lines(result):
+    lines = ["🛡️ 0050 變速防守"]
+    if not result.get("ready"):
+        lines.append("  ⚠️ " + result.get("reason", "資料尚未就緒"))
+        return lines
+    lines.append(f"  0050收盤:{result['close']:.2f}")
+    lines.append(f"  狀態:{result['state']}｜目標曝險:{result['target']:.1f}x")
+    lines.append(
+        f"  MA10 {result['ma10']:.2f}｜MA20 {result['ma20']:.2f}｜MA60 {result['ma60']:.2f}"
+    )
+    lines.append("  🔗 https://0857ken.github.io/txf-tracker/defense.html")
+    return lines
+
+
 def build_message(market, positions):
     m = market["market"]
     ma = market["ma_state"]
@@ -108,14 +194,23 @@ def main():
         positions = []
     msg = build_message(market, positions)
 
-    # 策略訊號:只在有觸發時附加
+    # 0050 變速防守:每日固定附上概要，不只在訊號變更時提醒。
+    try:
+        strat = load_json("data/strategy_data.json")
+        fubon = load_json("data/fubon_market_data.json")
+        defense = compute_variable_defense(strat, fubon)
+        msg += "\n\n" + "\n".join(variable_defense_lines(defense))
+    except Exception as e:
+        print("變速防守概要計算失敗:", e)
+        msg += "\n\n🛡️ 0050 變速防守\n  ⚠️ 概要暫時無法計算"
+
+    # 其他策略訊號:只在有觸發時附加
     if strategy_calc:
         try:
-            with open("data/strategy_data.json", encoding="utf-8") as sf:
-                strat = json.load(sf)
+            strat = strat if 'strat' in locals() else load_json("data/strategy_data.json")
             result = strategy_calc.compute_signals(strat)
             if result["signals"]:
-                msg += "\n\n📈 0050 策略訊號"
+                msg += "\n\n📈 0050 其他策略訊號"
                 msg += "\n現價 " + str(result["price"]) + " · RS " + str(round(result["rs"], 2))
                 for s in result["signals"]:
                     msg += "\n" + s
