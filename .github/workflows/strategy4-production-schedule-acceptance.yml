@@ -1,0 +1,42 @@
+name: Strategy 4 Production Schedule Acceptance
+
+on:
+  push:
+    branches:
+      - acceptance/strategy4-production-schedule-2026-10-05
+
+permissions:
+  contents: read
+
+jobs:
+  validate:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout schedule candidate
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+      - name: Verify schedule is read-only to repository and production-only
+        run: |
+          grep -q "ref: gh-pages" .github/workflows/defense-snapshot.yml
+          grep -q "DEFENSE_SCOPE: 'production'" .github/workflows/defense-snapshot.yml
+          grep -q "permissions:" .github/workflows/defense-snapshot.yml
+          grep -q "contents: read" .github/workflows/defense-snapshot.yml
+          ! grep -Eq "git push|placeOrder|submitOrder|brokerPositionsApi" .github/workflows/defense-snapshot.yml
+      - name: Checkout website production candidate
+        uses: actions/checkout@v4
+        with:
+          ref: feature/strategy4-production-forward-2026-10-05
+          clean: true
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+      - name: Validate production snapshot code
+        run: |
+          node -e "const c=require('./defense-config.js'); if(c.mode!=='production') throw new Error('not production')"
+          node --check scripts/defense-snapshot.cjs
+          node --check scripts/defense-quotes.cjs
+          node --test tests/defense-production-forward.test.cjs tests/defense-snapshot.test.cjs
+          mkdir -p test-results
+          node -e "const f=require('./tests/defense-fixtures.cjs');require('fs').writeFileSync('test-results/defense-dry-run.json',JSON.stringify({market:f.market(),account:f.account(),now:'2026-09-16T06:01:00Z'}))"
+          node scripts/defense-snapshot.cjs --fixture test-results/defense-dry-run.json
