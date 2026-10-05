@@ -1,0 +1,30 @@
+name: LINE Strategy 4 Lots Acceptance
+
+on:
+  push:
+    branches:
+      - acceptance/line-summary-strategy-lots-2026-10-06
+
+permissions:
+  contents: read
+
+jobs:
+  test:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.12'
+      - name: Install dependency
+        run: pip install firebase-admin
+      - name: Syntax
+        run: python -m py_compile scripts/line_summary.py scripts/strategy_calc.py
+      - name: Strategy 4 LINE tests
+        run: python -m unittest tests/test_line_summary_variable_defense.py
+      - name: Preview current lots comparison
+        run: |
+          python -c "import importlib.util; s=importlib.util.spec_from_file_location('m','scripts/line_summary.py'); m=importlib.util.module_from_spec(s); s.loader.exec_module(m); sig={'ready':True,'target':2.0}; a={'equity':450000,'outside':550000,'positions':[{'product':'TMF','lots':2,'mark':49949}]}; r=m.defense_lot_status(sig,a); print(chr(10).join(m.defense_lot_lines(r)))"
+      - run: git diff --check HEAD~2 HEAD
