@@ -52,9 +52,16 @@ test('new daily revision keeps prior immutable observation and cannot overwrite 
 test('Yahoo parser excludes unclosed current bar, aligns target/index, missing data fails', async () => {
   const body = {chart: {result: [{timestamp: [Date.parse('2026-09-15T01:00:00Z') / 1000, Date.parse('2026-09-16T01:00:00Z') / 1000],
     indicators: {quote: [{close: [100, 101], open: [99, 100], high: [101, 102], low: [99, 100], volume: [1000, 1000]}]}}]}};
-  const fetcher = async () => ({ok: true, json: async () => structuredClone(body)});
+  const fetcher = async url => {
+    if (String(url).includes('DailyMarketReportFut')) return {ok:false, status:503, json:async()=>[]};
+    return {ok: true, json: async () => structuredClone(body)};
+  };
   const early = await yahoo('0050.TW', '2026-09-16T04:00:00Z', fetcher); assert.equal(early.at(-1).date, '2026-09-15');
-  const m = await fetchMarket('2026-09-16T06:00:00Z', fetcher); assert.equal(m.date, '2026-09-16'); assert.equal(m.index, 101);
+  const targetProvider = () => ({date:'2026-09-16', collectedAt:null,
+    target:Array.from({length:80},(_,i)=>({date:'2026-09-16',close:100+i/100}))});
+  const m = await fetchMarket('2026-09-16T06:00:00Z', fetcher, targetProvider);
+  assert.equal(m.date, '2026-09-16'); assert.equal(m.index, 101);
+  assert.equal(m.futuresError, '逐合約期貨行情未取得，不用加權指數代替');
 });
 test('official futures parser selects exact day/month/day-session settlement and rejects duplicates', () => {
   const row = {Date: '20260916', Contract: 'MTX', 'ContractMonth(Week)': '202609', TradingSession: '一般', SettlementPrice: '20123', Last: '29999'};
