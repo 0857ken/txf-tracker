@@ -1,0 +1,22 @@
+name: Strategy 4 Margin Guidance Acceptance
+on:
+  push:
+    branches: [acceptance/strategy4-margin-constrained-guidance-2026-10-05]
+permissions:
+  contents: read
+jobs:
+  isolated:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+      - run: |
+          node --check defense-margin-guide.js
+          node --check defense.js
+          node --test tests/defense-margin-guidance.test.cjs
+          node --test tests/defense-fubon-market.test.cjs
+          node --test tests/defense-account-save.test.cjs
+          node --test tests/defense-valuation-guidance.test.cjs
+          git diff --check HEAD~2 HEAD
