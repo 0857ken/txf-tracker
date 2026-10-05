@@ -1,0 +1,31 @@
+name: Strategy 4 Owner-Pin Schedule Acceptance
+on:
+  push:
+    branches: [acceptance/strategy4-owner-pin-schedule-2026-10-05]
+permissions:
+  contents: read
+jobs:
+  validate:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - name: Verify schedule scope
+        run: |
+          grep -q "ref: gh-pages" .github/workflows/defense-snapshot.yml
+          grep -q "DEFENSE_SCOPE: 'production'" .github/workflows/defense-snapshot.yml
+          grep -q "contents: read" .github/workflows/defense-snapshot.yml
+          ! grep -q "DEFENSE_OWNER_UID" .github/workflows/defense-snapshot.yml
+          ! grep -Eq "git push|placeOrder|submitOrder|brokerPositionsApi" .github/workflows/defense-snapshot.yml
+      - uses: actions/checkout@v4
+        with:
+          ref: feature/strategy4-production-forward-2026-10-05
+          clean: true
+      - uses: actions/setup-node@v4
+        with: {node-version: '22'}
+      - name: Validate owner-pinned runner
+        run: |
+          node -e "const c=require('./defense-config.js'); if(c.mode!=='production') throw new Error('not production')"
+          node --check scripts/defense-snapshot.cjs
+          node --test tests/defense-production-forward.test.cjs tests/defense-snapshot.test.cjs
+          grep -q "strategy4System/owner" scripts/defense-snapshot.cjs
+          grep -q "defenseUsers/" scripts/defense-snapshot.cjs
