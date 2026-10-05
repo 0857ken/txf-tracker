@@ -41,7 +41,8 @@ async function main(){
      !candidate.includes('match /users/me/{document=**}')) throw new Error('CANDIDATE_RULE_GUARD');
 
   const auth=new GoogleAuth({credentials,scopes:['https://www.googleapis.com/auth/cloud-platform']});
-  const client=await auth.getClient(),headers=await client.getRequestHeaders();
+  const client=await auth.getClient(),rawHeaders=await client.getRequestHeaders();
+  const headers=typeof rawHeaders.entries==='function'?Object.fromEntries(rawHeaders.entries()):Object.fromEntries(Object.entries(rawHeaders));
   const rel=await api('https://firebaserules.googleapis.com/v1/projects/txf-tracker/releases/cloud.firestore',{headers});
   const oldRuleset=rel.rulesetName;
   const old=await api('https://firebaserules.googleapis.com/v1/'+oldRuleset,{headers});
