@@ -46,7 +46,10 @@ jobs:
           FIREBASE_KEY: ${{ secrets.FIREBASE_KEY }}
           DEFENSE_ENABLE_WRITE: 'true'
           DEFENSE_SCOPE: 'production'
-        run: node scripts/defense-snapshot.cjs --write
+          DEFENSE_OWNER_UID: ${{ vars.DEFENSE_OWNER_UID }}
+        run: |
+          test -n "$DEFENSE_OWNER_UID"
+          node scripts/defense-snapshot.cjs --write
 
       # Read-only public market data + private Firestore snapshot only.
       # No broker order API, no broker position API, no repository write/push.
