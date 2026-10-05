@@ -29,7 +29,10 @@
     if (busy) return;
     busy = true;
     document.querySelectorAll('button').forEach(b => { b.disabled = true; });
-    try { await action(); } catch (error) { notice(error.message || '操作失敗，請保留輸入重試', true); }
+    try { await action(); } catch (error) {
+      notice(error.message || '操作失敗，請保留輸入重試', true);
+      $('notice')?.scrollIntoView({behavior: 'smooth', block: 'center'});
+    }
     finally { busy = false; document.querySelectorAll('button').forEach(b => { b.disabled = false; }); }
   }
   function persistLocal(next) {
@@ -296,10 +299,17 @@
       const marginFetchedAt = f.elements.marginFetchedAt.value ? isoTime(f.elements.marginFetchedAt.value) : '';
       const brokerInitial = f.elements.brokerOverrideInitial.value.trim() ? n(f.elements.brokerOverrideInitial) : null;
       const brokerMaintenance = f.elements.brokerOverrideMaintenance.value.trim() ? n(f.elements.brokerOverrideMaintenance) : null;
+      if ((brokerInitial === null) !== (brokerMaintenance === null))
+        throw new Error('券商覆寫原始與維持保證金請一起填寫');
+      if (brokerInitial !== null && brokerInitial < brokerMaintenance)
+        throw new Error('券商覆寫原始保證金不得低於維持保證金');
       if (marginSource || marginEffectiveDate || marginFetchedAt || brokerInitial !== null || brokerMaintenance !== null) {
+        const brokerOverride = brokerInitial === null ? null : {
+          source: marginSource, effectiveDate: marginEffectiveDate, fetchedAt: marginFetchedAt,
+          initial: brokerInitial, maintenance: brokerMaintenance
+        };
         const mr = {source: marginSource, effectiveDate: marginEffectiveDate, fetchedAt: marginFetchedAt,
-          initial: a.initialMargin, maintenance: a.maintenanceMargin,
-          brokerOverride: brokerInitial === null && brokerMaintenance === null ? null : {initial: brokerInitial, maintenance: brokerMaintenance}};
+          initial: a.initialMargin, maintenance: a.maintenanceMargin, brokerOverride};
         const checked = window.DefenseGovernance.validateMarginRecord(mr, a.asof);
         if (!checked.fresh) throw new Error('保證金資料不可視為最新：' + checked.reasons.join('、'));
         a.marginReference = mr;
