@@ -30,14 +30,37 @@ def load_market():
         return json.load(f)
 
 
+def get_db():
+    """初始化 Firebase Admin；重複呼叫時沿用既有 app。"""
+    if not firebase_admin._apps:
+        key_json = os.environ["FIREBASE_KEY"]
+        cred = credentials.Certificate(json.loads(key_json))
+        firebase_admin.initialize_app(cred)
+    return firestore.client()
+
+
 def load_positions():
-    """用 Firebase Admin 讀 Firestore 部位。"""
-    key_json = os.environ["FIREBASE_KEY"]
-    cred = credentials.Certificate(json.loads(key_json))
-    firebase_admin.initialize_app(cred)
-    db = firestore.client()
+    """用 Firebase Admin 讀既有投資秘書部位。"""
+    db = get_db()
     docs = db.collection("users").document("me").collection("positions").stream()
     return [d.to_dict() for d in docs]
+
+
+def load_defense_account():
+    """讀正式第4策略 Forward 帳戶；只用手動核對資料，不讀券商庫存。"""
+    db = get_db()
+    owner = db.collection("strategy4System").document("owner").get()
+    if not owner.exists:
+        return None
+    uid = str((owner.to_dict() or {}).get("uid") or "")
+    if not uid:
+        return None
+    doc = (
+        db.collection("defenseUsers").document(uid)
+        .collection("strategies").document("0050-defense-v1")
+        .collection("state").document("account").get()
+    )
+    return doc.to_dict() if doc.exists else None
 
 
 def load_json(path):
@@ -126,6 +149,68 @@ def variable_defense_lines(result):
     return lines
 
 
+def defense_lot_status(result, account):
+    """比較正式 Forward 手動核對口數與理論策略口數。保證金不改寫理論目標。"""
+    if not result.get("ready"):
+        return {"ready": False, "reason": "策略訊號尚未確認"}
+    if not account:
+        return {"ready": False, "reason": "正式 Forward 帳戶尚未建立"}
+
+    equity = float(account.get("equity") or 0)
+    outside = float(account.get("outside") or 0)
+    total_equity = equity + outside
+    positions = [p for p in (account.get("positions") or []) if int(p.get("lots") or 0) != 0]
+    if total_equity <= 0:
+        return {"ready": False, "reason": "策略總權益無效"}
+    if len(positions) != 1:
+        return {"ready": False, "reason": "目前為混合商品，口數不可直接一對一比較"}
+
+    p = positions[0]
+    product = str(p.get("product") or "")
+    mult = {"TX": 200, "TXF": 200, "MTX": 50, "MXF": 50, "TMF": 10}.get(product)
+    mark = p.get("mark")
+    lots = int(p.get("lots") or 0)
+    if not mult or not isinstance(mark, (int, float)) or mark <= 0:
+        return {"ready": False, "reason": "缺少期貨參考價"}
+
+    target_notional = total_equity * float(result["target"])
+    per_lot_notional = float(mark) * mult
+    ideal_lots = target_notional / per_lot_notional
+    down = max(1, int(ideal_lots // 1))
+    up = max(1, down if ideal_lots == down else down + 1)
+    target_lots = down if abs(down * per_lot_notional - target_notional) <= abs(up * per_lot_notional - target_notional) else up
+    delta = target_lots - lots
+
+    return {
+        "ready": True,
+        "product": product,
+        "current_lots": lots,
+        "target_lots": target_lots,
+        "delta_lots": delta,
+        "same": delta == 0,
+        "strategy_equity": total_equity,
+        "mark": float(mark),
+    }
+
+
+def defense_lot_lines(status):
+    if not status.get("ready"):
+        return ["  口數核對:⚠️ " + status.get("reason", "無法比較")]
+    product_name = {"TX": "大台", "TXF": "大台", "MTX": "小台", "MXF": "小台", "TMF": "微台"}.get(
+        status["product"], status["product"]
+    )
+    if status["same"]:
+        verdict = "✅ 與策略相同"
+    elif status["delta_lots"] > 0:
+        verdict = f"⚠️ 少 {status['delta_lots']} 口"
+    else:
+        verdict = f"⚠️ 多 {abs(status['delta_lots'])} 口"
+    return [
+        f"  策略口數:{product_name} {status['target_lots']}口｜目前:{status['current_lots']}口",
+        f"  口數核對:{verdict}",
+    ]
+
+
 def build_message(market, positions):
     m = market["market"]
     ma = market["ma_state"]
@@ -199,7 +284,15 @@ def main():
         strat = load_json("data/strategy_data.json")
         fubon = load_json("data/fubon_market_data.json")
         defense = compute_variable_defense(strat, fubon)
-        msg += "\n\n" + "\n".join(variable_defense_lines(defense))
+        defense_lines = variable_defense_lines(defense)
+        try:
+            defense_account = load_defense_account()
+            lot_status = defense_lot_status(defense, defense_account)
+            defense_lines[3:3] = defense_lot_lines(lot_status)
+        except Exception as e:
+            print("變速防守口數核對失敗:", e)
+            defense_lines.insert(3, "  口數核對:⚠️ 暫時無法讀取正式 Forward 帳戶")
+        msg += "\n\n" + "\n".join(defense_lines)
     except Exception as e:
         print("變速防守概要計算失敗:", e)
         msg += "\n\n🛡️ 0050 變速防守\n  ⚠️ 概要暫時無法計算"
