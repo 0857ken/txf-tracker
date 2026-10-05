@@ -1,0 +1,49 @@
+name: Strategy 4 Production Forward Acceptance
+
+on:
+  push:
+    branches:
+      - acceptance/strategy4-production-forward-2026-10-05
+
+permissions:
+  contents: read
+
+jobs:
+  isolated:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+      - name: Syntax
+        run: |
+          node --check defense.js
+          node --check defense-core.js
+          node --check defense-governance.js
+          node --check defense-ledger.js
+          node --check defense-market.js
+          node --check scripts/defense-snapshot.cjs
+          node --check scripts/defense-quotes.cjs
+      - name: Production Forward tests
+        run: |
+          node --test tests/defense-production-forward.test.cjs
+          node --test tests/defense-snapshot.test.cjs
+          node --test tests/defense-fubon-market.test.cjs
+          node --test tests/defense-account-save.test.cjs
+          node --test tests/defense-valuation-guidance.test.cjs
+      - name: Existing regressions
+        run: node --test tests/follow-core.test.cjs tests/follow-data.test.cjs tests/offline-manual-preview.test.cjs tests/pluggable-market-adapter.test.cjs
+      - name: Dry-run snapshot
+        run: |
+          mkdir -p test-results
+          node -e "const f=require('./tests/defense-fixtures.cjs');require('fs').writeFileSync('test-results/defense-dry-run.json',JSON.stringify({market:f.market(),account:f.account(),now:'2026-09-16T06:01:00Z'}))"
+          node scripts/defense-snapshot.cjs --fixture test-results/defense-dry-run.json
+      - name: Frozen core hashes
+        run: |
+          echo '87a76f6c4fdc2ffea2d58887e451f7e5e5d0ac58a46026ddc1cea022eaacafd8  defense-core.js' | sha256sum -c -
+          echo '249a1c46e69ee05e7e8ef6497bf02ec052bfccc89ee58932e6fa1b4518095513  defense-governance.js' | sha256sum -c -
+          echo '3697671bc785b86830e33b1c26e401c3c699591f2e45795506fdba3dcd35b5a0  defense-ledger.js' | sha256sum -c -
+      - run: git diff --check HEAD~2 HEAD
