@@ -31,6 +31,12 @@ jobs:
           FIREBASE_KEY: ${{ secrets.FIREBASE_KEY }}
         run: python scripts/fetch_stocks.py
 
+      - name: 檢查股票 LINE 警戒
+        env:
+          LINE_TOKEN: ${{ secrets.LINE_TOKEN }}
+          FIREBASE_KEY: ${{ secrets.FIREBASE_KEY }}
+        run: python scripts/stock_alerts.py
+
       - name: Commit 更新的 JSON
         run: |
           git config user.name "github-actions[bot]"
