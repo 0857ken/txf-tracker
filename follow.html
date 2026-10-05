@@ -29,12 +29,16 @@
 <p class="hint">首次請匯入提供的 9/11 庫存檔。之後可修改下表，或貼上完整 CSV。所有股票都要保留，低於門檻的股票也參與分母。朋友歷史成本未知。</p>
 <label>庫存日期<input id="snapshot-date" type="date" required></label>
 <details open><summary>手機快速更新（推薦）</summary><p class="hint">每行一檔：代號 股數 價格。可用空白、逗號或 Tab 分隔；只貼有變動的股票即可，例如：<br><code>2368 40000 1005</code><br><code>3715 450000 120</code></p><textarea id="quick-update" rows="4" aria-label="快速更新朋友庫存" placeholder="2368 40000 1005&#10;3715 450000 120"></textarea><div class="toolbar"><button id="apply-quick" type="button">套用快速更新</button></div><p class="hint">套用後會先放入下方表格草稿；請確認日期與內容，再按「儲存庫存並產生調整清單」。新代號會先以代號作名稱、上市作市場，請再核對。</p></details>
+<div class="toolbar inventory-filter"><button id="friend-show-zero" type="button" aria-pressed="false" aria-controls="friend-body">顯示全部（含0股）</button><span id="friend-visibility" class="hint" role="status" aria-live="polite"></span></div>
+<p id="friend-empty" class="hint" hidden>目前沒有非零股庫存；可顯示全部或新增股票。</p>
 <div class="table-wrap"><table><thead><tr><th>代號</th><th>名稱</th><th>市場</th><th>朋友股數</th><th>快照參考價</th><th></th></tr></thead><tbody id="friend-body"></tbody></table></div>
 <div class="toolbar"><button id="add-friend">＋新增股票</button><button id="save-snapshot" class="primary">儲存庫存並產生調整清單</button></div>
 <details><summary>貼上完整庫存 CSV</summary><p class="hint">每行：代號,名稱,TW或TWO,股數,參考價。數字不要加千分位。</p><textarea id="csv" rows="5" aria-label="完整庫存 CSV" placeholder="代號,名稱,市場,股數,參考價"></textarea><button id="parse-csv">載入草稿</button></details>
 <details><summary>收到朋友買進／賣出通知</summary><form id="friend-trade" class="form-grid compact"><label>股票代號<input id="f-symbol" required maxlength="8"></label><label>方向<select id="f-side"><option value="buy">買進</option><option value="sell">賣出</option></select></label><label>股數<input id="f-shares" type="number" min="1" step="1" required></label><label>通知價格<input id="f-price" type="number" min="0.000001" step="any" required></label><button type="submit">套用到草稿</button></form><p class="hint">會增加／減少該檔總股數，更新該檔參考價；其餘股票價格保留。請核對日期與所有參考價，再儲存快照。這不能推算朋友舊部位的成本。</p></details></section>
 <section class="card"><h2>我的實際庫存</h2><p class="hint">此帳本獨立追蹤這筆跟單資金，不併入「200萬計畫」加總，避免重複計算。若已持有，請填股數；未知成本可留白。空手也請按儲存確認。</p>
 <label>目前可用現金（元）<input id="own-cash" type="number" min="0" step="any" value="100000"></label>
+<div class="toolbar inventory-filter"><button id="own-show-zero" type="button" aria-pressed="false" aria-controls="own-body">顯示全部（含0股）</button><span id="own-visibility" class="hint" role="status" aria-live="polite"></span></div>
+<p id="own-empty" class="hint" hidden>目前沒有非零股持股；可新增持股或記錄實際成交。</p>
 <div class="table-wrap"><table><thead><tr><th>代號</th><th>實際股數</th><th>均價含買入費用（可空白）</th></tr></thead><tbody id="own-body"></tbody></table></div>
 <div class="toolbar"><button id="add-own">＋新增我的持股</button><button id="save-own" class="primary">儲存並確認我的庫存</button></div>
 <details open><summary>記錄我的實際成交</summary><form id="trade-form" class="form-grid compact">

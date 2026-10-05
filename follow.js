@@ -6,6 +6,7 @@
   const esc=s=>String(s ?? '').replace(/[&<>"']/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));
   const today=()=>new Intl.DateTimeFormat('sv-SE',{timeZone:'Asia/Taipei'}).format(new Date());
   let state=C.initialState(), quotes={}, connected=false, busy=false, dirty=false;
+  const showZero={friend:false,own:false};
   const timeout=(promise,ms=18000)=>new Promise((resolve,reject)=>{
     const timer=setTimeout(()=>reject(new Error('連線逾時；尚未確認雲端結果。請重新載入核對後再操作')),ms);
     promise.then(value=>{clearTimeout(timer);resolve(value);},error=>{clearTimeout(timer);reject(error);});
@@ -34,14 +35,31 @@
   function fillSettings() {
     for(const [key,value] of Object.entries(state.settings)) $(key).value=value;
   }
+  function updateInventoryVisibility(kind) {
+    const rows=[...$(kind+'-body').rows];
+    let hiddenCount=0;
+    for(const row of rows) {
+      const value=row.querySelector('[data-key="shares"]').value.trim();
+      // Keep inputs in the DOM: saving, export and calculations must read every row.
+      // Blank/invalid drafts and explicitly added rows remain visible for editing.
+      row.hidden=!showZero[kind] && !row.hasAttribute('data-keep-visible') && value!=='' && Number(value)===0;
+      if(row.hidden) hiddenCount++;
+    }
+    const button=$(kind+'-show-zero');
+    button.textContent=showZero[kind]?'隱藏0股':'顯示全部（含0股）';
+    button.setAttribute('aria-pressed',String(showZero[kind]));
+    $(kind+'-visibility').textContent=`顯示 ${rows.length-hiddenCount} 檔，隱藏 ${hiddenCount} 檔0股；資料仍保留。`;
+    $(kind+'-empty').hidden=rows.length-hiddenCount>0;
+  }
   function renderFriends(items=state.snapshot?.items || []) {
-    $('friend-body').innerHTML=items.map(r=>`<tr>
+    $('friend-body').innerHTML=items.map(r=>`<tr${r.symbol?'':' data-keep-visible'}>
       <td><input data-key="symbol" aria-label="朋友股票代號" value="${esc(r.symbol)}" maxlength="8"></td>
       <td><input data-key="name" aria-label="股票名稱" value="${esc(r.name)}" maxlength="60"></td>
       <td><select data-key="market" aria-label="股票市場"><option value="TW" ${r.market==='TW'?'selected':''}>上市</option><option value="TWO" ${r.market==='TWO'?'selected':''}>上櫃</option></select></td>
       <td><input data-key="shares" aria-label="朋友持股股數" type="number" min="0" step="1" value="${esc(r.shares)}"></td>
       <td><input data-key="price" aria-label="快照參考價" type="number" min="0.000001" step="any" value="${esc(r.price)}"></td>
       <td><button data-remove type="button" aria-label="移除 ${esc(r.symbol)}">移除</button></td></tr>`).join('');
+    updateInventoryVisibility('friend');
   }
   function readFriends() {
     return [...$('friend-body').rows].map(row=>Object.fromEntries([...row.querySelectorAll('[data-key]')].map(input=>[input.dataset.key,input.value])));
@@ -75,6 +93,7 @@
     }).join('');
     $('own-cash').value=state.cash;
     $('symbols').innerHTML=codes.map(code=>`<option value="${esc(code)}"></option>`).join('');
+    updateInventoryVisibility('own');
   }
   function renderPlan() {
     const p=C.calculate(state,quotes);
@@ -163,7 +182,11 @@
     await persist(next,`規則更新：資金 ${money(next.settings.budget)}、門檻 >${next.settings.threshold}%、${next.settings.mode==='original'?'原占比留現金':'入選配滿'}`);
   }));
   $('add-friend').addEventListener('click',handle(()=>{renderFriends([...readFriends(),{symbol:'',name:'',shares:0,price:'',market:'TW'}]);dirty=true;}));
-  $('friend-body').addEventListener('click',e=>{if(e.target.hasAttribute('data-remove')){e.target.closest('tr').remove();dirty=true;}});
+  $('friend-body').addEventListener('click',e=>{if(e.target.hasAttribute('data-remove')){e.target.closest('tr').remove();updateInventoryVisibility('friend');dirty=true;}});
+  for(const kind of ['friend','own']) {
+    $(kind+'-show-zero').addEventListener('click',()=>{showZero[kind]=!showZero[kind];updateInventoryVisibility(kind);});
+    $(kind+'-body').addEventListener('change',e=>{if(e.target.matches('[data-key="shares"]'))updateInventoryVisibility(kind);});
+  }
   $('apply-quick').addEventListener('click',handle(()=>{renderFriends(parseQuickUpdate($('quick-update').value,readFriends()));$('snapshot-date').value=today();$('quick-update').value='';dirty=true;status('快速更新已套用到草稿。請核對表格後按「儲存庫存並產生調整清單」。');}));
   $('parse-csv').addEventListener('click',handle(()=>{const snap=C.parseCSV($('csv').value,$('snapshot-date').value);renderFriends(snap.items);dirty=true;status('CSV 已載入草稿，請核對後按「儲存庫存」。');}));
   $('save-snapshot').addEventListener('click',handle(async()=>{
@@ -176,7 +199,7 @@
     const changes=codes.map(code=>{const delta=(snap.items.find(r=>r.symbol===code)?.shares||0)-(previous.find(r=>r.symbol===code)?.shares||0);return delta?code+' '+(delta>0?'+':'')+delta+'股':null;}).filter(Boolean);
     next.snapshot=snap;next.snapshots.unshift({at:new Date().toISOString(),snapshot:snap});next.snapshots=next.snapshots.slice(0,50);
     await persist(next,'朋友庫存 '+snap.date+'：'+(changes.join('、') || '股數不變，更新參考價'));
-    renderOwn();
+    renderFriends();renderOwn();
   }));
   $('friend-trade').addEventListener('submit',handle(()=>{
     const code=C.symbol($('f-symbol').value),qty=C.number($('f-shares').value,'通知股數',1,true),price=C.number($('f-price').value,'通知價格',0.000001);
@@ -196,12 +219,19 @@
     }));next.holdingsConfirmed=true;
     if(state.holdingsConfirmed && !confirm('以這次盤點校正實際股數與現金？歷史成交紀錄會保留。'))return;
     await persist(next,'我的庫存盤點確認；可用現金 '+money(next.cash)+' 元');
+    renderOwn();
   }));
   $('add-own').addEventListener('click',handle(()=>{
     const entered=prompt('要加入跟單帳本的股票代號：');if(entered===null)return;
     const code=C.symbol(entered);
-    if([...$('own-body').rows].some(r=>r.dataset.symbol===code))throw new Error('此股票已在庫存表中');
-    $('own-body').insertAdjacentHTML('beforeend',`<tr data-symbol="${esc(code)}"><td>${esc(code)}</td><td><input data-key="shares" aria-label="${esc(code)}實際股數" type="number" min="0" step="1" value="0"></td><td><input data-key="avgCost" aria-label="${esc(code)}平均成本" type="number" min="0.000001" step="any" placeholder="未知"></td></tr>`);
+    const existing=[...$('own-body').rows].find(r=>r.dataset.symbol===code);
+    if(existing){
+      existing.setAttribute('data-keep-visible','');updateInventoryVisibility('own');
+      existing.querySelector('[data-key="shares"]').focus();
+      status('已顯示 '+code+' 的庫存欄位，請填股數與成本後儲存。');return;
+    }
+    $('own-body').insertAdjacentHTML('beforeend',`<tr data-symbol="${esc(code)}" data-keep-visible><td>${esc(code)}</td><td><input data-key="shares" aria-label="${esc(code)}實際股數" type="number" min="0" step="1" value="0"></td><td><input data-key="avgCost" aria-label="${esc(code)}平均成本" type="number" min="0.000001" step="any" placeholder="未知"></td></tr>`);
+    updateInventoryVisibility('own');$('own-body').lastElementChild.querySelector('[data-key="shares"]').focus();
     dirty=true;
   }));
   $('trade-form').addEventListener('submit',handle(async()=>{
