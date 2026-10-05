@@ -1,0 +1,41 @@
+name: Strategy 4 Forward Schedule Final Acceptance
+
+on:
+  push:
+    branches:
+      - acceptance/strategy4-forward-schedule-final-2026-10-05
+
+permissions:
+  contents: read
+
+jobs:
+  validate:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+      - name: Validate schedule workflow safety
+        run: |
+          grep -q "ref: gh-pages" .github/workflows/defense-snapshot.yml
+          grep -q "DEFENSE_SCOPE: 'production'" .github/workflows/defense-snapshot.yml
+          grep -q "contents: read" .github/workflows/defense-snapshot.yml
+          ! grep -Eq "git push|placeOrder|submitOrder|brokerPositionsApi|DEFENSE_OWNER_UID" .github/workflows/defense-snapshot.yml
+          grep -q "scripts/defense-snapshot.cjs --write" .github/workflows/defense-snapshot.yml
+      - uses: actions/checkout@v4
+        with:
+          ref: gh-pages
+          clean: true
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+      - name: Validate current production runner
+        run: |
+          node -e "const c=require('./defense-config.js'); if(c.mode!=='production') throw new Error('not production')"
+          node --check scripts/defense-snapshot.cjs
+          node --check scripts/defense-quotes.cjs
+          grep -q "strategy4System/owner" scripts/defense-snapshot.cjs
+          grep -q "defenseUsers/" scripts/defense-snapshot.cjs
+          echo '87a76f6c4fdc2ffea2d58887e451f7e5e5d0ac58a46026ddc1cea022eaacafd8  defense-core.js' | sha256sum -c -
+          echo '249a1c46e69ee05e7e8ef6497bf02ec052bfccc89ee58932e6fa1b4518095513  defense-governance.js' | sha256sum -c -
+          echo '3697671bc785b86830e33b1c26e401c3c699591f2e45795506fdba3dcd35b5a0  defense-ledger.js' | sha256sum -c -
