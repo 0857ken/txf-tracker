@@ -162,32 +162,44 @@ async function deleteCustomAsset(id) {
 
 async function loadStocks() {
   try {
-    const [stocks, customs, prices, market] = await Promise.all([
+    const [stocks, customs, prices, futuresMaster] = await Promise.all([
       window.fetchStocks(),
       window.fetchCustomAssets(),
       window.fetchStockPrices(),
-      window.fetchMarketData()
+      window.fetchFuturesMaster()
     ]);
 
     let totalValue = 0;
 
-    // 台指期列(讀 Firestore 部位 + market_data.json)
+    // 台指期列：只讀 0050 變速防守正式主帳。
     let txfRows = '';
-    if (market && market.market) {
-      const curPrice = market.market.current_price;
-      let positions = [];
-      try { positions = await window.fetchPositions(); } catch (e) {}
-      positions.forEach(p => {
-        const mult = TXF_MULT[p.type] || 10;
-        const cost = p.entry_price * mult * p.lots;
-        const value = curPrice * mult * p.lots;
-        const pnl = Math.round((curPrice - p.entry_price) * mult * p.lots);
-        const pnlPct = cost ? ((pnl / cost) * 100).toFixed(2) : '0';
-        const color = pnl >= 0 ? 'red' : 'green';
-        totalValue += value;
-        txfRows += '<tr style="opacity:0.85"><td>' + p.type + '</td><td>台指期</td><td>' + p.lots + ' 口</td><td>' + p.entry_price.toLocaleString() + '</td><td>' + curPrice.toLocaleString() + '</td><td class="' + color + '">' + (pnl >= 0 ? '+' : '') + pnl.toLocaleString() + ' (' + pnlPct + '%)</td><td>—</td><td>—</td><td>—</td></tr>';
-      });
-    }
+    const positions = futuresMaster.positions || [];
+    positions.forEach(p => {
+      const mult = TXF_MULT[p.type] || 10;
+      const curPrice = Number(p.current_price);
+      const entry = Number(p.entry_price);
+      const hasPrice = Number.isFinite(curPrice) && curPrice > 0;
+      const hasCost = p.cost_valid && Number.isFinite(entry) && entry > 0;
+      const value = hasPrice ? curPrice * mult * p.lots : 0;
+      if (hasPrice) totalValue += value;
+
+      const pnl = hasPrice && hasCost ? Math.round((curPrice - entry) * mult * p.lots) : null;
+      const costNotional = hasCost ? entry * mult * p.lots : null;
+      const pnlPct = pnl !== null && costNotional ? ((pnl / costNotional) * 100).toFixed(2) : null;
+      const color = pnl === null ? '' : (pnl >= 0 ? 'red' : 'green');
+      const pnlText = pnl === null ? '待成本核對' : (pnl >= 0 ? '+' : '') + pnl.toLocaleString() + ' (' + pnlPct + '%)';
+
+      txfRows += '<tr style="opacity:0.85">' +
+        '<td>' + p.type + '</td>' +
+        '<td>台指期 ' + (p.month || '') + '</td>' +
+        '<td>' + p.lots + ' 口</td>' +
+        '<td>' + (hasCost ? entry.toLocaleString() : '—') + '</td>' +
+        '<td>' + (hasPrice ? curPrice.toLocaleString() : '—') + '</td>' +
+        '<td class="' + color + '">' + pnlText + '</td>' +
+        '<td>—</td><td>—</td>' +
+        '<td><a href="defense.html#positions" style="color:var(--blue);text-decoration:none">正式主帳 ↗</a></td>' +
+        '</tr>';
+    });
 
     // 自訂資產列
     let customRows = '';
@@ -390,7 +402,7 @@ function changeRange(range) {
   loadHistory();
 }
 
-(function waitInit(){ if(window.fetchStocks){ loadStocks(); loadHistory(); document.getElementById("btn-day").classList.add("active"); setInterval(loadStocks,60000);} else { setTimeout(waitInit,100);} })();
+(function waitInit(){ if(window.fetchStocks && window.fetchFuturesMaster){ loadStocks(); loadHistory(); document.getElementById("btn-day").classList.add("active"); setInterval(loadStocks,60000);} else { setTimeout(waitInit,100);} })();
 </script>
 
 <!-- 編輯股票警戒對話框 -->
