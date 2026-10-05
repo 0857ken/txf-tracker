@@ -20,7 +20,7 @@
   const empty = (title, text) => '<div class="card empty"><strong>' + escape(title) + '</strong>' + escape(text) + '</div>';
   const STORE = 'txf-defense-preview-v1';
   let state = {account: null, snapshots: [], executions: [], events: [], health: null, ledgerSeed: null, ledgerInputs: [], ledgerDays: [], ledgerRevision: 0};
-  let market = null, snapshot = null, connected = false, adapter = null, busy = false, pendingOrderId = crypto.randomUUID(), ledgerUI = null, localStore = STORE;
+  let market = null, snapshot = null, connected = false, adapter = null, busy = false, pendingOrderId = crypto.randomUUID(), ledgerUI = null, localStore = STORE, previewCandidate = null;
   function notice(message, error = false) {
     $('notice').textContent = message;
     $('notice').classList.toggle('error', error);
@@ -281,7 +281,7 @@
     $('position-inputs').append(row);
   }
   function populateAccount() {
-    const a = state.account || {asof: now(), equityDate: market.date, indexAtEquity: market.index,
+    const a = state.account || previewCandidate || {asof: now(), equityDate: market.date, indexAtEquity: market.index,
       equity: '', outside: '', initialMargin: '', maintenanceMargin: '', nextRollDate: ''};
     const f = $('account-form');
     ['equityDate', 'equity', 'outside', 'indexAtEquity', 'initialMargin', 'maintenanceMargin', 'nextRollDate'].forEach(k => { f.elements[k].value = a[k] ?? ''; });
@@ -303,6 +303,7 @@
     if (connected) {
       state.account = await adapter.saveAccount(next, expected, events);
       state = {...state, ...await adapter.load()};
+      previewCandidate = null;
     } else {
       const value = {...next, revision: expected + 1};
       persistLocal(sanitizePreviewState({...state, account: value, events: [...state.events, ...events.map(e => ({...e, id: crypto.randomUUID()}))]}));
@@ -399,17 +400,24 @@
     }); });
   }
   async function connect() {
-    if (window.DEFENSE_INLINE_DATA) throw new Error('此檔為獨立預覽，雲端功能請由feature branch頁面開啟');
+    if (window.DEFENSE_INLINE_DATA) throw new Error('此檔為獨立預覽，雲端功能請由正式頁面開啟');
     adapter = await import('./defense-data.js');
     const loaded = await adapter.load();
     state = {...state, ...loaded}; connected = true;
     if (loaded.market && loaded.market.date >= market.date) market = loaded.market;
+    if (config.mode === 'production' && !loaded.account) {
+      let saved = null;
+      try { saved = JSON.parse(localStorage.getItem(STORE) || 'null'); } catch {}
+      if (saved?.account) previewCandidate = sanitizePreviewState(saved).account;
+    }
     $('mode-label').textContent = config.mode === 'production' ? '正式 Forward 帳戶' : '開發預覽 · 獨立雲端測試帳戶';
     $('connect').textContent = '已連接'; $('execution-form').elements.screenshots.disabled = false;
     $('attachment-note').textContent = '原始截圖保存在本策略資料範圍，可供日後比對。';
     render(); populateAccount();
     if (!state.account) $('account-details').open = true;
-    notice(state.account ? '已載入本策略資料。' : '測試帳戶目前空白，請輸入本策略帳戶資料；示範值不會寫入雲端。');
+    notice(state.account ? '已載入正式 Forward 帳戶資料。'
+      : previewCandidate ? '正式 Forward 尚未建立；已帶入你本機剛核對的資料。確認欄位後按「儲存帳戶與核對紀錄」即可建立正式帳戶。'
+      : '正式 Forward 尚未建立，請先輸入本策略帳戶資料。');
   }
   async function init() {
     setupForms();
