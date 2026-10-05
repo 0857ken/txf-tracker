@@ -1,0 +1,119 @@
+name: Futures Master Read-only Audit
+
+on:
+  push:
+    branches:
+      - acceptance/futures-master-readonly-audit-2026-10-06
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  audit:
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      - name: Setup Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: '3.12'
+
+      - name: Install Firestore SDK
+        run: pip install firebase-admin
+
+      - name: Read-only audit
+        env:
+          FIREBASE_KEY: ${{ secrets.FIREBASE_KEY }}
+        run: |
+          python - <<'PY'
+          import json, os
+          import firebase_admin
+          from firebase_admin import credentials, firestore
+
+          ALIAS = {
+              "TX": "TX", "TXF": "TX", "大台": "TX",
+              "MTX": "MTX", "MXF": "MTX", "小台": "MTX",
+              "TMF": "TMF", "微台": "TMF",
+          }
+
+          def norm_product(v):
+              return ALIAS.get(str(v or "").strip())
+
+          cred = credentials.Certificate(json.loads(os.environ["FIREBASE_KEY"]))
+          firebase_admin.initialize_app(cred)
+          db = firestore.client()
+
+          owner = db.collection("strategy4System").document("owner").get()
+          owner_uid = (owner.to_dict() or {}).get("uid") if owner.exists else None
+          if not owner_uid:
+              raise SystemExit("AUDIT_FAIL owner_missing")
+
+          base = (
+              db.collection("defenseUsers").document(owner_uid)
+              .collection("strategies").document("0050-defense-v1")
+          )
+          account_doc = base.collection("state").document("account").get()
+          market_doc = base.collection("market").document("latest").get()
+
+          account = account_doc.to_dict() if account_doc.exists else None
+          market = market_doc.to_dict() if market_doc.exists else None
+
+          if not account:
+              raise SystemExit("AUDIT_FAIL account_missing")
+          if not market:
+              raise SystemExit("AUDIT_FAIL market_missing")
+
+          positions = account.get("positions") or []
+          futures = market.get("futures") or []
+
+          quote_map = {}
+          for q in futures:
+              p = norm_product(q.get("product"))
+              m = q.get("month")
+              if p and m:
+                  quote_map[(p, m)] = q
+
+          account_mark_coverage = 0
+          market_quote_coverage = 0
+          missing_all_price = 0
+          defense_lots = {}
+          for p in positions:
+              product = norm_product(p.get("product"))
+              month = p.get("month")
+              lots = int(p.get("lots") or 0)
+              if product:
+                  defense_lots[product] = defense_lots.get(product, 0) + lots
+              if isinstance(p.get("mark"), (int, float)) and p.get("mark", 0) > 0:
+                  account_mark_coverage += 1
+              q = quote_map.get((product, month))
+              if q and isinstance(q.get("mark"), (int, float)) and q.get("mark", 0) > 0:
+                  market_quote_coverage += 1
+              elif not (isinstance(p.get("mark"), (int, float)) and p.get("mark", 0) > 0):
+                  missing_all_price += 1
+
+          legacy_docs = (
+              db.collection("users").document("me").collection("positions").stream()
+          )
+          legacy = {}
+          legacy_count = 0
+          for d in legacy_docs:
+              x = d.to_dict() or {}
+              product = norm_product(x.get("type"))
+              lots = int(x.get("lots") or 0)
+              if product:
+                  legacy[product] = legacy.get(product, 0) + lots
+              legacy_count += 1
+
+          print("AUDIT_OK")
+          print("formal_account_exists=true")
+          print("formal_market_exists=true")
+          print(f"formal_position_count={len(positions)}")
+          print(f"formal_account_mark_coverage={account_mark_coverage}/{len(positions)}")
+          print(f"formal_market_quote_coverage={market_quote_coverage}/{len(positions)}")
+          print(f"formal_missing_all_price={missing_all_price}")
+          print(f"formal_market_futures_rows={len(futures)}")
+          print(f"legacy_position_count={legacy_count}")
+          print(f"legacy_matches_formal_lots={str(legacy == defense_lots).lower()}")
+          print("price_policy=market_futures_mark_then_account_mark_never_index")
+          PY
