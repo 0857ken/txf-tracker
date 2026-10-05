@@ -15,7 +15,7 @@ concurrency:
 
 jobs:
   snapshot:
-    if: github.repository == '0857ken/txf-tracker' && github.ref == 'refs/heads/main'
+    if: github.repository == '0857ken/txf-tracker' && github.ref == 'refs/heads/main' && vars.DEFENSE_OWNER_UID != ''
     runs-on: ubuntu-latest
     timeout-minutes: 10
     steps:
@@ -46,6 +46,7 @@ jobs:
           FIREBASE_KEY: ${{ secrets.FIREBASE_KEY }}
           DEFENSE_ENABLE_WRITE: 'true'
           DEFENSE_SCOPE: 'production'
+          DEFENSE_OWNER_UID: ${{ vars.DEFENSE_OWNER_UID }}
         run: node scripts/defense-snapshot.cjs --write
 
       # Read-only public market data + private Firestore snapshot only.
