@@ -1,0 +1,20 @@
+name: Claim Strategy 4 Formal Forward Owner
+on:
+  push:
+    branches: [acceptance/strategy4-owner-claim-2026-10-05]
+permissions:
+  contents: read
+jobs:
+  claim:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/checkout@v4
+        with: {ref: gh-pages, path: prod}
+      - uses: actions/setup-node@v4
+        with: {node-version: '22'}
+      - run: npm ci --prefix prod/tools/defense-runner --omit=dev --ignore-scripts --no-audit --no-fund
+      - name: Claim only if exactly one enabled password user exists
+        env:
+          FIREBASE_KEY: ${{ secrets.FIREBASE_KEY }}
+        run: node tools/claim-strategy4-owner.cjs
