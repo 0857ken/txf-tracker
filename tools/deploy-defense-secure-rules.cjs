@@ -10,9 +10,10 @@ async function api(url,options={}){
   return r.json();
 }
 async function patchRelease(headers,rulesetName){
-  const url='https://firebaserules.googleapis.com/v1/projects/txf-tracker/releases/cloud.firestore?updateMask=rulesetName';
+  const name='projects/txf-tracker/releases/cloud.firestore';
+  const url='https://firebaserules.googleapis.com/v1/'+name;
   const r=await fetch(url,{method:'PATCH',headers:{...headers,'content-type':'application/json'},
-    body:JSON.stringify({name:'projects/txf-tracker/releases/cloud.firestore',rulesetName})});
+    body:JSON.stringify({release:{name,rulesetName},updateMask:'rulesetName'})});
   if(!r.ok) throw new Error('RELEASE_PATCH_'+r.status);
   return r.json();
 }
@@ -60,10 +61,15 @@ async function main(){
     await patchRelease(headers,created.name); activated=true;
     const source=fs.readFileSync('prod/firebase-init.js','utf8');
     const m=source.match(/apiKey:\s*"([^"]+)"/); if(!m) throw new Error('PUBLIC_FIREBASE_KEY_NOT_FOUND');
-    const p=await probe(m[1]);
-    console.log(JSON.stringify({rulesActivated:true,legacyAuthenticatedAccess:p.legacy,secureSelfAccess:p.own,secureOtherAccess:p.other,secureUnauthenticatedAccess:p.unauth}));
-    if(![200,404].includes(p.legacy)||![200,404].includes(p.own)||p.other!==403||p.unauth!==403)
-      throw new Error('SECURITY_PROBE_FAILED');
+    let p=null,ok=false;
+    for(let attempt=0;attempt<18;attempt++){
+      p=await probe(m[1]);
+      ok=[200,404].includes(p.legacy)&&[200,404].includes(p.own)&&p.other===403&&p.unauth===403;
+      if(ok) break;
+      await new Promise(resolve=>setTimeout(resolve,5000));
+    }
+    console.log(JSON.stringify({rulesActivated:true,legacyAuthenticatedAccess:p?.legacy,secureSelfAccess:p?.own,secureOtherAccess:p?.other,secureUnauthenticatedAccess:p?.unauth}));
+    if(!ok) throw new Error('SECURITY_PROBE_FAILED');
   }catch(e){
     if(activated) await patchRelease(headers,oldRuleset);
     throw e;
