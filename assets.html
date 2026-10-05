@@ -113,9 +113,67 @@
 }
 
 @media(max-width:768px){header{flex-wrap:wrap;gap:12px}.nav{flex-wrap:wrap;gap:12px}}
+
+/* App-inspired dashboard refresh: original data/logic preserved. */
+body { background:#000; }
+main { max-width:1180px; padding-bottom:110px; }
+.card { background:#1c1c1e; border:1px solid #343438; border-radius:22px; padding:24px; box-shadow:0 12px 32px rgba(0,0,0,.18); }
+.label { color:#a7a7ad; font-size:12px; letter-spacing:.08em; }
+.value { letter-spacing:-.02em; }
+.dashboard-heading { display:flex; align-items:end; justify-content:space-between; gap:16px; margin:10px 0 18px; }
+.dashboard-heading h1 { font-size:34px; line-height:1; margin:0; letter-spacing:-.04em; }
+.dashboard-heading p { margin:6px 0 0; color:#8e8e93; font-size:13px; }
+.hero-networth { text-align:center; padding:34px 24px; margin-bottom:14px; background:linear-gradient(180deg,#202024 0%,#1b1b1f 100%); }
+.hero-eyebrow { color:#a7a7ad; font-size:13px; letter-spacing:.12em; margin-bottom:10px; }
+.hero-value { font-family:var(--mono); font-size:46px; font-weight:650; letter-spacing:-.045em; }
+.hero-sub { color:#8e8e93; font-size:12px; margin-top:10px; }
+.kpi-grid { display:grid; grid-template-columns:repeat(4,1fr); gap:12px; margin-bottom:18px; }
+.kpi-card { min-height:132px; display:flex; flex-direction:column; justify-content:center; text-align:center; }
+.kpi-card .value { font-size:22px; }
+.kpi-icon { font-size:20px; margin-bottom:8px; }
+.section-title { display:flex; align-items:center; gap:9px; margin-bottom:14px; font-size:18px; font-weight:700; }
+.section-title .section-note { margin-left:auto; font-size:11px; color:#8e8e93; font-weight:400; }
+.grid-2 { gap:18px; }
+.pie-wrapper { height:330px; }
+button { border-radius:10px; }
+input { border-radius:10px; }
+.app-topbar,.bottom-nav { display:none; }
+@media(max-width:768px){
+  body { background:#000; }
+  header { display:none; }
+  main { padding:18px 14px 108px; }
+  .app-topbar { display:flex; position:sticky; top:0; z-index:20; align-items:center; justify-content:space-between; padding:16px 16px 8px; background:rgba(0,0,0,.88); backdrop-filter:blur(16px); }
+  .app-topbar .app-title { font-size:31px; font-weight:800; letter-spacing:-.04em; }
+  .app-topbar .app-actions { display:flex; gap:8px; }
+  .app-topbar a { width:42px; height:42px; display:grid; place-items:center; border:1px solid #3a3a3c; border-radius:50%; color:#f5f5f7; text-decoration:none; background:#171719; }
+  .dashboard-heading { margin-top:4px; }
+  .dashboard-heading h1 { display:none; }
+  .dashboard-heading p { font-size:12px; }
+  .hero-networth { padding:28px 18px; border-radius:24px; }
+  .hero-value { font-size:42px; }
+  .kpi-grid { grid-template-columns:repeat(2,1fr); gap:10px; }
+  .kpi-card { min-height:118px; padding:16px 10px; border-radius:20px; }
+  .kpi-card .value { font-size:19px !important; }
+  .grid-2 { grid-template-columns:1fr !important; }
+  .card { border-radius:22px; padding:20px 18px; margin-bottom:14px; }
+  .pie-wrapper { height:290px; }
+  .bottom-nav { display:grid; grid-template-columns:repeat(5,1fr); position:fixed; z-index:30; left:14px; right:14px; bottom:12px; padding:9px 6px 8px; border-radius:28px; background:rgba(31,31,33,.94); border:1px solid #454549; box-shadow:0 18px 50px rgba(0,0,0,.5); backdrop-filter:blur(18px); }
+  .bottom-nav a { display:flex; flex-direction:column; align-items:center; gap:3px; color:#c7c7cc; text-decoration:none; font-size:11px; }
+  .bottom-nav a .nav-icon { font-size:21px; line-height:1.2; }
+  .bottom-nav a.active { color:#f0cc69; }
+  table.responsive tr { border-radius:16px; }
+}
+
 </style>
 </head>
 <body>
+<div class="app-topbar">
+  <div class="app-title">儀表板</div>
+  <div class="app-actions">
+    <a href="strategy.html" aria-label="策略庫">◫</a>
+    <a href="defense.html" aria-label="變速防守">◒</a>
+  </div>
+</div>
 <header>
   <div class="logo">TXF TRACKER · 200萬計畫</div>
   <nav class="nav">
@@ -128,22 +186,39 @@
 </header>
 
 <main>
-  <div class="grid-4">
-    <div class="card">
-      <div class="label">總資金</div>
-      <div class="value blue">2,000,000 元</div>
+  <div class="dashboard-heading">
+    <div>
+      <h1>儀表板</h1>
+      <p>200 萬計畫 · 資產、曝險與策略狀態集中查看</p>
     </div>
-    <div class="card">
-      <div class="label">總市值</div>
+  </div>
+
+  <section class="card hero-networth">
+    <div class="hero-eyebrow">策略淨資產 · NET WORTH</div>
+    <div class="hero-value" id="plan-networth">—</div>
+    <div class="hero-sub">期初資金 2,000,000 元 · 現金與投資部位合併計算</div>
+  </section>
+
+  <div class="kpi-grid">
+    <div class="card kpi-card">
+      <div class="kpi-icon">💼</div>
+      <div class="label">已投入市值</div>
       <div class="value blue" id="total-value">—</div>
-      <div class="sub">淨值 · 曝險 <span id="exposure" style="color:var(--gold)">—</span>(<span id="leverage">—</span>倍)</div>
     </div>
-    <div class="card">
+    <div class="card kpi-card">
+      <div class="kpi-icon">↗</div>
       <div class="label">總損益</div>
       <div class="value" id="total-pnl">—</div>
       <div class="sub" id="total-pct">—</div>
     </div>
-    <div class="card">
+    <div class="card kpi-card">
+      <div class="kpi-icon">⚡</div>
+      <div class="label">投資槓桿</div>
+      <div class="value" style="color:#f0cc69"><span id="leverage">—</span>x</div>
+      <div class="sub">曝險 <span id="exposure">—</span></div>
+    </div>
+    <div class="card kpi-card">
+      <div class="kpi-icon">💳</div>
       <div class="label">現金水位</div>
       <div class="value green" id="cash">—</div>
       <div class="sub" id="cash-pct">—</div>
@@ -152,11 +227,11 @@
 
   <div class="grid-2">
     <div class="card">
-      <div class="label">資產配置</div>
+      <div class="section-title">◔ 投資組合 <span class="section-note">成本基礎配置</span></div>
       <div class="pie-wrapper"><canvas id="pie"></canvas></div>
     </div>
     <div class="card">
-      <div class="label">快速新增資產</div>
+      <div class="section-title">＋ 資產管理 <span class="section-note">手動資產</span></div>
       <table class="responsive">
         <tr><th>項目</th><th>類別</th><th>數量</th><th>成本價</th><th>市值</th></tr>
         <tr>
@@ -177,7 +252,7 @@
     </div>
   </div>
   <div class="card">
-    <div class="label">🔔 股票 LINE 警戒</div>
+    <div class="section-title">🔔 LINE 警戒 <span class="section-note">自動檢查</span></div>
     <div style="display:flex;gap:12px;align-items:center;flex-wrap:wrap;margin-bottom:14px">
       <div id="notify-status" style="font-size:14px;color:var(--muted)">載入中...</div>
       <button onclick="location.href='stocks.html'" style="background:var(--blue);font-size:13px">⚙️ 設定股票警戒</button>
@@ -188,13 +263,13 @@
   </div>
 
   <div class="card">
-    <div class="label">總資產淨值（含已實現 · 每日快照）</div>
+    <div class="section-title">⌁ 淨資產走勢 <span class="section-note">每日快照</span></div>
     <div id="snapshot-empty" style="height:220px;display:flex;align-items:center;justify-content:center;color:var(--muted);font-size:13px">尚無每日快照資料</div>
     <div id="snapshot-chart-wrap" style="height:220px;display:none"><canvas id="snapshot-chart"></canvas></div>
   </div>
 
   <div class="card">
-    <div class="label">已實現損益（累積曲線）</div>
+    <div class="section-title">▥ 已實現損益 <span class="section-note">累積</span></div>
     <div style="height:200px;margin-bottom:16px"><canvas id="realized-chart"></canvas></div>
     <table class="responsive">
       <thead><tr><th>日期</th><th>項目</th><th>數量</th><th>成本價</th><th>結算價</th><th>損益</th><th>操作</th></tr></thead>
@@ -203,13 +278,20 @@
   </div>
 
   <div class="card">
-    <div class="label">總損益明細</div>
+    <div class="section-title">≡ 損益明細 <span class="section-note">全部資產</span></div>
     <table id="pnl-detail-table" class="responsive">
       <thead><tr><th>項目</th><th>類別</th><th>數量</th><th>成本價</th><th>市值</th><th>損益</th><th>報酬率</th><th>操作</th></tr></thead>
       <tbody id="pnl-detail-tbody"><tr><td colspan="8" style="color:var(--muted)">載入中...</td></tr></tbody>
     </table>
   </div>
 </main>
+<nav class="bottom-nav" aria-label="主要導覽">
+  <a href="index.html"><span class="nav-icon">⌁</span><span>期貨</span></a>
+  <a href="stocks.html"><span class="nav-icon">▣</span><span>股票</span></a>
+  <a href="assets.html" class="active"><span class="nav-icon">◔</span><span>儀表板</span></a>
+  <a href="strategy.html"><span class="nav-icon">◫</span><span>策略庫</span></a>
+  <a href="follow.html"><span class="nav-icon">↗</span><span>跟單</span></a>
+</nav>
 
 <script type="module" src="firebase-init.js"></script>
 <script type="module" src="positions.js"></script>
@@ -361,6 +443,8 @@ async function calculateAssets() {
   const pnlPct = ((pnl / 2000000) * 100).toFixed(2);
 
   document.getElementById('total-value').textContent = Math.round(totalValue).toLocaleString() + ' 元';
+  const netWorthEl = document.getElementById('plan-networth');
+  if (netWorthEl) netWorthEl.textContent = Math.round(totalValue + cash).toLocaleString() + ' 元';
   const expoEl = document.getElementById("exposure");
   const levEl = document.getElementById("leverage");
   if (expoEl) expoEl.textContent = Math.round(txfNotional).toLocaleString();
