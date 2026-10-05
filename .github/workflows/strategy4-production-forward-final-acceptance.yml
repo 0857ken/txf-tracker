@@ -1,0 +1,38 @@
+name: Strategy 4 Production Forward Final Acceptance
+on:
+  push:
+    branches: [acceptance/strategy4-production-forward-final-2026-10-05]
+permissions:
+  contents: read
+jobs:
+  isolated:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+      - name: Validate production code
+        run: |
+          node --check defense.js
+          node --check defense-data.js
+          node --check defense-margin-guide.js
+          node --check scripts/defense-snapshot.cjs
+          node --check scripts/defense-quotes.cjs
+          node -e "const c=require('./defense-config.js');if(c.mode!=='production')throw new Error('not production')"
+          node --test tests/defense-production-forward.test.cjs
+          node --test tests/defense-snapshot.test.cjs
+          node --test tests/defense-margin-guidance.test.cjs
+          node --test tests/defense-fubon-market.test.cjs
+          node --test tests/defense-account-save.test.cjs
+          node --test tests/defense-valuation-guidance.test.cjs
+      - name: Existing regressions
+        run: node --test tests/follow-core.test.cjs tests/follow-data.test.cjs tests/offline-manual-preview.test.cjs tests/pluggable-market-adapter.test.cjs
+      - name: Dry-run Forward snapshot
+        run: |
+          mkdir -p test-results
+          node -e "const f=require('./tests/defense-fixtures.cjs');require('fs').writeFileSync('test-results/defense-dry-run.json',JSON.stringify({market:f.market(),account:f.account(),now:'2026-09-16T06:01:00Z'}))"
+          node scripts/defense-snapshot.cjs --fixture test-results/defense-dry-run.json
+      - run: git diff --check HEAD~2 HEAD
