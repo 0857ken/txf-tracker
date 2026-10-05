@@ -415,11 +415,7 @@
     }
     $('mode-label').textContent = config.mode === 'production' ? '正式 Forward 帳戶' : '開發預覽 · 獨立雲端測試帳戶';
     $('connect').textContent = '已連接'; $('execution-form').elements.screenshots.disabled = false;
-    if (config.mode === 'production') {
-      $('forward-owner-id').textContent = window.fbUid || '';
-      $('forward-owner-row').hidden = false;
-      $('forward-auth-panel').hidden = true;
-    }
+    if (config.mode === 'production') $('forward-auth-panel').hidden = true;
     $('attachment-note').textContent = '原始截圖保存在本策略資料範圍，可供日後比對。';
     render(); populateAccount();
     if (!state.account) $('account-details').open = true;
@@ -493,11 +489,6 @@
       notice((result.created ? '正式 Forward 帳戶已建立。' : '正式 Forward 已登入。') +
         ' 請確認帳戶資料並儲存一次，之後每日快照可由排程自動保存。');
     }); });
-    $('copy-forward-id').addEventListener('click', () => task(async () => {
-      if (!window.fbUid) throw new Error('自動快照 ID 尚未就緒');
-      await navigator.clipboard.writeText(window.fbUid);
-      notice('自動快照 ID 已複製。這不是密碼；請把它加入 GitHub Actions secret：DEFENSE_OWNER_UID。');
-    }));
     $('use-market-index').addEventListener('click', () => {
       const f = $('account-form');
       f.elements.equityDate.value = market.date;

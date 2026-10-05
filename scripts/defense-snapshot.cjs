@@ -156,7 +156,8 @@ async function main() {
   const db = getFirestore();
   let root;
   if (scope === 'production') {
-    const ownerUid = process.env.DEFENSE_OWNER_UID || '';
+    const owner = await db.doc('strategy4System/owner').get();
+    const ownerUid = owner.exists ? owner.data().uid : '';
     if (!/^[A-Za-z0-9_-]{8,128}$/.test(ownerUid)) throw new Error('OWNER_UID_UNAVAILABLE');
     root = 'defenseUsers/' + ownerUid + '/strategies/' + config.strategyId;
   } else root = 'users/me/defensePreviews/' + config.previewId;

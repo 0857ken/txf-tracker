@@ -16,17 +16,18 @@ test('formal production can prefill one-time setup from preview without importin
   assert.doesNotMatch(ui,/previewCandidate\s*=\s*saved;/);
 });
 
-test('production snapshot requires an explicit owner UID and never falls back to users/me',()=>{
+test('production snapshot reads one pinned owner UID from Admin-only Firestore config and never falls back to users/me',()=>{
   const runner=fs.readFileSync(path.join(root,'scripts/defense-snapshot.cjs'),'utf8');
-  assert.match(runner,/DEFENSE_OWNER_UID/);
+  assert.match(runner,/strategy4System\/owner/);
   assert.match(runner,/OWNER_UID_UNAVAILABLE/);
+  assert.doesNotMatch(runner,/process\.env\.DEFENSE_OWNER_UID/);
   assert.doesNotMatch(runner,/users\/me\/.*defenseStrategies/);
 });
-test('formal UI exposes only the current Firebase UID as the snapshot routing ID',()=>{
+test('formal UI does not require the user to copy routing IDs or repository secrets',()=>{
   const html=fs.readFileSync(path.join(root,'defense.html'),'utf8');
   const ui=fs.readFileSync(path.join(root,'defense.js'),'utf8');
-  assert.match(html,/id="forward-owner-id"/);
-  assert.match(ui,/navigator\.clipboard\.writeText\(window\.fbUid\)/);
+  assert.doesNotMatch(html,/forward-owner-id/);
+  assert.doesNotMatch(ui,/DEFENSE_OWNER_UID/);
 });
 
 test('Firebase init preserves an existing permanent login instead of overwriting it with anonymous auth',()=>{
