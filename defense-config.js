@@ -1,7 +1,7 @@
 (function (root) {
   'use strict';
   const config = Object.freeze({
-    mode: 'preview',
+    mode: 'production',
     strategyId: '0050-defense-v1',
     previewId: '0050-defense-candidate-v1',
     forwardStart: '2026-09-16',

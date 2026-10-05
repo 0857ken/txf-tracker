@@ -1,0 +1,9 @@
+{
+  "name": "txf-defense-snapshot-runner",
+  "version": "1.0.0",
+  "private": true,
+  "description": "Isolated dependencies for the fourth strategy's daily snapshot",
+  "engines": {"node": ">=22"},
+  "dependencies": {"firebase-admin": "14.3.0"},
+  "devDependencies": {"jsdom": "26.1.0"}
+}

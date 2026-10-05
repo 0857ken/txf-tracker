@@ -7,16 +7,17 @@ function timeout(p, ms = 15000) {
   return Promise.race([p, new Promise((_, reject) => { timer = setTimeout(() => reject(new Error('連線逾時，請保留輸入再重試')), ms); })])
     .finally(() => clearTimeout(timer));
 }
-function namespace() {
+function base() {
   if (config.mode === 'production') {
     if (location.hostname !== '0857ken.github.io' || !location.pathname.startsWith('/txf-tracker/'))
       throw new Error('正式資料僅限正式投資秘書網址存取');
-    return 'defenseStrategies/' + config.strategyId;
+    if (!window.fbUid || !/^[A-Za-z0-9_-]{8,128}$/.test(window.fbUid))
+      throw new Error('Firebase使用者識別尚未完成');
+    return 'defenseUsers/' + window.fbUid + '/strategies/' + config.strategyId;
   }
   if (config.mode !== 'preview') throw new Error('模式不明，停止連線');
-  return 'defensePreviews/' + config.previewId;
+  return 'users/me/defensePreviews/' + config.previewId;
 }
-function base() { return 'users/me/' + namespace(); }
 function ref(group, id) { return doc(window.fbDb, base() + '/' + group + '/' + id); }
 function col(group) { return collection(window.fbDb, base() + '/' + group); }
 async function ready() {
