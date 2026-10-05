@@ -20,7 +20,7 @@
   const empty = (title, text) => '<div class="card empty"><strong>' + escape(title) + '</strong>' + escape(text) + '</div>';
   const STORE = 'txf-defense-preview-v1';
   let state = {account: null, snapshots: [], executions: [], events: [], health: null, ledgerSeed: null, ledgerInputs: [], ledgerDays: [], ledgerRevision: 0};
-  let market = null, snapshot = null, connected = false, adapter = null, busy = false, pendingOrderId = crypto.randomUUID(), ledgerUI = null, localStore = STORE, previewCandidate = null;
+  let market = null, snapshot = null, connected = false, adapter = null, authAdapter = null, busy = false, pendingOrderId = crypto.randomUUID(), ledgerUI = null, localStore = STORE, previewCandidate = null;
   function notice(message, error = false) {
     $('notice').textContent = message;
     $('notice').classList.toggle('error', error);
@@ -401,6 +401,9 @@
   }
   async function connect() {
     if (window.DEFENSE_INLINE_DATA) throw new Error('此檔為獨立預覽，雲端功能請由正式頁面開啟');
+    authAdapter ||= await import('./defense-auth.js');
+    const session = await authAdapter.ready();
+    if (!session || session.isAnonymous) throw new Error('請先登入正式 Forward 帳戶');
     adapter = await import('./defense-data.js');
     const loaded = await adapter.load();
     state = {...state, ...loaded}; connected = true;
@@ -415,6 +418,7 @@
     if (config.mode === 'production') {
       $('forward-owner-id').textContent = window.fbUid || '';
       $('forward-owner-row').hidden = false;
+      $('forward-auth-panel').hidden = true;
     }
     $('attachment-note').textContent = '原始截圖保存在本策略資料範圍，可供日後比對。';
     render(); populateAccount();
@@ -453,8 +457,23 @@
         $('mode-label').textContent = '第三輪合成驗收 · 非真實帳戶'; populateAccount();
       }
     });
-    if (config.mode === 'production') await connect();
-    else {
+    if (config.mode === 'production') {
+      authAdapter = await import('./defense-auth.js');
+      const session = await authAdapter.ready();
+      if (session && !session.isAnonymous) await connect();
+      else {
+        let saved = null;
+        try { saved = JSON.parse(localStorage.getItem(STORE) || 'null'); } catch {}
+        if (saved?.account) {
+          const cleaned = sanitizePreviewState(saved);
+          state = cleaned; previewCandidate = cleaned.account;
+        }
+        render(); populateAccount();
+        $('forward-auth-panel').hidden = false;
+        $('mode-label').textContent = '正式 Forward 待登入 · 本機資料';
+        notice('請先建立／登入正式 Forward 帳戶。登入前畫面只使用本機資料，不會寫入正式 Forward。');
+      }
+    } else {
       let saved;
       try { saved = JSON.parse(localStorage.getItem(STORE) || 'null'); } catch { saved = null; }
       if (saved?.account) {
@@ -465,10 +484,19 @@
       render(); populateAccount();
     }
     $('connect').addEventListener('click', () => task(connect));
+    $('forward-auth-form').addEventListener('submit', e => { e.preventDefault(); task(async () => {
+      authAdapter ||= await import('./defense-auth.js');
+      const f = e.target;
+      const result = await authAdapter.loginOrCreate(f.elements.email.value, f.elements.password.value);
+      f.elements.password.value = '';
+      await connect();
+      notice((result.created ? '正式 Forward 帳戶已建立。' : '正式 Forward 已登入。') +
+        ' 請確認帳戶資料並儲存一次，之後每日快照可由排程自動保存。');
+    }); });
     $('copy-forward-id').addEventListener('click', () => task(async () => {
       if (!window.fbUid) throw new Error('自動快照 ID 尚未就緒');
       await navigator.clipboard.writeText(window.fbUid);
-      notice('自動快照 ID 已複製。這不是密碼；請貼到 GitHub Repository variable DEFENSE_OWNER_UID。');
+      notice('自動快照 ID 已複製。這不是密碼；請把它加入 GitHub Actions secret：DEFENSE_OWNER_UID。');
     }));
     $('use-market-index').addEventListener('click', () => {
       const f = $('account-form');

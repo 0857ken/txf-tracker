@@ -28,3 +28,23 @@ test('formal UI exposes only the current Firebase UID as the snapshot routing ID
   assert.match(html,/id="forward-owner-id"/);
   assert.match(ui,/navigator\.clipboard\.writeText\(window\.fbUid\)/);
 });
+
+test('Firebase init preserves an existing permanent login instead of overwriting it with anonymous auth',()=>{
+  const init=fs.readFileSync(path.join(root,'firebase-init.js'),'utf8');
+  assert.match(init,/if \(user\)[\s\S]*window\.fbUid = user\.uid/);
+  assert.match(init,/if \(fallbackInFlight\) return/);
+  assert.match(init,/await signInAnonymously\(auth\)/);
+  assert.match(init,/window\.fbAuth = auth/);
+});
+test('formal Forward requires stable email authentication before cloud connect',()=>{
+  const ui=fs.readFileSync(path.join(root,'defense.js'),'utf8');
+  const auth=fs.readFileSync(path.join(root,'defense-auth.js'),'utf8');
+  const html=fs.readFileSync(path.join(root,'defense.html'),'utf8');
+  assert.match(ui,/session\.isAnonymous/);
+  assert.match(ui,/請先登入正式 Forward 帳戶/);
+  assert.match(auth,/linkWithCredential/);
+  assert.match(auth,/signInWithEmailAndPassword/);
+  assert.match(html,/id="forward-auth-form"/);
+  assert.match(html,/type="password"/);
+  assert.doesNotMatch(auth,/console\.log\([^)]*password/i);
+});

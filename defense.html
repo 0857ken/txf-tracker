@@ -24,6 +24,17 @@
     <div class="title-row"><div><div class="eyebrow">STRATEGY 04</div><h1>0050訊號 <span class="times">×</span><br class="mobile-break"> 台指期防守反攻</h1><p>收盤確認訊號，守住資金安全線。</p></div><button id="connect" class="secondary">重新連接</button></div>
     <div id="notice" class="notice" role="status" aria-live="polite">正在連接正式 Forward 資料。</div>
     <div id="forward-owner-row" class="notice" hidden><span>自動快照 ID：</span><code id="forward-owner-id"></code> <button id="copy-forward-id" class="text-button" type="button">複製 ID</button></div>
+    <section id="forward-auth-panel" class="card form-card auth-card" hidden aria-labelledby="forward-auth-title">
+      <h2 id="forward-auth-title">正式 Forward 登入</h2>
+      <p class="muted">第一次會把目前匿名工作階段升級成固定帳號；之後換裝置可用同一組電子郵件與密碼登入。密碼只交給 Firebase Authentication，不寫入 GitHub、Firestore 或本頁資料。</p>
+      <form id="forward-auth-form">
+        <div class="form-grid">
+          <label>電子郵件<input name="email" type="email" autocomplete="username" required></label>
+          <label>密碼<input name="password" type="password" minlength="6" autocomplete="current-password" required></label>
+        </div>
+        <button type="submit" class="primary">建立／登入正式 Forward</button>
+      </form>
+    </section>
     <nav class="section-menu" aria-label="第4策略功能">
       <a href="#today">① 今日狀態</a><a href="#positions">② 持倉曝險</a><a href="#funding">③ 資金風控</a><a href="#stress">④ 下跌壓測</a>
       <a href="#execution">⑤ 交易滑價</a><a href="#forward">⑥ Forward</a><a href="#history">⑦ 風控歷史</a><a href="#review">⑧ 每月檢討</a>
@@ -140,7 +151,7 @@
     </section>
     <section id="history" aria-labelledby="history-title"><div class="section-heading"><h2 id="history-title"><span>07</span> 每日風控歷史</h2><button id="export-data" class="text-button">匯出紀錄 ↓</button></div><div id="history-content"></div></section>
     <section id="review" aria-labelledby="review-title"><div class="section-heading"><h2 id="review-title"><span>08</span> 每月檢討</h2><input type="month" id="review-month" aria-label="檢討月份"></div><div id="review-content"></div></section>
-    <footer>Forward candidate · 固定規則 v1<br>營運每月檢討，核心策略每 3–6 個月檢討。</footer>
+    <footer>Formal Forward · 固定規則 v1<br>營運每月檢討，核心策略每 3–6 個月檢討。</footer>
   </main>
   <nav class="mobile-dock" aria-label="常用功能"><a href="#today">今日</a><a href="#stress">壓測</a><a href="#execution">交易</a><a href="#review">檢討</a></nav>
   <noscript>請啟用JavaScript以使用策略計算與壓力測試。</noscript>

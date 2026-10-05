@@ -4,3 +4,9 @@
 @media(max-width:360px){main{padding-left:12px;padding-right:12px}.hero .metric .value{font-size:25px}.form-grid{grid-template-columns:1fr}.title-row h1{font-size:22px}.release-bar{flex-wrap:wrap}.book-level{grid-template-columns:20px 1fr 1fr}.book-pair{grid-template-columns:1fr}.mobile-dock a{padding:8px 17px}}
 .record-meta{white-space:pre-wrap;overflow-wrap:anywhere}
 @media(prefers-reduced-motion:reduce){html{scroll-behavior:auto}}
+
+.auth-card{margin:16px 0 24px;border:1px solid rgba(73,166,255,.35)}
+.auth-card h2{margin-top:0}
+.auth-card form{margin-top:12px}
+.auth-card input[type="password"],.auth-card input[type="email"]{width:100%}
+#forward-owner-row code{user-select:all;overflow-wrap:anywhere}
