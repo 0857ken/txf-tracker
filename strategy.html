@@ -18,9 +18,11 @@
   .nav a { font-family:var(--mono); font-size:12px; color:var(--muted); text-decoration:none; }
   .nav a.active { color:var(--blue); border-bottom:1px solid var(--blue); }
   main { max-width:1100px; margin:0 auto; padding:24px 28px; }
-  .tabs { display:flex; gap:8px; margin-bottom:20px; border-bottom:1px solid var(--border); }
-  .tab { padding:10px 18px; font-family:var(--mono); font-size:13px; color:var(--muted); cursor:pointer; border-bottom:2px solid transparent; }
+  .tabs { display:flex; flex-wrap:wrap; gap:8px; margin-bottom:20px; border-bottom:1px solid var(--border); }
+  .tab,.strategy-link { padding:10px 18px; font-family:var(--mono); font-size:13px; color:var(--muted); cursor:pointer; border-bottom:2px solid transparent; }
   .tab.active { color:var(--gold); border-bottom-color:var(--gold); }
+  .strategy-link { text-decoration:none; color:var(--blue); }
+  .strategy-link:hover { color:var(--gold); border-bottom-color:var(--gold); }
   .panel { display:none; }
   .panel.active { display:block; }
   .banner { padding:20px 24px; border-radius:12px; margin-bottom:20px; font-size:18px; font-weight:600; }
@@ -65,10 +67,8 @@
     <div class="tab active" data-tab="rs">耀的 RS 訊號</div>
     <div class="tab" data-tab="line">橘太郎三條線</div>
     <div class="tab" data-tab="grid">月波動網格</div>
+    <a class="strategy-link" href="defense.html">0050 變速防守 ↗</a>
   </div>
-  <a href="defense.html" style="display:block;padding:16px 18px;margin-bottom:18px;border:1px solid #375a75;border-radius:10px;background:#141925;color:#e7c16b;text-decoration:none;line-height:1.7">
-    ④ 0050訊號 × 台指期防守反攻策略 <span style="display:block;font-size:12px;color:#9caabe">Fubon 正式唯讀行情 · Frozen 規則 · 帳戶／交易紀錄仍採預覽隔離 →</span>
-  </a>
 
   <div class="panel active" id="panel-rs"></div>
   <div class="panel" id="panel-line"></div>
