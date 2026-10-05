@@ -72,7 +72,7 @@ test('formal strategy dashboard links Strategy 4 to the Fubon-integrated page in
   const config=fs.readFileSync(path.join(root,'defense-config.js'),'utf8');
   assert.match(html,/href="defense\.html"/);
   assert.doesNotMatch(html,/href="strategy4-preview\/index\.html"/);
-  assert.match(html,/Fubon 正式唯讀行情/);
+  assert.match(html,/0050 變速防守/);
   assert.match(config,/mode:\s*'production'/);
   assert.doesNotMatch(config,/mode:\s*'preview'/);
 });
