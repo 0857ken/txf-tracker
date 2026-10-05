@@ -62,16 +62,38 @@
         {product: 'TMF', month: '2026-10', lots: 3, mark: null}],
       marginReference: {checkedOn: '2026-09-17', source: 'https://www.taifex.com.tw/cht/5/indexMarging',
         effectiveDate: '2026-08-12', fetchedAt: '2026-09-17T08:00:00+08:00', initial: 280400, maintenance: 215200},
-      nextRollDate: '2026-10-20', lastAppliedState: 'nonbear:2', lastCleanupMonth: market.date.slice(0, 7)};
+      nextRollDate: '2026-10-20'};
+  }
+  function sanitizePreviewState(next) {
+    const clean = C.clone(next);
+    if (!clean.account) return clean;
+    const cleanupMonths = new Set((clean.events || []).filter(e => e.kind === 'monthly_cleanup' && typeof e.date === 'string')
+      .map(e => e.date.slice(0, 7)));
+    if (clean.account.lastCleanupMonth && !cleanupMonths.has(clean.account.lastCleanupMonth)) delete clean.account.lastCleanupMonth;
+    return clean;
+  }
+  function referenceExposure(x) {
+    return x && C.finite(x.notional) && C.finite(x.strategyEquity) && x.strategyEquity > 0 ? x.notional / x.strategyEquity : null;
+  }
+  function valuationIssue(x) {
+    if (!x || x.allocationStatus === 'ready') return '資料完整';
+    const a = state.account;
+    if (!a) return '尚未建立帳戶';
+    if (a.equityDate !== market.date) return '權益日期 ' + a.equityDate + ' 與行情日 ' + market.date + ' 不一致';
+    if (C.finite(a.indexAtEquity) && C.finite(market.index) && Math.abs(a.indexAtEquity - market.index) > 1e-9)
+      return '權益對應加權指數 ' + fmt(a.indexAtEquity, 2) + ' 與當日收盤 ' + fmt(market.index, 2) + ' 不一致；若這筆權益是收盤後券商核對值，請使用「使用當日加權收盤」';
+    if (x.positions.some(p => p.mark === null)) return '缺少期貨參考價';
+    return '等待逐合約期貨行情 MTM 或重新核對帳戶';
   }
   function renderToday() {
-    const s = C.signal(market.target), x = snapshot;
+    const s = C.signal(market.target), x = snapshot, refExposure = referenceExposure(snapshot);
     const badges = x ? x.labels.map(t => badge(t, t === '需補款' ? 'red' : t === '正常' ? 'green' : 'gold')).join('')
       : badge('請核對帳戶', 'gold');
     $('today-content').innerHTML = '<div class="card hero"><div class="hero-heading"><h3>' + escape(s.reason || '資料待核對') +
       '</h3><div class="badges">' + badges + '</div></div><div class="metrics">' +
       metric('目標曝險', s.valid ? fmt(s.target, 1) + 'x' : '待確認', x?.allocationStatus === 'ready' ? '動態總權益 ' + money(x.strategyEquity) : '估值尚未完整', 'gold') +
-      metric('實際曝險', C.finite(x?.actualExposure) ? fmt(x.actualExposure, 3) + 'x' : '—', x?.allocationStatus === 'ready' ? '期貨名目值 ÷ 動態總權益' : '不使用固定本金代算', 'blue') +
+      metric('實際曝險', C.finite(x?.actualExposure) ? fmt(x.actualExposure, 3) + 'x' : C.finite(refExposure) ? fmt(refExposure, 3) + 'x*' : '—',
+        x?.allocationStatus === 'ready' ? '期貨名目值 ÷ 動態總權益' : C.finite(refExposure) ? '參考值；尚未通過權益估值核對，不作調倉依據' : '不使用固定本金代算', 'blue') +
       metric('加權指數', fmt(market.index, 2), market.date + ' 收盤') +
       metric('0050 收盤', fmt(s.close, 2), s.date || '') +
       '</div><div class="meta">資料日 ' + escape(market.date) + ' · 更新 ' + escape(localTime(market.updatedAt).replace('T', ' ')) +
@@ -84,17 +106,21 @@
   function renderPositions() {
     const x = snapshot;
     if (!x) { $('positions-content').innerHTML = empty('先核對你的策略帳戶', '第4策略不會自動把其他策略或主頁持倉算進來。'); return; }
+    const refExposure = referenceExposure(x), s = C.signal(market.target);
+    const refGap = C.finite(refExposure) && s.valid ? s.target - refExposure : null;
     const parts = x.positions.map(p => keys([['商品／月份', p.product + ' · ' + p.month], ['持倉', p.lots + ' 口'],
       ['參考價', p.mark === null ? '缺少期貨價格' : fmt(p.mark, 2)]])).join('<div class="divider"></div>');
     $('positions-content').innerHTML = '<div class="card"><div class="metrics">' +
-      metric('目標－實際差距', fmt(x.decision.gap, 3) + 'x', x.allocationStatus === 'ready' ? '正值需增加曝險' : '估值不可用，暫停建議調整口數') +
+      metric('目標－實際差距', x.allocationStatus === 'ready' ? fmt(x.decision.gap, 3) + 'x' : C.finite(refGap) ? fmt(refGap, 3) + 'x*' : '—x',
+        x.allocationStatus === 'ready' ? '正值需增加曝險' : C.finite(refGap) ? '參考差距；尚未通過權益估值核對，不作調倉依據' : '估值不可用，暫停建議調整口數') +
       metric('±0.05x band', x.decision.insideBand === null ? '待確認' : x.decision.insideBand ? '範圍內' : '範圍外', '訊號改變／換倉仍須執行', x.decision.insideBand ? 'green' : 'gold') +
       metric('目標名目曝險', money(x.targetNotional), '動態總權益 × 目標倍數') + metric('淨名目曝險', money(x.notional)) +
       metric('決策總權益', money(x.strategyEquity), '期貨權益＋場外資金') + metric('配口狀態', x.allocationStatus === 'ready' ? '可計算' : 'valuation-unavailable', x.allocationStatus === 'ready' ? '動態權益資料完整' : '保留最後核對值，不產生調整建議', x.allocationStatus === 'ready' ? 'green' : 'gold') +
       '</div><div class="pill-values"><span>TX ' + x.lots.TX + ' 口</span><span>MTX ' + x.lots.MTX + ' 口</span><span>TMF ' + x.lots.TMF + ' 口</span></div>' +
       keys([['訊號是否尚待執行', x.decision.signalChanged ? (x.allocationStatus === 'ready' ? '是（band內也需核對調倉）' : '是（待估值完整後執行）') : '否'],
         ['下一次換倉日', x.nextRollDate || '尚未指定'], ['期貨帳戶核對時間', localTime(x.accountAsOf).replace('T', ' ')],
-        ['權益來源', x.equitySource === 'broker_confirmed' ? '使用者券商核對值' : x.equitySource === 'futures_mtm' ? '逐合約期貨MTM估值' : '最後核對值（待更新）']]) +
+        ['權益來源', x.equitySource === 'broker_confirmed' ? '使用者券商核對值' : x.equitySource === 'futures_mtm' ? '逐合約期貨MTM估值' : '最後核對值（待更新）'],
+        ['估值待核對原因', valuationIssue(x)]]) +
       '<details><summary>逐筆合約</summary>' + (parts || '<p class="muted">目前無部位。</p>') + '</details></div>';
   }
   function renderFunding() {
@@ -279,10 +305,12 @@
       state = {...state, ...await adapter.load()};
     } else {
       const value = {...next, revision: expected + 1};
-      persistLocal({...state, account: value, events: [...state.events, ...events.map(e => ({...e, id: crypto.randomUUID()}))]});
+      persistLocal(sanitizePreviewState({...state, account: value, events: [...state.events, ...events.map(e => ({...e, id: crypto.randomUUID()}))]}));
     }
     render(); populateAccount();
-    notice(connected ? '已儲存帳戶與事件紀錄。每日快照由排程獨立執行。' : '已儲存本機預覽紀錄；正式帳戶不受影響。');
+    const allocationNote = snapshot?.allocationStatus === 'ready' ? '' : '；配口仍待核對：' + valuationIssue(snapshot);
+    notice(connected ? '已儲存帳戶與事件紀錄。每日快照由排程獨立執行。' + allocationNote
+      : '已儲存本機預覽紀錄；正式帳戶不受影響' + allocationNote + '。');
   }
   function n(input, nullable = false) {
     if (input.value.trim() === '') { if (nullable) return null; throw new Error('必填數值不可留空'); }
@@ -417,11 +445,21 @@
     else {
       let saved;
       try { saved = JSON.parse(localStorage.getItem(STORE) || 'null'); } catch { saved = null; }
-      if (saved?.account) state = saved;
-      else state.account = demoAccount();
+      if (saved?.account) {
+        const cleaned = sanitizePreviewState(saved);
+        if (JSON.stringify(cleaned) !== JSON.stringify(saved)) persistLocal(cleaned);
+        else state = cleaned;
+      } else state.account = demoAccount();
       render(); populateAccount();
     }
     $('connect').addEventListener('click', () => task(connect));
+    $('use-market-index').addEventListener('click', () => {
+      const f = $('account-form');
+      f.elements.equityDate.value = market.date;
+      f.elements.indexAtEquity.value = Number(market.index).toFixed(2);
+      f.elements.asof.value = localTime(now());
+      notice('已填入今日加權收盤 ' + fmt(market.index, 2) + '。請先確認這筆期貨帳戶權益確實是今日收盤後的券商核對值，再按儲存。');
+    });
     $('refresh').addEventListener('click', () => task(async () => {
       market = localStore === STORE ? await publicMarket() : C.clone(window.DEFENSE_ACCEPTANCE_EXAMPLE.market);
       if (connected) { state = {...state, ...await adapter.load()}; if (state.market && state.market.date >= market.date) market = state.market; }

@@ -42,7 +42,7 @@
             <label>權益對應交易日<input name="equityDate" type="date" required></label>
             <label>期貨帳戶權益（元）<input name="equity" type="number" step="0.01" inputmode="decimal" required></label>
             <label>場外備用資金（元）<input name="outside" type="number" min="0" step="0.01" inputmode="decimal" required></label>
-            <label>權益對應加權指數<input name="indexAtEquity" type="number" min="0.01" step="0.01" inputmode="decimal" required></label>
+            <label>權益對應加權指數<input name="indexAtEquity" type="number" min="0.01" step="0.01" inputmode="decimal" required><small>若這筆券商權益是今日收盤後核對值，可用當日加權收盤對齊估值。</small><button type="button" id="use-market-index" class="secondary">使用當日加權收盤</button></label>
             <label>本次外部淨入金（元）<input name="externalFlow" type="number" step="0.01" inputmode="decimal" value="0"><small>策略外新投入為正、提領為負；帳戶間轉帳填0。</small></label>
             <label>所需原始保證金（總額）<input name="initialMargin" type="number" min="0" step="1" inputmode="numeric" required></label>
             <label>所需維持保證金（總額）<input name="maintenanceMargin" type="number" min="0" step="1" inputmode="numeric" required></label>
