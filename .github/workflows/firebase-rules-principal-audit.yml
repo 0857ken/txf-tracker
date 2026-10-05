@@ -15,10 +15,4 @@ jobs:
       - name: Print non-secret service account identity
         env:
           FIREBASE_KEY: ${{ secrets.FIREBASE_KEY }}
-        run: |
-          python3 - <<'PY'
-import json, os
-j=json.loads(os.environ['FIREBASE_KEY'])
-print('project_id='+j.get('project_id',''))
-print('client_email='+j.get('client_email',''))
-PY
+        run: python3 -c "import json,os; j=json.loads(os.environ['FIREBASE_KEY']); print('project_id='+j.get('project_id','')); print('client_email='+j.get('client_email',''))"
