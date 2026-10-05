@@ -8,7 +8,8 @@ async function main(){
   const credentials=JSON.parse(process.env.FIREBASE_KEY||'{}');
   if(credentials.project_id!=='txf-tracker') throw new Error('WRONG_PROJECT');
   const auth=new GoogleAuth({credentials,scopes:['https://www.googleapis.com/auth/cloud-platform']});
-  const client=await auth.getClient(), headers=await client.getRequestHeaders();
+  const client=await auth.getClient(), rawHeaders=await client.getRequestHeaders();
+  const headers=typeof rawHeaders.entries==='function'?Object.fromEntries(rawHeaders.entries()):Object.fromEntries(Object.entries(rawHeaders));
   const url='https://identitytoolkit.googleapis.com/admin/v2/projects/txf-tracker/config';
   const before=await fetch(url,{headers});
   if(!before.ok) throw new Error('AUTH_CONFIG_READ_'+before.status);
