@@ -1,0 +1,28 @@
+name: Enable Strategy 4 Stable Firebase Login
+
+on:
+  push:
+    branches:
+      - acceptance/firebase-auth-enable-email-2026-10-05
+
+permissions:
+  contents: read
+
+jobs:
+  enable:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/checkout@v4
+        with:
+          ref: feature/strategy4-production-forward-2026-10-05
+          path: prod
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+      - name: Install isolated Google libraries
+        run: npm ci --prefix prod/tools/defense-runner --omit=dev --ignore-scripts --no-audit --no-fund
+      - name: Enable email login and authorize GitHub Pages
+        env:
+          FIREBASE_KEY: ${{ secrets.FIREBASE_KEY }}
+        run: node tools/enable-defense-email-auth.cjs
