@@ -64,9 +64,9 @@
 <main>
   <div class="grid-5">
     <div class="card">
-      <div class="label">台指期數 現價</div>
+      <div class="label">台指期 現價</div>
       <div class="value blue" id="price">—</div>
-      <div class="sub" id="data-source">Yahoo Finance</div>
+      <div class="sub" id="data-source">0050變速防守正式 Forward</div>
     </div>
     <div class="card">
       <div class="label">期現價差</div>
@@ -102,7 +102,7 @@
 
   <div class="grid-2">
     <div class="card">
-      <div class="label">近 30 日收盤走勢</div>
+      <div class="label">近 30 日加權指數收盤走勢</div>
       <div class="chart-wrap"><canvas id="chart"></canvas></div>
     </div>
     <div class="card">
@@ -117,27 +117,21 @@
   </div>
 
   <div class="card">
-    <div class="label">部位明細</div>
+    <div class="label">部位明細 · 0050變速防守正式主帳</div>
     <table>
-      <thead><tr><th>日期</th><th>種類</th><th>口數</th><th>成本價</th><th>現價損益(元)</th><th>備註</th><th>操作</th></tr></thead>
+      <thead><tr><th>月份</th><th>種類</th><th>口數</th><th>成本備份</th><th>期貨價</th><th>損益</th><th>來源</th></tr></thead>
       <tbody id="pos-tbody"><tr><td colspan="7">載入中...</td></tr></tbody>
     </table>
   </div>
 
   <div class="card">
-    <div class="label">新增部位</div>
-    <table>
-      <tr>
-        <td>日期: <input type="date" id="new-date"></td>
-        <td>種類: <select id="new-type" style="width:90px"><option value="TMF">微台</option><option value="MXF" selected>小台</option><option value="TXF">大台</option></select></td>
-        <td>口數: <input type="number" id="new-lots" placeholder="1" style="width:60px"></td>
-        <td>成本價: <input type="number" id="new-cost" step="0.1" placeholder="37281" style="width:80px"></td>
-      </tr>
-      <tr>
-        <td colspan="3">備註: <input type="text" id="new-note" placeholder="備註" style="width:200px"></td>
-        <td><button onclick="addPosition()">新增</button></td>
-      </tr>
-    </table>
+    <div class="label">期貨主帳管理</div>
+    <div style="display:flex;justify-content:space-between;gap:16px;align-items:center;flex-wrap:wrap">
+      <div style="font-size:13px;color:var(--muted);line-height:1.7">
+        實際 TX／MTX／TMF 部位只在「0050變速防守 → 核對帳戶」修改；本頁唯讀同步，避免不同頁面出現不同口數。
+      </div>
+      <a href="defense.html#positions" style="background:var(--blue);color:#fff;text-decoration:none;padding:8px 14px;border-radius:6px;font-size:12px">前往核對帳戶 ↗</a>
+    </div>
   </div>
   <div class="card">
     <div class="label">📋 我的交易計畫</div>
@@ -193,25 +187,46 @@ loadDashboard();
 
 async function loadDashboard() {
   try {
-    const res = await fetch('data/market_data.json?t=' + Date.now());
-    if (!res.ok) throw new Error('讀取報價失敗');
+    const [res, master] = await Promise.all([
+      fetch('data/market_data.json?t=' + Date.now()),
+      window.fetchFuturesMaster()
+    ]);
+    if (!res.ok) throw new Error('讀取加權指數資料失敗');
     const j = await res.json();
+    const positions = master.positions || [];
 
-    // 報價現價
-    document.getElementById('price').textContent = j.market.current_price.toLocaleString();
+    const single = positions.length === 1 ? positions[0] : null;
+    const futuresPrice = single && Number.isFinite(Number(single.current_price)) ? Number(single.current_price) : null;
+    const indexPrice = Number.isFinite(Number(master.market?.index))
+      ? Number(master.market.index)
+      : Number(j.market?.current_price);
 
-    // 期現價差：serverless 版無即時期貨,顯示盤後
+    const priceEl = document.getElementById('price');
+    if (positions.length === 0) priceEl.textContent = '—';
+    else if (futuresPrice !== null) priceEl.textContent = futuresPrice.toLocaleString();
+    else priceEl.textContent = positions.length > 1 ? '逐合約' : '待期貨價';
+
+    document.getElementById('data-source').textContent = single
+      ? (single.type + ' ' + single.month + ' · ' + single.price_source)
+      : (positions.length > 1 ? '多合約逐筆顯示 · 0050變速防守正式 Forward' : '0050變速防守正式 Forward');
+
     const spreadEl = document.getElementById('spread');
     const statusEl = document.getElementById('spread-status');
     const twiiEl = document.getElementById('twii-price');
-    if (twiiEl) twiiEl.textContent = j.market.current_price.toLocaleString();
-    if (spreadEl) { spreadEl.textContent = '—'; }
-    if (statusEl) { statusEl.textContent = '加權指數現值'; }
+    if (twiiEl) twiiEl.textContent = Number.isFinite(indexPrice) ? indexPrice.toLocaleString() : '—';
+    if (spreadEl) {
+      if (futuresPrice !== null && Number.isFinite(indexPrice)) {
+        const spread = futuresPrice - indexPrice;
+        spreadEl.textContent = (spread >= 0 ? '+' : '') + spread.toLocaleString(undefined, {maximumFractionDigits:2});
+        spreadEl.className = 'value ' + (spread >= 0 ? 'red' : 'green');
+      } else {
+        spreadEl.textContent = '—';
+        spreadEl.className = 'value';
+      }
+    }
+    if (statusEl) statusEl.textContent = single ? (single.month + ' 期貨價 − 加權指數') : '多合約時不顯示單一期現價差';
 
-    document.getElementById('data-source').textContent =
-      'Yahoo Finance · ' + (j.updated_at || '');
-
-    // 均線
+    // 加權指數均線仍沿用 market_data.json；不把加權指數當期貨價格。
     document.getElementById('ma5').textContent = j.ma_state.ma5 ? j.ma_state.ma5.toLocaleString() : '—';
     document.getElementById('ma20').textContent = j.ma_state.ma20 ? j.ma_state.ma20.toLocaleString() : '—';
     document.getElementById('ma60').textContent = j.ma_state.ma60 ? j.ma_state.ma60.toLocaleString() : '—';
@@ -221,34 +236,41 @@ async function loadDashboard() {
     const lotsSuggest = document.getElementById('lots-suggest');
     if (lotsSuggest) lotsSuggest.textContent = j.ma_state.mode;
 
-    // 部位:從 Firestore 讀取並計算損益
-    const curPrice = j.market.current_price;
-    let positions = [];
-    try { positions = await window.fetchPositions(); } catch (err) { console.error('讀取部位失敗', err); }
-
-    let totalPnl = 0, equivLots = 0;
+    let totalPnl = 0;
+    let pnlComplete = true;
+    let equivLots = 0;
     positions.forEach(p => {
-      p._pnl = window.calcPnl(p, curPrice);
-      totalPnl += p._pnl;
+      p._pnl = window.calcPnl(p);
+      if (p._pnl === null) pnlComplete = false;
+      else totalPnl += p._pnl;
       const mult = window.CONTRACT_MULT[p.type] || 10;
-      equivLots += (mult / 10) * p.lots;  // 換算微台口數
+      equivLots += (mult / 10) * p.lots;
     });
 
     const pnlEl = document.getElementById('pnl');
+    const pnlSub = document.getElementById('pnl-sub');
     if (pnlEl) {
-      pnlEl.textContent = (totalPnl >= 0 ? '+' : '') + totalPnl.toLocaleString() + ' 元';
-      pnlEl.className = 'value ' + (totalPnl >= 0 ? 'red' : 'green');
+      if (!pnlComplete && positions.length) {
+        pnlEl.textContent = '待成本核對';
+        pnlEl.className = 'value';
+        if (pnlSub) pnlSub.textContent = '正式主帳口數／期貨價已同步；不使用錯誤成本硬算';
+      } else {
+        pnlEl.textContent = (totalPnl >= 0 ? '+' : '') + totalPnl.toLocaleString() + ' 元';
+        pnlEl.className = 'value ' + (totalPnl >= 0 ? 'red' : 'green');
+        if (pnlSub) pnlSub.textContent = positions.length ? '正式期貨價 × 舊成本唯讀備份' : '目前無部位';
+      }
     }
+
     const lotsEl = document.getElementById('lots');
     if (lotsEl) lotsEl.textContent = equivLots + ' 口 (微台)';
     const lotsSub = document.getElementById('lots-sub');
-    if (lotsSub) lotsSub.textContent = positions.length + ' 筆部位';
+    if (lotsSub) lotsSub.textContent = positions.length + ' 筆正式主帳部位';
 
-    // 獲利保護線:取第一筆部位的成本 ×(1+保護%),簡化用 5%
     const hardFloorEl = document.getElementById('hard-floor');
     if (hardFloorEl) {
-      if (positions.length > 0) {
-        const avgCost = positions.reduce((s,p)=>s+p.entry_price,0)/positions.length;
+      const costs = positions.map(p => Number(p.entry_price)).filter(Number.isFinite);
+      if (positions.length && costs.length === positions.length) {
+        const avgCost = costs.reduce((a,b) => a + b, 0) / costs.length;
         const ppPct = parseFloat(localStorage.getItem("profit_protect_pct") || "1.0");
         hardFloorEl.textContent = Math.round(avgCost * (1 + ppPct / 100)).toLocaleString();
       } else {
@@ -256,81 +278,40 @@ async function loadDashboard() {
       }
     }
 
-    // 畫部位表格
     const posTbody = document.getElementById('pos-tbody');
     if (posTbody) {
       if (positions.length === 0) {
-        posTbody.innerHTML = '<tr><td colspan="7" style="color:var(--muted)">尚無部位,用下方表單新增</td></tr>';
+        posTbody.innerHTML = '<tr><td colspan="7" style="color:var(--muted)">0050變速防守正式帳戶目前無期貨部位</td></tr>';
       } else {
-        posTbody.innerHTML = positions.map((p, i) => `
-          <tr>
-            <td>${p.date}</td><td>${p.type}</td>
-            <td><input type="number" id="lots-${i}" value="${p.lots}" style="width:60px"></td>
-            <td><input type="number" id="cost-${i}" value="${p.entry_price}" step="0.1" style="width:80px"></td>
-            <td class="${p._pnl >= 0 ? 'red' : 'green'}">${(p._pnl >= 0 ? '+' : '') + p._pnl.toLocaleString()}</td>
-            <td>${p.note || ''}</td>
-            <td>
-              <button onclick="updatePos('${p.id}', ${i})">保存</button>
-              <button onclick="deletePos('${p.id}')" class="red">刪除</button>
-            </td>
-          </tr>
-        `).join('');
+        posTbody.innerHTML = positions.map(p => {
+          const price = Number.isFinite(Number(p.current_price)) ? Number(p.current_price).toLocaleString() : '—';
+          const cost = p.cost_valid && Number.isFinite(Number(p.entry_price)) ? Number(p.entry_price).toLocaleString() : '—';
+          const pnl = p._pnl === null ? '待成本核對' : ((p._pnl >= 0 ? '+' : '') + p._pnl.toLocaleString() + ' 元');
+          const pnlClass = p._pnl === null ? '' : (p._pnl >= 0 ? 'red' : 'green');
+          return `
+            <tr>
+              <td>${p.month || '—'}</td>
+              <td>${p.type}</td>
+              <td>${p.lots} 口</td>
+              <td>${cost}</td>
+              <td>${price}</td>
+              <td class="${pnlClass}">${pnl}</td>
+              <td style="color:var(--muted)">${p.price_source}</td>
+            </tr>
+          `;
+        }).join('');
       }
     }
 
-    // 走勢圖:把 trend 轉成 renderChart 要的格式
     const chartData = j.trend.dates.map((d, i) => ({ date: d, close: j.trend.prices[i] }));
     renderChart(chartData);
   } catch (e) {
     console.error('Error:', e);
     document.getElementById('price').textContent = '讀取失敗';
+    document.getElementById('data-source').textContent = e.message || '正式主帳讀取失敗';
   }
 }
 
-
-async function updatePos(posId, idx) {
-  const lots = parseInt(document.getElementById(`lots-${idx}`).value);
-  const cost = parseFloat(document.getElementById(`cost-${idx}`).value);
-  if (!lots || !cost) return alert('請填寫口數和成本價');
-  try {
-    await window.updatePositionFS(posId, { lots, entry_price: cost });
-    alert('已保存');
-    loadDashboard();
-  } catch (e) {
-    alert('保存失敗: ' + e.message);
-  }
-}
-
-async function deletePos(posId) {
-  if (!confirm('確定刪除？')) return;
-  try {
-    await window.deletePositionFS(posId);
-    loadDashboard();
-  } catch (e) {
-    alert('刪除失敗: ' + e.message);
-  }
-}
-
-async function addPosition() {
-  const date = document.getElementById('new-date').value;
-  const type = document.getElementById('new-type').value;
-  const lots = parseInt(document.getElementById('new-lots').value);
-  const cost = parseFloat(document.getElementById('new-cost').value);
-  const note = document.getElementById('new-note').value;
-  if (!date || !type || !lots || !cost) return alert('請填寫所有欄位');
-  try {
-    await window.addPositionFS({ date, type, lots, entry_price: cost, note: note || '' });
-    alert('已新增');
-    document.getElementById('new-date').value = '';
-    document.getElementById('new-type').value = '';
-    document.getElementById('new-lots').value = '';
-    document.getElementById('new-cost').value = '';
-    document.getElementById('new-note').value = '';
-    loadDashboard();
-  } catch (e) {
-    alert('新增失敗: ' + e.message);
-  }
-}
 
 function renderChart(data) {
 const ctx = document.getElementById('chart').getContext('2d');
@@ -340,7 +321,7 @@ const ctx = document.getElementById('chart').getContext('2d');
     data: {
       labels: data.map(d => d.date.slice(5)),
       datasets: [{
-        label: '台指期',
+        label: '加權指數',
         data: data.map(d => d.close),
         borderColor: '#3d9eff',
         backgroundColor: 'rgba(61, 158, 255, 0.1)',
@@ -360,7 +341,7 @@ const ctx = document.getElementById('chart').getContext('2d');
   });
 }
 
-(function waitInit(){ if(window.fetchPositions){ loadDashboard(); setInterval(loadDashboard,60000);} else { setTimeout(waitInit,100);} })();
+(function waitInit(){ if(window.fetchPositions && window.fetchFuturesMaster){ loadDashboard(); setInterval(loadDashboard,60000);} else { setTimeout(waitInit,100);} })();
 </script>
 
 <!-- 系統設定 dialog -->
