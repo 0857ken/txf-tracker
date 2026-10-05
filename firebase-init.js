@@ -1,4 +1,4 @@
-// Firebase 初始化(單人使用,匿名驗證)
+// Firebase 初始化：保留既有登入；只有沒有登入狀態時才建立匿名工作階段。
 import { initializeApp } from 'https://www.gstatic.com/firebasejs/12.14.0/firebase-app.js';
 import { getFirestore } from 'https://www.gstatic.com/firebasejs/12.14.0/firebase-firestore.js';
 import { getAuth, signInAnonymously, onAuthStateChanged } from 'https://www.gstatic.com/firebasejs/12.14.0/firebase-auth.js';
@@ -15,17 +15,28 @@ const firebaseConfig = {
 const app = initializeApp(firebaseConfig);
 const db = getFirestore(app);
 const auth = getAuth(app);
+window.fbDb = db;
+window.fbAuth = auth;
 
-// 匿名登入,登入完成後標記 ready
-window.fbReady = new Promise((resolve) => {
-  onAuthStateChanged(auth, (user) => {
+let fallbackInFlight = false;
+window.fbReady = new Promise((resolve, reject) => {
+  let settled = false;
+  onAuthStateChanged(auth, async (user) => {
     if (user) {
       window.fbUid = user.uid;
-      resolve(user.uid);
+      if (!settled) { settled = true; resolve(user.uid); }
+      return;
+    }
+    window.fbUid = null;
+    if (fallbackInFlight) return;
+    fallbackInFlight = true;
+    try {
+      await signInAnonymously(auth);
+    } catch (error) {
+      console.error('Firebase登入失敗');
+      if (!settled) { settled = true; reject(error); }
+    } finally {
+      fallbackInFlight = false;
     }
   });
-  signInAnonymously(auth).catch((e) => console.error('匿名登入失敗:', e));
 });
-
-// 把 db 和常用函式掛到 window,讓其他 script 用
-window.fbDb = db;
