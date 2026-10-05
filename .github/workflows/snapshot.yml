@@ -1,0 +1,32 @@
+name: 每日資產淨值快照
+
+on:
+  schedule:
+    # 台灣平日 14:20 = UTC 06:20
+    - cron: '20 6 * * 1-5'
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  snapshot-assets:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout gh-pages
+        uses: actions/checkout@v4
+        with:
+          ref: gh-pages
+
+      - name: Setup Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: '3.12'
+
+      - name: 安裝套件
+        run: pip install firebase-admin
+
+      - name: 建立每日資產淨值快照
+        env:
+          FIREBASE_KEY: ${{ secrets.FIREBASE_KEY }}
+        run: python scripts/snapshot_assets.py
