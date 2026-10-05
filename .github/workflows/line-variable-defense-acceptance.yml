@@ -1,0 +1,36 @@
+name: LINE Variable Defense Summary Acceptance
+
+on:
+  push:
+    branches:
+      - acceptance/line-summary-variable-defense-2026-10-06
+
+permissions:
+  contents: read
+
+jobs:
+  test:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.12'
+      - name: Install LINE summary dependency
+        run: pip install firebase-admin
+      - name: Syntax
+        run: python -m py_compile scripts/line_summary.py scripts/strategy_calc.py
+      - name: Variable defense LINE tests
+        run: python -m unittest tests/test_line_summary_variable_defense.py
+      - name: Preview current summary block
+        run: |
+          python - <<'PY'
+import importlib.util
+spec=importlib.util.spec_from_file_location("m","scripts/line_summary.py")
+m=importlib.util.module_from_spec(spec);spec.loader.exec_module(m)
+r=m.compute_variable_defense(m.load_json("data/strategy_data.json"),m.load_json("data/fubon_market_data.json"))
+print("\n".join(m.variable_defense_lines(r)))
+PY
+      - run: git diff --check HEAD~2 HEAD
