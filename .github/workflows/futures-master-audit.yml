@@ -22,6 +22,39 @@ jobs:
       - name: Install Firestore SDK
         run: pip install firebase-admin
 
+      - name: Checkout proposed futures master branch
+        uses: actions/checkout@v4
+        with:
+          ref: feature/futures-master-defense-2026-10-06
+
+      - name: Syntax check shared futures module
+        run: node --check positions.js
+
+      - name: Syntax check inline page scripts
+        run: |
+          python - <<'PY'
+          import re, pathlib, subprocess, sys
+          for name in ["index.html", "stocks.html", "assets.html"]:
+              text = pathlib.Path(name).read_text(encoding="utf-8")
+              blocks = re.findall(r"<script(?![^>]*\bsrc=)[^>]*>([\s\S]*?)</script>", text, re.I)
+              for i, block in enumerate(blocks):
+                  p = pathlib.Path("/tmp") / f"{name}.{i}.js"
+                  p.write_text(block, encoding="utf-8")
+                  r = subprocess.run(["node", "--check", str(p)], text=True, capture_output=True)
+                  if r.returncode:
+                      print(r.stderr)
+                      raise SystemExit(f"SYNTAX_FAIL {name} inline-script-{i}")
+          print("SYNTAX_OK")
+          PY
+
+      - name: Guard against legacy futures writes
+        run: |
+          if grep -E "updatePositionFS|deletePositionFS|addPositionFS" index.html stocks.html assets.html; then
+            echo "LEGACY_WRITE_REFERENCE_FOUND"
+            exit 1
+          fi
+          echo "LEGACY_WRITE_GUARD_OK"
+
       - name: Read-only audit
         env:
           FIREBASE_KEY: ${{ secrets.FIREBASE_KEY }}
