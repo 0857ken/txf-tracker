@@ -24,7 +24,7 @@ jobs:
         run: |
           node --test tests/defense-margin-guidance.test.cjs
           node --test tests/defense-production-forward.test.cjs
-          node --test tests/defense-fubon-market.test.cjs
+          node --test tests/defense-account-save.test.cjs
       - name: Scope guard
         run: |
           git diff --name-only HEAD~2 HEAD
