@@ -44,9 +44,66 @@
   .range-btn { background: var(--bg3); color: var(--muted); border: 1px solid var(--border); padding: 4px 12px; font-size: 11px; }
   .range-btn.active { background: var(--blue); color: #fff; border-color: var(--blue); }
 @media(max-width:768px){header{flex-wrap:wrap;gap:12px}.nav{flex-wrap:wrap;gap:12px}}
+
+/* Mobile containment + app-like navigation. */
+html, body { max-width:100%; overflow-x:hidden; }
+main, .card, .grid-2 { min-width:0; }
+canvas { max-width:100%; }
+.app-topbar,.bottom-nav { display:none; }
+@media(max-width:768px){
+  header { display:none; }
+  body { background:#000; }
+  main { width:100%; max-width:100%; padding:14px 14px 108px; overflow-x:hidden; }
+  .grid-2 { grid-template-columns:1fr; gap:12px; margin-bottom:12px; }
+  .card { width:100%; max-width:100%; overflow:hidden; border-radius:20px; padding:18px 16px; margin-bottom:14px; }
+  .value { font-size:22px; }
+  .app-topbar { display:flex; position:sticky; top:0; z-index:20; align-items:center; justify-content:space-between; padding:16px 16px 8px; background:rgba(0,0,0,.88); backdrop-filter:blur(16px); }
+  .app-topbar .app-title { font-size:30px; font-weight:800; letter-spacing:-.04em; }
+  .app-actions { display:flex; gap:8px; }
+  .app-actions button,.app-actions a { width:42px; height:42px; display:grid; place-items:center; padding:0; margin:0; border-radius:50%; border:1px solid #3a3a3c; background:#171719; color:#fff; text-decoration:none; font-size:18px; }
+  .bottom-nav { display:grid; grid-template-columns:repeat(5,1fr); position:fixed; z-index:30; left:14px; right:14px; bottom:12px; padding:9px 6px 8px; border-radius:28px; background:rgba(31,31,33,.94); border:1px solid #454549; box-shadow:0 18px 50px rgba(0,0,0,.5); backdrop-filter:blur(18px); }
+  .bottom-nav a { min-width:0; display:flex; flex-direction:column; align-items:center; gap:3px; color:#c7c7cc; text-decoration:none; font-size:11px; }
+  .bottom-nav a .nav-icon { font-size:21px; line-height:1.2; }
+  .bottom-nav a.active { color:#f0cc69; }
+
+  table.mobile-cards { width:100%; display:block; }
+  table.mobile-cards thead { display:none; }
+  table.mobile-cards tbody { display:block; width:100%; }
+  table.mobile-cards tr { display:block; width:100%; background:var(--bg3); border:1px solid var(--border); border-radius:16px; padding:10px 12px; margin-bottom:10px; }
+  table.mobile-cards td { display:grid; grid-template-columns:92px minmax(0,1fr); align-items:start; gap:10px; width:100%; max-width:100%; padding:7px 0; border:0; overflow-wrap:anywhere; word-break:break-word; }
+  table.mobile-cards td::before { color:var(--muted); font-size:11px; line-height:1.5; }
+  table.mobile-cards td:nth-child(1)::before { content:'代號'; }
+  table.mobile-cards td:nth-child(2)::before { content:'名稱'; }
+  table.mobile-cards td:nth-child(3)::before { content:'股數／口數'; }
+  table.mobile-cards td:nth-child(4)::before { content:'成本價'; }
+  table.mobile-cards td:nth-child(5)::before { content:'現價'; }
+  table.mobile-cards td:nth-child(6)::before { content:'損益'; }
+  table.mobile-cards td:nth-child(7)::before { content:'提醒上限'; }
+  table.mobile-cards td:nth-child(8)::before { content:'提醒下限'; }
+  table.mobile-cards td:nth-child(9)::before { content:'操作'; }
+  table.mobile-cards td:nth-child(9) { display:flex; flex-wrap:wrap; gap:6px; padding-top:10px; border-top:1px solid var(--border); }
+  table.mobile-cards td:nth-child(9)::before { flex:0 0 92px; }
+  table.mobile-cards input { width:100% !important; min-width:0; font-size:16px; }
+  table.mobile-cards button { margin:0; }
+
+  table.add-position { display:block; width:100%; }
+  table.add-position tbody, table.add-position tr { display:block; width:100%; }
+  table.add-position td { display:block; width:100%; padding:7px 0; border:0; font-size:12px; }
+  table.add-position input, table.add-position select { display:block; width:100% !important; max-width:100%; margin-top:5px; padding:10px; font-size:16px !important; border-radius:10px !important; }
+  table.add-position button { width:100%; min-height:42px; margin:4px 0 0; border-radius:10px; font-size:14px; }
+  dialog { width:calc(100vw - 28px) !important; min-width:0 !important; max-width:calc(100vw - 28px) !important; }
+}
+
 </style>
 </head>
 <body>
+<div class="app-topbar">
+  <div class="app-title">資產總覽</div>
+  <div class="app-actions">
+    <button type="button" onclick="loadStocks()" aria-label="刷新">↻</button>
+    <a href="assets.html" aria-label="儀表板">◔</a>
+  </div>
+</div>
 <header>
   <div class="logo">TXF TRACKER · 資產總覽</div>
   <nav class="nav">
@@ -79,7 +136,7 @@
 
   <div class="card">
     <div class="label">資產明細（股票/ETF/基金）</div>
-    <table>
+    <table class="mobile-cards">
       <thead><tr><th>代號</th><th>名稱</th><th>股數</th><th>成本價</th><th>現價</th><th>損益(%)</th><th>提醒上限</th><th>提醒下限</th><th>操作</th></tr></thead>
       <tbody id="stock-tbody"><tr><td colspan="9">載入中...</td></tr></tbody>
     </table>
@@ -87,7 +144,7 @@
 
   <div class="card">
     <div class="label">新增持倉</div>
-    <table>
+    <table class="add-position">
       <tr>
         <td>類別: <select id="new-type" style="background:var(--bg3);color:var(--text);border:1px solid var(--border);padding:6px;border-radius:4px;font-family:var(--mono);font-size:12px">
           <option value="stock">股票/ETF</option>
@@ -103,6 +160,13 @@
     </table>
   </div>
 </main>
+<nav class="bottom-nav" aria-label="主要導覽">
+  <a href="index.html"><span class="nav-icon">⌁</span><span>期貨</span></a>
+  <a href="stocks.html" class="active"><span class="nav-icon">▣</span><span>股票</span></a>
+  <a href="assets.html"><span class="nav-icon">◔</span><span>儀表板</span></a>
+  <a href="strategy.html"><span class="nav-icon">◫</span><span>策略庫</span></a>
+  <a href="follow.html"><span class="nav-icon">↗</span><span>跟單</span></a>
+</nav>
 
 <script src="https://cdnjs.cloudflare.com/ajax/libs/Chart.js/3.9.1/chart.min.js"></script>
 <script type="module" src="firebase-init.js"></script>
