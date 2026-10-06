@@ -1,0 +1,32 @@
+name: Stocks Mobile Overflow Acceptance
+
+on:
+  push:
+    branches:
+      - acceptance/stocks-mobile-overflow-2026-10-06
+
+permissions:
+  contents: read
+
+jobs:
+  test:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+      - name: Mobile structure tests
+        run: node --test tests/stocks-mobile-overflow.test.cjs
+      - name: Existing production regressions
+        run: |
+          node --test tests/defense-margin-guidance.test.cjs
+          node --test tests/defense-production-forward.test.cjs
+          node --test tests/defense-fubon-market.test.cjs
+      - name: Scope guard
+        run: |
+          git diff --name-only HEAD~2 HEAD
+          test "$(git diff --name-only HEAD~2 HEAD | grep -Ev '^(stocks.html|tests/stocks-mobile-overflow.test.cjs|.github/workflows/stocks-mobile-overflow-acceptance.yml)$' | wc -l)" -eq 0
+      - run: git diff --check HEAD~2 HEAD
