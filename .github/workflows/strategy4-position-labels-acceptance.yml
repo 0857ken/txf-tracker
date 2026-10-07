@@ -1,0 +1,20 @@
+name: Strategy 4 Position Labels Acceptance
+on:
+  push:
+    branches:
+      - acceptance/strategy4-position-labels-2026-10-07
+permissions:
+  contents: read
+jobs:
+  test:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+      - run: node --test tests/strategy4-position-labels.test.cjs
+      - run: node --test tests/defense-account-save.test.cjs tests/defense-margin-guidance.test.cjs
+      - run: git diff --check HEAD~2 HEAD
