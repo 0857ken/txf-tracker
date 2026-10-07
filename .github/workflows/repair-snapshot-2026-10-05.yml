@@ -10,7 +10,7 @@ permissions:
   contents: read
 
 jobs:
-  inspect:
+  repair:
     runs-on: ubuntu-latest
     timeout-minutes: 10
     steps:
@@ -21,7 +21,7 @@ jobs:
       - name: Install Firestore SDK
         run: pip install firebase-admin
 
-      - name: Inspect target snapshot read-only
+      - name: Repair target snapshot with strict guards
         env:
           FIREBASE_KEY: ${{ secrets.FIREBASE_KEY }}
         run: |
@@ -31,6 +31,19 @@ jobs:
           from firebase_admin import credentials, firestore
 
           TARGET = "2026-10-05"
+          EXPECTED = {
+              "schema_version": 1,
+              "net_worth": 2248345,
+              "total_pnl": 248345,
+              "unrealized_pnl": 248345,
+              "cash": 1645064,
+              "invested_value": 603281,
+              "invested_cost": 354936,
+              "futures_margin_used": 60000,
+              "futures_notional": 994241,
+              "market_price": 49712.04,
+          }
+
           cred = credentials.Certificate(json.loads(os.environ["FIREBASE_KEY"]))
           firebase_admin.initialize_app(cred)
           db = firestore.client()
@@ -38,13 +51,21 @@ jobs:
           asset_ref = db.collection("users").document("me").collection("dailySnapshots").document(TARGET)
           asset_doc = asset_ref.get()
           if not asset_doc.exists:
-              raise SystemExit("INSPECT_FAIL asset_snapshot_missing")
+              raise SystemExit("REPAIR_ABORT asset_snapshot_missing")
           asset = asset_doc.to_dict() or {}
+
+          for key, expected in EXPECTED.items():
+              actual = asset.get(key)
+              if isinstance(expected, float):
+                  if actual is None or abs(float(actual) - expected) > 1e-9:
+                      raise SystemExit(f"REPAIR_ABORT unexpected_{key}")
+              elif actual != expected:
+                  raise SystemExit(f"REPAIR_ABORT unexpected_{key}")
 
           owner = db.collection("strategy4System").document("owner").get()
           owner_uid = (owner.to_dict() or {}).get("uid") if owner.exists else None
           if not owner_uid:
-              raise SystemExit("INSPECT_FAIL owner_missing")
+              raise SystemExit("REPAIR_ABORT owner_missing")
 
           defense_ref = (
               db.collection("defenseUsers").document(owner_uid)
@@ -53,41 +74,111 @@ jobs:
           )
           defense_doc = defense_ref.get()
           if not defense_doc.exists:
-              raise SystemExit("INSPECT_FAIL defense_snapshot_missing")
+              raise SystemExit("REPAIR_ABORT defense_snapshot_missing")
           defense = defense_doc.to_dict() or {}
-
-          legacy_docs = list(
-              db.collection("users").document("me").collection("positions").stream()
-          )
-          legacy = [d.to_dict() or {} for d in legacy_docs]
-
           positions = defense.get("positions") or []
           if len(positions) != 1:
-              raise SystemExit("INSPECT_FAIL defense_position_count_not_1")
+              raise SystemExit("REPAIR_ABORT defense_position_count")
           p = positions[0]
 
-          print("INSPECT_OK")
-          print("asset_schema_version=" + str(asset.get("schema_version")))
-          print("asset_net_worth=" + str(asset.get("net_worth")))
-          print("asset_total_pnl=" + str(asset.get("total_pnl")))
-          print("asset_unrealized_pnl=" + str(asset.get("unrealized_pnl")))
-          print("asset_cash=" + str(asset.get("cash")))
-          print("asset_invested_value=" + str(asset.get("invested_value")))
-          print("asset_invested_cost=" + str(asset.get("invested_cost")))
-          print("asset_futures_margin_used=" + str(asset.get("futures_margin_used")))
-          print("asset_futures_notional=" + str(asset.get("futures_notional")))
-          print("asset_market_price=" + str(asset.get("market_price")))
+          if p.get("product") != "TMF" or p.get("month") != "2026-10" or float(p.get("lots") or 0) != 2:
+              raise SystemExit("REPAIR_ABORT defense_position_mismatch")
+          if float(p.get("mark") or 0) != 49949:
+              raise SystemExit("REPAIR_ABORT defense_mark_mismatch")
+          if float(defense.get("initialMargin") or 0) != 140200:
+              raise SystemExit("REPAIR_ABORT defense_margin_mismatch")
+          if abs(float(defense.get("index") or 0) - 49712.04) > 1e-9:
+              raise SystemExit("REPAIR_ABORT defense_index_mismatch")
 
-          print("defense_product=" + str(p.get("product")))
-          print("defense_month=" + str(p.get("month")))
-          print("defense_lots=" + str(p.get("lots")))
-          print("defense_mark=" + str(p.get("mark")))
-          print("defense_initial_margin=" + str(defense.get("initialMargin")))
-          print("defense_market_index=" + str(defense.get("index")))
+          legacy_docs = list(db.collection("users").document("me").collection("positions").stream())
+          if len(legacy_docs) != 1:
+              raise SystemExit("REPAIR_ABORT legacy_position_count")
+          legacy = legacy_docs[0].to_dict() or {}
+          if legacy.get("type") != "TMF" or float(legacy.get("lots") or 0) != 2 or float(legacy.get("entry_price") or 0) != 50068:
+              raise SystemExit("REPAIR_ABORT legacy_cost_mismatch")
 
-          print("legacy_position_count=" + str(len(legacy)))
-          for i, row in enumerate(legacy):
-              print(f"legacy_{i}_type=" + str(row.get("type")))
-              print(f"legacy_{i}_lots=" + str(row.get("lots")))
-              print(f"legacy_{i}_entry_price=" + str(row.get("entry_price")))
+          correct_mark = 49949.0
+          benchmark = 49712.04
+          mult = 10.0
+          lots = 2.0
+          entry = 50068.0
+          correct_margin = 140200.0
+
+          old_margin = float(asset["futures_margin_used"])
+          old_mark = float(asset["market_price"])
+          pnl_delta = (correct_mark - old_mark) * mult * lots
+          margin_delta = correct_margin - old_margin
+
+          repaired = {
+              "net_worth": round(float(asset["net_worth"]) + pnl_delta),
+              "total_pnl": round(float(asset["total_pnl"]) + pnl_delta),
+              "unrealized_pnl": round(float(asset["unrealized_pnl"]) + pnl_delta),
+              "cash": round(float(asset["cash"]) - margin_delta),
+              "cash_pct": round((float(asset["cash"]) - margin_delta) / 2000000 * 100, 4),
+              "invested_value": round(float(asset["invested_value"]) + margin_delta + pnl_delta),
+              "invested_cost": round(float(asset["invested_cost"]) + margin_delta),
+              "futures_margin_used": round(correct_margin),
+              "futures_notional": round(correct_mark * mult * abs(lots)),
+              "leverage": round((correct_mark * mult * abs(lots)) / 2000000, 4),
+              "market_price": correct_mark,
+              "benchmark_price": benchmark,
+              "futures_prices": [{
+                  "product": "TMF",
+                  "month": "2026-10",
+                  "price": correct_mark,
+                  "source": "0050變速防守正式帳戶核對價",
+              }],
+              "futures_source": "0050-defense-formal",
+              "futures_account_asof": defense.get("accountAsOf"),
+              "futures_market_updated_at": defense.get("marketUpdatedAt"),
+              "schema_version": 2,
+              "updated_at": firestore.SERVER_TIMESTAMP,
+          }
+
+          # Expected corrected totals from the reconciled 2026-10-05 inputs.
+          checks = {
+              "net_worth": 2253084,
+              "total_pnl": 253084,
+              "unrealized_pnl": 253084,
+              "cash": 1564864,
+              "invested_value": 688220,
+              "invested_cost": 435136,
+              "futures_margin_used": 140200,
+              "futures_notional": 998980,
+              "leverage": 0.4995,
+              "market_price": 49949.0,
+              "benchmark_price": 49712.04,
+              "schema_version": 2,
+          }
+          for key, expected in checks.items():
+              actual = repaired.get(key)
+              if isinstance(expected, float):
+                  if abs(float(actual) - expected) > 1e-9:
+                      raise SystemExit(f"REPAIR_ABORT computed_{key}")
+              elif actual != expected:
+                  raise SystemExit(f"REPAIR_ABORT computed_{key}")
+
+          asset_ref.set(repaired, merge=True)
+
+          verify = asset_ref.get().to_dict() or {}
+          for key, expected in checks.items():
+              actual = verify.get(key)
+              if isinstance(expected, float):
+                  if abs(float(actual) - expected) > 1e-9:
+                      raise SystemExit(f"VERIFY_FAIL {key}")
+              elif actual != expected:
+                  raise SystemExit(f"VERIFY_FAIL {key}")
+
+          print("REPAIR_OK")
+          print("snapshot_date=" + TARGET)
+          print("net_worth=" + str(verify["net_worth"]))
+          print("total_pnl=" + str(verify["total_pnl"]))
+          print("cash=" + str(verify["cash"]))
+          print("invested_value=" + str(verify["invested_value"]))
+          print("futures_margin_used=" + str(verify["futures_margin_used"]))
+          print("futures_notional=" + str(verify["futures_notional"]))
+          print("leverage=" + str(verify["leverage"]))
+          print("futures_price=" + str(verify["market_price"]))
+          print("benchmark_price=" + str(verify["benchmark_price"]))
+          print("schema_version=" + str(verify["schema_version"]))
           PY
