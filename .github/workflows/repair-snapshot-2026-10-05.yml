@@ -1,0 +1,93 @@
+name: Repair 2026-10-05 Daily Snapshot
+
+on:
+  push:
+    branches:
+      - acceptance/repair-daily-snapshot-2026-10-05
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  inspect:
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.12'
+
+      - name: Install Firestore SDK
+        run: pip install firebase-admin
+
+      - name: Inspect target snapshot read-only
+        env:
+          FIREBASE_KEY: ${{ secrets.FIREBASE_KEY }}
+        run: |
+          python - <<'PY'
+          import json, os
+          import firebase_admin
+          from firebase_admin import credentials, firestore
+
+          TARGET = "2026-10-05"
+          cred = credentials.Certificate(json.loads(os.environ["FIREBASE_KEY"]))
+          firebase_admin.initialize_app(cred)
+          db = firestore.client()
+
+          asset_ref = db.collection("users").document("me").collection("dailySnapshots").document(TARGET)
+          asset_doc = asset_ref.get()
+          if not asset_doc.exists:
+              raise SystemExit("INSPECT_FAIL asset_snapshot_missing")
+          asset = asset_doc.to_dict() or {}
+
+          owner = db.collection("strategy4System").document("owner").get()
+          owner_uid = (owner.to_dict() or {}).get("uid") if owner.exists else None
+          if not owner_uid:
+              raise SystemExit("INSPECT_FAIL owner_missing")
+
+          defense_ref = (
+              db.collection("defenseUsers").document(owner_uid)
+              .collection("strategies").document("0050-defense-v1")
+              .collection("dailySnapshots").document(TARGET)
+          )
+          defense_doc = defense_ref.get()
+          if not defense_doc.exists:
+              raise SystemExit("INSPECT_FAIL defense_snapshot_missing")
+          defense = defense_doc.to_dict() or {}
+
+          legacy_docs = list(
+              db.collection("users").document("me").collection("positions").stream()
+          )
+          legacy = [d.to_dict() or {} for d in legacy_docs]
+
+          positions = defense.get("positions") or []
+          if len(positions) != 1:
+              raise SystemExit("INSPECT_FAIL defense_position_count_not_1")
+          p = positions[0]
+
+          print("INSPECT_OK")
+          print("asset_schema_version=" + str(asset.get("schema_version")))
+          print("asset_net_worth=" + str(asset.get("net_worth")))
+          print("asset_total_pnl=" + str(asset.get("total_pnl")))
+          print("asset_unrealized_pnl=" + str(asset.get("unrealized_pnl")))
+          print("asset_cash=" + str(asset.get("cash")))
+          print("asset_invested_value=" + str(asset.get("invested_value")))
+          print("asset_invested_cost=" + str(asset.get("invested_cost")))
+          print("asset_futures_margin_used=" + str(asset.get("futures_margin_used")))
+          print("asset_futures_notional=" + str(asset.get("futures_notional")))
+          print("asset_market_price=" + str(asset.get("market_price")))
+
+          print("defense_product=" + str(p.get("product")))
+          print("defense_month=" + str(p.get("month")))
+          print("defense_lots=" + str(p.get("lots")))
+          print("defense_mark=" + str(p.get("mark")))
+          print("defense_initial_margin=" + str(defense.get("initialMargin")))
+          print("defense_market_index=" + str(defense.get("index")))
+
+          print("legacy_position_count=" + str(len(legacy)))
+          for i, row in enumerate(legacy):
+              print(f"legacy_{i}_type=" + str(row.get("type")))
+              print(f"legacy_{i}_lots=" + str(row.get("lots")))
+              print(f"legacy_{i}_entry_price=" + str(row.get("entry_price")))
+          PY
