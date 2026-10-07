@@ -65,7 +65,7 @@
             <label>券商覆寫維持保證金（選填）<input name="brokerOverrideMaintenance" type="number" min="0" step="1" inputmode="numeric"></label>
             <label>下一次預計換倉日<input name="nextRollDate" type="date"></label>
           </div>
-          <p class="muted">每筆按商品、月份填寫。多單正口數、空單負口數；未填期貨參考價時不計算實際曝險，不用指數代替。</p>
+          <p class="muted">每筆按商品、月份填寫。口數是目前總持倉；同商品同月份加碼直接改總口數。市價／收盤價只用來估算曝險，不是成交成本。</p>
           <div id="position-inputs"></div><button type="button" id="add-position" class="secondary">＋ 增加合約</button>
           <label class="checkbox"><input name="acknowledge" type="checkbox">我已按成交紀錄核對完成本次訊號調倉</label>
           <button type="submit" class="primary">儲存帳戶與核對紀錄</button>

@@ -297,8 +297,8 @@
     const row = document.createElement('div'); row.className = 'position-input';
     row.innerHTML = '<label>商品<select class="pos-product">' + Object.keys(C.MULT).map(k => '<option' + (p.product === k ? ' selected' : '') + '>' + k + '</option>').join('') +
       '</select></label><label>月份<input class="pos-month" type="month" required value="' + escape(p.month) + '"></label>' +
-      '<label>口數<input class="pos-lots" type="number" inputmode="numeric" step="1" required value="' + escape(p.lots) + '"></label>' +
-      '<label>期貨參考價<input class="pos-mark" type="number" inputmode="decimal" step="0.01" min="0.01" value="' + escape(p.mark ?? '') + '"></label>' +
+      '<label>目前總口數<input class="pos-lots" type="number" inputmode="numeric" step="1" required value="' + escape(p.lots) + '"><small>同商品、同月份加碼時，填加碼後的總口數，不是本次新增口數。</small></label>' +
+      '<label>目前市價／收盤價（非成交價）<input class="pos-mark" type="number" inputmode="decimal" step="0.01" min="0.01" value="' + escape(p.mark ?? '') + '"><small>用於估算目前名目曝險；買進成交價請不要填在這裡。</small></label>' +
       '<button class="remove-position" type="button" aria-label="移除此合約">×</button>';
     row.querySelector('button').addEventListener('click', () => row.remove());
     $('position-inputs').append(row);
