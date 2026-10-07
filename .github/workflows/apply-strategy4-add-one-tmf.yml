@@ -1,0 +1,24 @@
+name: Apply Strategy 4 +1 TMF
+on:
+  push:
+    branches:
+      - ops/strategy4-add-one-tmf-2026-10-06
+permissions:
+  contents: read
+jobs:
+  apply:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/checkout@v4
+        with:
+          ref: gh-pages
+          path: prod
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+      - run: npm ci --prefix prod/tools/defense-runner --omit=dev --ignore-scripts --no-audit --no-fund
+      - name: Apply guarded +1 TMF position update
+        env:
+          FIREBASE_KEY: ${{ secrets.FIREBASE_KEY }}
+        run: node tools/apply-strategy4-add-one-tmf.cjs
