@@ -1,0 +1,113 @@
+name: Realized PnL Read-only Audit
+
+on:
+  push:
+    branches:
+      - acceptance/realized-pnl-readonly-audit-2026-10-10
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  audit:
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.12'
+
+      - name: Install Firestore SDK
+        run: pip install firebase-admin
+
+      - name: Inspect formal futures executions and realized PnL
+        env:
+          FIREBASE_KEY: ${{ secrets.FIREBASE_KEY }}
+        run: |
+          python - <<'PY'
+          import json, os
+          import firebase_admin
+          from firebase_admin import credentials, firestore
+
+          cred = credentials.Certificate(json.loads(os.environ["FIREBASE_KEY"]))
+          firebase_admin.initialize_app(cred)
+          db = firestore.client()
+
+          owner = db.collection("strategy4System").document("owner").get()
+          owner_uid = (owner.to_dict() or {}).get("uid") if owner.exists else None
+          if not owner_uid:
+              raise SystemExit("AUDIT_FAIL owner_missing")
+
+          base = (
+              db.collection("defenseUsers").document(owner_uid)
+              .collection("strategies").document("0050-defense-v1")
+          )
+
+          exec_docs = list(base.collection("executions").stream())
+          executions = []
+          for d in exec_docs:
+              x = d.to_dict() or {}
+              fills = x.get("fills") or []
+              fill_lots = 0.0
+              fill_value = 0.0
+              for f in fills:
+                  lots = float(f.get("lots") or 0)
+                  price = float(f.get("price") or 0)
+                  fill_lots += lots
+                  fill_value += lots * price
+              avg_fill = (fill_value / fill_lots) if fill_lots else None
+              executions.append({
+                  "id": d.id,
+                  "tradeDate": x.get("tradeDate"),
+                  "product": x.get("product"),
+                  "side": x.get("side"),
+                  "kind": x.get("kind"),
+                  "nearMonth": x.get("nearMonth"),
+                  "farMonth": x.get("farMonth"),
+                  "filledLots": fill_lots,
+                  "averageFill": avg_fill,
+                  "fee": x.get("fee"),
+                  "tax": x.get("tax"),
+                  "orderedAt": x.get("orderedAt"),
+                  "fills": [
+                      {
+                          "lots": f.get("lots"),
+                          "price": f.get("price"),
+                          "at": f.get("at"),
+                      }
+                      for f in fills
+                  ],
+              })
+          executions.sort(key=lambda x: (str(x.get("tradeDate") or ""), str(x.get("orderedAt") or "")))
+
+          realized_docs = list(
+              db.collection("users").document("me").collection("realizedPnl").stream()
+          )
+          realized = []
+          for d in realized_docs:
+              x = d.to_dict() or {}
+              realized.append({
+                  "id": d.id,
+                  "date": x.get("date"),
+                  "lots": x.get("lots"),
+                  "entry_price": x.get("entry_price"),
+                  "exit_price": x.get("exit_price"),
+                  "pnl_twd": x.get("pnl_twd"),
+                  "note": x.get("note"),
+              })
+          realized.sort(key=lambda x: (str(x.get("date") or ""), str(x.get("id") or "")))
+
+          account_doc = base.collection("state").document("account").get()
+          account = account_doc.to_dict() if account_doc.exists else {}
+          positions = (account or {}).get("positions") or []
+
+          print("AUDIT_OK")
+          print("execution_count=" + str(len(executions)))
+          for i, e in enumerate(executions):
+              print("EXEC_" + str(i) + "=" + json.dumps(e, ensure_ascii=False, separators=(",", ":")))
+          print("realized_count=" + str(len(realized)))
+          for i, r in enumerate(realized):
+              print("REALIZED_" + str(i) + "=" + json.dumps(r, ensure_ascii=False, separators=(",", ":")))
+          print("formal_positions=" + json.dumps(positions, ensure_ascii=False, separators=(",", ":")))
+          PY
