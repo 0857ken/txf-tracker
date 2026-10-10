@@ -1,0 +1,184 @@
+name: Reconcile Realized PnL 2026-10-08
+
+on:
+  push:
+    branches:
+      - acceptance/realized-pnl-write-2026-10-10
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  reconcile:
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.12'
+
+      - name: Install Firestore SDK
+        run: pip install firebase-admin
+
+      - name: Write realized PnL and repair affected snapshots
+        env:
+          FIREBASE_KEY: ${{ secrets.FIREBASE_KEY }}
+        run: |
+          python - <<'PY'
+          import json, os
+          import firebase_admin
+          from firebase_admin import credentials, firestore
+
+          DOC_ID = "tmf-2026-10-08-added-lots-roundtrip"
+          REALIZED_PNL = -3310
+          TRADE_DATE = "2026-10-08"
+
+          expected_snapshots = {
+              "2026-10-08": {
+                  "net_worth": 2243884,
+                  "total_pnl": 243884,
+                  "realized_pnl": 0,
+                  "unrealized_pnl": 243884,
+                  "cash": 1564864,
+              },
+              "2026-10-09": {
+                  "net_worth": 2232044,
+                  "total_pnl": 232044,
+                  "realized_pnl": 0,
+                  "unrealized_pnl": 232044,
+                  "cash": 1564864,
+              },
+          }
+
+          cred = credentials.Certificate(json.loads(os.environ["FIREBASE_KEY"]))
+          firebase_admin.initialize_app(cred)
+          db = firestore.client()
+
+          realized_ref = (
+              db.collection("users").document("me")
+              .collection("realizedPnl").document(DOC_ID)
+          )
+
+          existing = realized_ref.get()
+          if existing.exists:
+              data = existing.to_dict() or {}
+              if data.get("pnl_twd") == REALIZED_PNL and data.get("date") == TRADE_DATE:
+                  print("RECONCILE_ALREADY_DONE")
+                  raise SystemExit(0)
+              raise SystemExit("RECONCILE_ABORT realized_doc_conflict")
+
+          all_realized = list(
+              db.collection("users").document("me").collection("realizedPnl").stream()
+          )
+          if all_realized:
+              raise SystemExit("RECONCILE_ABORT realized_collection_not_empty")
+
+          owner = db.collection("strategy4System").document("owner").get()
+          owner_uid = (owner.to_dict() or {}).get("uid") if owner.exists else None
+          if not owner_uid:
+              raise SystemExit("RECONCILE_ABORT owner_missing")
+
+          account_doc = (
+              db.collection("defenseUsers").document(owner_uid)
+              .collection("strategies").document("0050-defense-v1")
+              .collection("state").document("account").get()
+          )
+          if not account_doc.exists:
+              raise SystemExit("RECONCILE_ABORT formal_account_missing")
+          account = account_doc.to_dict() or {}
+          positions = account.get("positions") or []
+          if len(positions) != 1:
+              raise SystemExit("RECONCILE_ABORT formal_position_count")
+          p = positions[0]
+          if p.get("product") != "TMF" or p.get("month") != "2026-10" or float(p.get("lots") or 0) != 2:
+              raise SystemExit("RECONCILE_ABORT formal_position_mismatch")
+
+          legacy_docs = list(
+              db.collection("users").document("me").collection("positions").stream()
+          )
+          if len(legacy_docs) != 1:
+              raise SystemExit("RECONCILE_ABORT legacy_position_count")
+          legacy = legacy_docs[0].to_dict() or {}
+          if legacy.get("type") != "TMF" or float(legacy.get("lots") or 0) != 2 or float(legacy.get("entry_price") or 0) != 50068:
+              raise SystemExit("RECONCILE_ABORT legacy_position_mismatch")
+
+          snap_col = db.collection("users").document("me").collection("dailySnapshots")
+          snapshots = {}
+          for date, expected in expected_snapshots.items():
+              snap = snap_col.document(date).get()
+              if not snap.exists:
+                  raise SystemExit("RECONCILE_ABORT snapshot_missing_" + date)
+              data = snap.to_dict() or {}
+              for key, value in expected.items():
+                  if data.get(key) != value:
+                      raise SystemExit("RECONCILE_ABORT snapshot_changed_" + date + "_" + key)
+              snapshots[date] = data
+
+          realized_payload = {
+              "date": TRADE_DATE,
+              "type": "TMF",
+              "month": "2026-10",
+              "lots": 2,
+              "entry_price": 49755.0,
+              "exit_price": 49589.5,
+              "pnl_twd": REALIZED_PNL,
+              "note": "TMF 2610 加碼2口後減碼2口；買進 49,888 / 49,622，賣出 49,591 / 49,588；毛損益，未扣費稅",
+              "source": "manual-reconciled",
+              "trade_details": {
+                  "buys": [
+                      {"lots": 1, "price": 49888},
+                      {"lots": 1, "price": 49622},
+                  ],
+                  "sells": [
+                      {"lots": 1, "price": 49591},
+                      {"lots": 1, "price": 49588},
+                  ],
+                  "method": "aggregate-added-lots-roundtrip",
+              },
+              "created_at": firestore.SERVER_TIMESTAMP,
+              "updated_at": firestore.SERVER_TIMESTAMP,
+          }
+
+          batch = db.batch()
+          batch.create(realized_ref, realized_payload)
+
+          for date, old in snapshots.items():
+              new_net = old["net_worth"] + REALIZED_PNL
+              new_total = old["total_pnl"] + REALIZED_PNL
+              new_cash = old["cash"] + REALIZED_PNL
+              patch = {
+                  "net_worth": new_net,
+                  "total_pnl": new_total,
+                  "realized_pnl": REALIZED_PNL,
+                  "cash": new_cash,
+                  "pnl_pct": round(new_total / 2000000 * 100, 4),
+                  "cash_pct": round(new_cash / 2000000 * 100, 4),
+                  "realized_reconciliation": {
+                      "source_doc": DOC_ID,
+                      "trade_date": TRADE_DATE,
+                      "pnl_twd": REALIZED_PNL,
+                      "version": 1,
+                  },
+                  "updated_at": firestore.SERVER_TIMESTAMP,
+              }
+              batch.set(snap_col.document(date), patch, merge=True)
+
+          batch.commit()
+
+          saved = realized_ref.get().to_dict() or {}
+          if saved.get("pnl_twd") != REALIZED_PNL:
+              raise SystemExit("VERIFY_FAIL realized_pnl")
+
+          for date in expected_snapshots:
+              x = snap_col.document(date).get().to_dict() or {}
+              if x.get("realized_pnl") != REALIZED_PNL:
+                  raise SystemExit("VERIFY_FAIL snapshot_realized_" + date)
+
+          print("RECONCILE_OK")
+          print("realized_doc=" + DOC_ID)
+          print("trade_date=" + TRADE_DATE)
+          print("realized_pnl=" + str(REALIZED_PNL))
+          print("snapshot_2026-10-08_net_worth=" + str(snap_col.document("2026-10-08").get().to_dict().get("net_worth")))
+          print("snapshot_2026-10-09_net_worth=" + str(snap_col.document("2026-10-09").get().to_dict().get("net_worth")))
+          PY
