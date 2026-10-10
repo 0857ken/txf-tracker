@@ -14,6 +14,27 @@ jobs:
     runs-on: ubuntu-latest
     timeout-minutes: 10
     steps:
+      - name: Checkout assets realized PnL UI branch
+        uses: actions/checkout@v4
+        with:
+          ref: feature/assets-realized-pnl-total-2026-10-10
+
+      - name: Validate assets.html inline scripts
+        run: |
+          python - <<'PY'
+          import re, pathlib, subprocess
+          text = pathlib.Path("assets.html").read_text(encoding="utf-8")
+          blocks = re.findall(r"<script(?![^>]*\\bsrc=)[^>]*>([\\s\\S]*?)</script>", text, re.I)
+          for i, block in enumerate(blocks):
+              p = pathlib.Path("/tmp") / f"assets.{i}.js"
+              p.write_text(block, encoding="utf-8")
+              r = subprocess.run(["node", "--check", str(p)], text=True, capture_output=True)
+              if r.returncode:
+                  print(r.stderr)
+                  raise SystemExit(f"SYNTAX_FAIL inline-script-{i}")
+          print("ASSETS_SYNTAX_OK")
+          PY
+
       - uses: actions/setup-python@v5
         with:
           python-version: '3.12'
