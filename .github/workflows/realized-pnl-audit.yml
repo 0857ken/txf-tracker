@@ -110,4 +110,27 @@ jobs:
           for i, r in enumerate(realized):
               print("REALIZED_" + str(i) + "=" + json.dumps(r, ensure_ascii=False, separators=(",", ":")))
           print("formal_positions=" + json.dumps(positions, ensure_ascii=False, separators=(",", ":")))
+
+          snap_docs = list(
+              db.collection("users").document("me").collection("dailySnapshots").stream()
+          )
+          snapshots = []
+          for d in snap_docs:
+              if d.id >= "2026-10-07":
+                  x = d.to_dict() or {}
+                  snapshots.append({
+                      "date": d.id,
+                      "net_worth": x.get("net_worth"),
+                      "total_pnl": x.get("total_pnl"),
+                      "realized_pnl": x.get("realized_pnl"),
+                      "unrealized_pnl": x.get("unrealized_pnl"),
+                      "cash": x.get("cash"),
+                      "pnl_pct": x.get("pnl_pct"),
+                      "cash_pct": x.get("cash_pct"),
+                      "schema_version": x.get("schema_version"),
+                  })
+          snapshots.sort(key=lambda x: x["date"])
+          print("snapshot_count=" + str(len(snapshots)))
+          for i, s in enumerate(snapshots):
+              print("SNAPSHOT_" + str(i) + "=" + json.dumps(s, ensure_ascii=False, separators=(",", ":")))
           PY
