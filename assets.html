@@ -379,6 +379,7 @@ async function calculateAssets() {
   let txfMarginUsed = 0;
   let txfNotional = 0;
   let futuresCostComplete = true;
+  let realizedPnl = 0;
 
   // 台指期：只讀 0050 變速防守正式主帳。
   try {
@@ -431,15 +432,23 @@ async function calculateAssets() {
     totalValue += a.value;
   });
 
+  // 已實現損益：會回到現金，並納入計畫總損益／總淨值。
+  try {
+    const realizedRows = await window.fetchRealized();
+    realizedPnl = realizedRows.reduce((sum, row) => sum + (Number(row.pnl_twd) || 0), 0);
+  } catch (e) {
+    console.error('已實現損益讀取失敗', e);
+  }
+
   // 現金水位：股票/基金用成本扣，期貨使用 0050 變速防守正式帳戶的原始保證金總額。
   let cashUsed = txfMarginUsed;
   stocksData.forEach(s => {
     cashUsed += s.cost_price * s.shares;
   });
   assets.forEach(a => cashUsed += a.value);
-  const cash = 2000000 - cashUsed;
+  const cash = 2000000 + realizedPnl - cashUsed;
 
-  const pnl = totalValue - totalCost;
+  const pnl = totalValue - totalCost + realizedPnl;
   const pnlPct = ((pnl / 2000000) * 100).toFixed(2);
 
   document.getElementById('total-value').textContent = Math.round(totalValue).toLocaleString() + ' 元';
