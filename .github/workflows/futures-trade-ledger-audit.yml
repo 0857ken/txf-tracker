@@ -1,0 +1,90 @@
+name: Futures Trade Ledger Read-only Audit
+
+on:
+  push:
+    branches:
+      - acceptance/futures-trade-ledger-audit-2026-10-11
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  audit:
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.12'
+
+      - name: Install Firestore SDK
+        run: pip install firebase-admin
+
+      - name: Inspect current futures position and realized ledger
+        env:
+          FIREBASE_KEY: ${{ secrets.FIREBASE_KEY }}
+        run: |
+          python - <<'PY'
+          import json, os
+          import firebase_admin
+          from firebase_admin import credentials, firestore
+
+          cred = credentials.Certificate(json.loads(os.environ["FIREBASE_KEY"]))
+          firebase_admin.initialize_app(cred)
+          db = firestore.client()
+
+          owner = db.collection("strategy4System").document("owner").get()
+          owner_uid = (owner.to_dict() or {}).get("uid") if owner.exists else None
+          if not owner_uid:
+              raise SystemExit("AUDIT_FAIL owner_missing")
+
+          base = (
+              db.collection("defenseUsers").document(owner_uid)
+              .collection("strategies").document("0050-defense-v1")
+          )
+          account_doc = base.collection("state").document("account").get()
+          if not account_doc.exists:
+              raise SystemExit("AUDIT_FAIL account_missing")
+          account = account_doc.to_dict() or {}
+
+          legacy_docs = list(
+              db.collection("users").document("me").collection("positions").stream()
+          )
+          realized_docs = list(
+              db.collection("users").document("me").collection("realizedPnl").stream()
+          )
+          trade_docs = list(
+              db.collection("users").document("me").collection("futuresTrades").stream()
+          )
+
+          print("AUDIT_OK")
+          print("formal_positions=" + json.dumps(account.get("positions") or [], ensure_ascii=False, separators=(",", ":")))
+          print("formal_account_asof=" + str(account.get("asof")))
+          print("legacy_position_count=" + str(len(legacy_docs)))
+          for i, d in enumerate(legacy_docs):
+              x = d.to_dict() or {}
+              print("LEGACY_" + str(i) + "=" + json.dumps({
+                  "id": d.id,
+                  "type": x.get("type"),
+                  "lots": x.get("lots"),
+                  "entry_price": x.get("entry_price"),
+                  "date": x.get("date"),
+                  "note": x.get("note"),
+              }, ensure_ascii=False, separators=(",", ":")))
+          print("realized_count=" + str(len(realized_docs)))
+          for i, d in enumerate(realized_docs):
+              x = d.to_dict() or {}
+              print("REALIZED_" + str(i) + "=" + json.dumps({
+                  "id": d.id,
+                  "date": x.get("date"),
+                  "type": x.get("type"),
+                  "month": x.get("month"),
+                  "lots": x.get("lots"),
+                  "entry_price": x.get("entry_price"),
+                  "exit_price": x.get("exit_price"),
+                  "pnl_twd": x.get("pnl_twd"),
+                  "source": x.get("source"),
+              }, ensure_ascii=False, separators=(",", ":")))
+          print("futures_trade_count=" + str(len(trade_docs)))
+          PY
