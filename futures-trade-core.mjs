@@ -36,7 +36,8 @@ function normalizeLot(raw) {
     lots,
     entryPrice,
     openedAt,
-    tag: String(raw.tag || 'trade')
+    tag: String(raw.tag || 'trade'),
+    sequence: Number.isInteger(raw.sequence) ? raw.sequence : 0
   };
 }
 
@@ -49,6 +50,7 @@ export function normalizeState(raw) {
     schemaVersion: 1,
     cutoverDate,
     revision: Number.isInteger(state.revision) ? state.revision : 0,
+    lastTradeDate: String(state.lastTradeDate || state.last_trade_date || cutoverDate),
     openLots
   };
 }
@@ -56,6 +58,7 @@ export function normalizeState(raw) {
 function sortLots(openLots, policy) {
   const direction = policy === 'fifo' ? 1 : -1;
   return [...openLots].sort((a, b) => {
+    if (a.sequence !== b.sequence) return (a.sequence - b.sequence) * direction;
     const c = String(a.openedAt).localeCompare(String(b.openedAt));
     if (c !== 0) return c * direction;
     return String(a.id).localeCompare(String(b.id)) * direction;
@@ -97,6 +100,7 @@ export function applyTrade(rawState, rawTrade) {
   assert(trade.id, '成交ID不可空白');
   assert(validDate(trade.date), '成交日期格式錯誤');
   assert(trade.date >= state.cutoverDate, '成交日期早於交易帳本起始日');
+  assert(trade.date >= state.lastTradeDate, '請依時間順序輸入成交；不可在較新成交之後補登更早日期');
   assert(MULT[trade.product], '未知期貨商品');
   assert(/^\d{4}-\d{2}$/.test(trade.month), '合約月份格式錯誤');
   assert(['buy', 'sell'].includes(trade.side), '成交方向錯誤');
@@ -105,6 +109,7 @@ export function applyTrade(rawState, rawTrade) {
     const next = {
       ...state,
       revision: state.revision + 1,
+      lastTradeDate: trade.date,
       openLots: [
         ...state.openLots,
         {
@@ -114,7 +119,8 @@ export function applyTrade(rawState, rawTrade) {
           lots: trade.lots,
           entryPrice: trade.price,
           openedAt: trade.at,
-          tag: 'trade'
+          tag: 'trade',
+          sequence: state.revision + 1
         }
       ]
     };
@@ -162,6 +168,7 @@ export function applyTrade(rawState, rawTrade) {
   const next = {
     ...state,
     revision: state.revision + 1,
+    lastTradeDate: trade.date,
     openLots: nextLots
   };
 
