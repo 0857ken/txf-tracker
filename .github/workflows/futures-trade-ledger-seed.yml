@@ -1,0 +1,128 @@
+name: Seed Futures Trade Ledger 2026-10-11
+
+on:
+  push:
+    branches:
+      - acceptance/futures-trade-ledger-seed-2026-10-11
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  seed:
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.12'
+
+      - name: Install Firestore SDK
+        run: pip install firebase-admin
+
+      - name: Seed trade ledger with strict guards
+        env:
+          FIREBASE_KEY: ${{ secrets.FIREBASE_KEY }}
+        run: |
+          python - <<'PY'
+          import json, os
+          import firebase_admin
+          from firebase_admin import credentials, firestore
+
+          CUTOVER = "2026-10-11"
+
+          cred = credentials.Certificate(json.loads(os.environ["FIREBASE_KEY"]))
+          firebase_admin.initialize_app(cred)
+          db = firestore.client()
+
+          owner = db.collection("strategy4System").document("owner").get()
+          owner_uid = (owner.to_dict() or {}).get("uid") if owner.exists else None
+          if not owner_uid:
+              raise SystemExit("SEED_ABORT owner_missing")
+
+          base = (
+              db.collection("defenseUsers").document(owner_uid)
+              .collection("strategies").document("0050-defense-v1")
+          )
+
+          account_doc = base.collection("state").document("account").get()
+          if not account_doc.exists:
+              raise SystemExit("SEED_ABORT account_missing")
+          account = account_doc.to_dict() or {}
+          positions = account.get("positions") or []
+          if len(positions) != 1:
+              raise SystemExit("SEED_ABORT formal_position_count")
+          p = positions[0]
+          if p.get("product") != "TMF" or p.get("month") != "2026-10" or float(p.get("lots") or 0) != 2:
+              raise SystemExit("SEED_ABORT formal_position_mismatch")
+
+          legacy_docs = list(
+              db.collection("users").document("me").collection("positions").stream()
+          )
+          if len(legacy_docs) != 1:
+              raise SystemExit("SEED_ABORT legacy_position_count")
+          legacy_doc = legacy_docs[0]
+          legacy = legacy_doc.to_dict() or {}
+          if legacy.get("type") != "TMF" or float(legacy.get("lots") or 0) != 2 or float(legacy.get("entry_price") or 0) != 50068:
+              raise SystemExit("SEED_ABORT legacy_position_mismatch")
+
+          realized_ref = (
+              db.collection("users").document("me").collection("realizedPnl")
+              .document("tmf-2026-10-08-added-lots-roundtrip")
+          )
+          realized = realized_ref.get()
+          if not realized.exists:
+              raise SystemExit("SEED_ABORT realized_seed_missing")
+          realized_data = realized.to_dict() or {}
+          if realized_data.get("pnl_twd") != -3310 or realized_data.get("date") != "2026-10-08":
+              raise SystemExit("SEED_ABORT realized_seed_mismatch")
+
+          trade_docs = list(base.collection("trades").stream())
+          if trade_docs:
+              raise SystemExit("SEED_ABORT trades_not_empty")
+
+          state_ref = base.collection("state").document("tradeLedger")
+          existing = state_ref.get()
+          expected_open = [{
+              "id": "seed-core-TMF-2026-10",
+              "product": "TMF",
+              "month": "2026-10",
+              "lots": 2,
+              "entryPrice": 50068,
+              "openedAt": "2026-10-05T12:00:00+08:00",
+              "tag": "core",
+          }]
+
+          if existing.exists:
+              x = existing.to_dict() or {}
+              if (
+                  x.get("schemaVersion") == 1
+                  and x.get("cutoverDate") == CUTOVER
+                  and x.get("openLots") == expected_open
+              ):
+                  print("SEED_ALREADY_DONE")
+                  raise SystemExit(0)
+              raise SystemExit("SEED_ABORT existing_state_conflict")
+
+          state_ref.set({
+              "schemaVersion": 1,
+              "cutoverDate": CUTOVER,
+              "revision": 0,
+              "openLots": expected_open,
+              "openingRealizedPnl": -3310,
+              "openingRealizedDoc": "tmf-2026-10-08-added-lots-roundtrip",
+              "seedSource": "formal-account-and-legacy-cost-reconciled",
+              "createdAt": firestore.SERVER_TIMESTAMP,
+              "updatedAt": firestore.SERVER_TIMESTAMP,
+          })
+
+          verify = state_ref.get().to_dict() or {}
+          if verify.get("openLots") != expected_open or verify.get("cutoverDate") != CUTOVER:
+              raise SystemExit("VERIFY_FAIL trade_ledger_seed")
+
+          print("SEED_OK")
+          print("cutover_date=" + CUTOVER)
+          print("open_position=TMF 2026-10 x2 @50068")
+          print("opening_realized_pnl=-3310")
+          PY
