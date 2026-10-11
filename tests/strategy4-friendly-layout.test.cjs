@@ -16,5 +16,5 @@ test('Strategy 4 uses the friendly production name without implying automatic or
   assert.match(html,/<title>0050 變速防守 · 投資秘書<\/title>/);
   assert.match(html,/<h1>0050 變速防守<\/h1>/);
   assert.match(html,/0\.5x～2\.0x 台指期曝險檔位；不自動下單/);
-  assert.match(html,/>四策略<\/a>/);
+  assert.match(html,/>策略庫<\/a>/);
 });
