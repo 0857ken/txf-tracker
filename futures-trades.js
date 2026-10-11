@@ -193,6 +193,7 @@ async function saveTrade(uid, form) {
       schemaVersion: 1,
       cutoverDate: result.nextState.cutoverDate,
       revision: result.nextState.revision,
+      lastTradeDate: result.nextState.lastTradeDate,
       openLots: result.nextState.openLots,
       updatedAt: serverTimestamp()
     }, {merge:true});
