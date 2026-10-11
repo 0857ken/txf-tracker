@@ -1,7 +1,7 @@
 // 台指期主帳：0050 變速防守正式 Forward（唯讀）
 // 實際部位只從 defenseUsers/{uid}/strategies/0050-defense-v1/state/account 讀取。
 // 期貨價格優先使用正式 market/latest 的逐合約 mark；缺少時只回退帳戶核對 mark，絕不使用加權指數代替。
-// users/me/positions 僅保留舊成本資料作唯讀相容；口數與正式主帳不一致時不採用舊成本。
+// 成本優先讀正式期貨交易帳本；users/me/positions 只保留切換前舊成本備份。
 import { collection, doc, getDoc, getDocs } from 'https://www.gstatic.com/firebasejs/12.14.0/firebase-firestore.js';
 
 const MULT = Object.freeze({
@@ -57,14 +57,39 @@ function legacyCostGroups(rows) {
   return groups;
 }
 
+
+function tradeLedgerGroups(state) {
+  const groups = {};
+  (Array.isArray(state?.openLots) ? state.openLots : []).forEach(row => {
+    const product = canonicalProduct(row.product);
+    const month = String(row.month || '');
+    const lots = Number(row.lots);
+    const entry = finitePositive(row.entryPrice ?? row.entry_price);
+    if (!product || !/^\d{4}-\d{2}$/.test(month) || !Number.isFinite(lots) || lots <= 0 || entry === null) return;
+    const key = product + ':' + month;
+    if (!groups[key]) groups[key] = { lots: 0, weighted: 0, weight: 0, dates: [] };
+    const g = groups[key];
+    g.lots += lots;
+    g.weighted += entry * lots;
+    g.weight += lots;
+    if (row.openedAt) g.dates.push(String(row.openedAt).slice(0,10));
+  });
+  Object.values(groups).forEach(g => {
+    g.entry_price = g.weight > 0 ? g.weighted / g.weight : null;
+    g.date = g.dates.sort()[0] || null;
+  });
+  return groups;
+}
+
 async function loadMaster() {
   await window.fbReady;
   const uid = window.fbUid;
   if (!uid) throw new Error('Firebase 使用者尚未完成初始化');
 
-  const [accountSnap, marketSnap, legacySnap] = await Promise.all([
+  const [accountSnap, marketSnap, tradeStateSnap, legacySnap] = await Promise.all([
     getDoc(defenseDoc(uid, 'state', 'account')),
     getDoc(defenseDoc(uid, 'market', 'latest')),
+    getDoc(defenseDoc(uid, 'state', 'tradeLedger')),
     getDocs(legacyPosCol())
   ]);
 
@@ -83,6 +108,9 @@ async function loadMaster() {
     const mark = finitePositive(q.mark);
     if (product && month && mark !== null) quotes.set(product + ':' + month, q);
   });
+
+  const tradeState = tradeStateSnap.exists() ? (tradeStateSnap.data() || {}) : null;
+  const ledgerGroups = tradeLedgerGroups(tradeState);
 
   const legacyRows = [];
   legacySnap.forEach(d => legacyRows.push({ id: d.id, ...d.data() }));
@@ -105,14 +133,25 @@ async function loadMaster() {
     const quoteMark = finitePositive(quote?.mark);
     const currentPrice = quoteMark ?? accountMark;
 
+    const ledger = ledgerGroups[product + ':' + month] || null;
     const legacy = legacyGroups[product] || null;
-    const costValid = Boolean(
+    const ledgerCostValid = Boolean(
+      tradeState &&
+      ledger &&
+      Number.isFinite(lots) &&
+      ledger.lots === lots &&
+      finitePositive(ledger.entry_price) !== null
+    );
+    const legacyCostValid = Boolean(
+      !tradeState &&
       formalCounts[product] === 1 &&
       legacy &&
       Number.isFinite(lots) &&
       legacy.lots === lots &&
       finitePositive(legacy.entry_price) !== null
     );
+    const costValid = ledgerCostValid || legacyCostValid;
+    const costRow = ledgerCostValid ? ledger : legacy;
 
     return {
       id: product + ':' + month + ':' + index,
@@ -120,17 +159,17 @@ async function loadMaster() {
       type: LEGACY_TYPE[product],
       month,
       lots,
-      entry_price: costValid ? legacy.entry_price : null,
+      entry_price: costValid ? costRow.entry_price : null,
       cost_valid: costValid,
-      cost_source: costValid ? 'legacy-readonly-backup' : 'unavailable',
+      cost_source: ledgerCostValid ? 'futures-trade-ledger' : (legacyCostValid ? 'legacy-readonly-backup' : 'unavailable'),
       reference_price: accountMark,
       current_price: currentPrice,
       price_source: quoteMark !== null
         ? (quote?.source || '0050變速防守正式逐合約行情')
         : (accountMark !== null ? '0050變速防守正式帳戶核對價' : 'missing'),
       price_at: quoteMark !== null ? (quote?.markAt || market?.updatedAt || null) : (account.asof || null),
-      date: costValid ? (legacy.date || account.equityDate || '') : (account.equityDate || ''),
-      note: costValid ? (legacy.note || '舊成本唯讀備份') : '0050變速防守正式主帳',
+      date: costValid ? (costRow?.date || account.equityDate || '') : (account.equityDate || ''),
+      note: ledgerCostValid ? '期貨成交帳本成本' : (legacyCostValid ? (legacy.note || '舊成本唯讀備份') : '交易帳本與正式主帳待核對'),
       readonly: true
     };
   });
@@ -141,7 +180,8 @@ async function loadMaster() {
     positions,
     source: '0050變速防守正式 Forward',
     strategyId: STRATEGY_ID,
-    legacyCostMatched: positions.every(p => p.cost_valid || !p.lots)
+    costMatched: positions.every(p => p.cost_valid || !p.lots),
+    tradeLedger: tradeState
   };
 }
 
