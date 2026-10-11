@@ -14,6 +14,62 @@ jobs:
     runs-on: ubuntu-latest
     timeout-minutes: 10
     steps:
+      - name: Checkout proposed trade ledger branch
+        uses: actions/checkout@v4
+        with:
+          ref: feature/futures-trade-ledger-2026-10-11
+
+      - name: Syntax check trade ledger modules
+        run: |
+          node --check futures-trade-core.mjs
+          node --check futures-trades.js
+
+      - name: Unit test matching rules
+        run: |
+          node --input-type=module <<'JS'
+          import {applyTrade, summarizeOpenLots} from './futures-trade-core.mjs';
+
+          const seed = {
+            schemaVersion: 1,
+            cutoverDate: '2026-10-11',
+            revision: 0,
+            openLots: [
+              {id:'core',product:'TMF',month:'2026-10',lots:2,entryPrice:50068,openedAt:'2026-10-05T12:00:00+08:00',tag:'core'}
+            ]
+          };
+
+          const buy = applyTrade(seed, {
+            id:'buy1',date:'2026-10-11',at:'2026-10-11T12:00:00+08:00',
+            product:'TMF',month:'2026-10',side:'buy',lots:1,price:51000,matchPolicy:'lifo'
+          }).nextState;
+
+          const lifo = applyTrade(buy, {
+            id:'sell1',date:'2026-10-11',at:'2026-10-11T13:00:00+08:00',
+            product:'TMF',month:'2026-10',side:'sell',lots:1,price:51100,matchPolicy:'lifo'
+          });
+          if (lifo.realized.grossPnlTwd !== 1000) throw new Error('LIFO realized mismatch');
+          const lifoSummary = summarizeOpenLots(lifo.nextState.openLots);
+          if (lifoSummary.length !== 1 || lifoSummary[0].lots !== 2 || lifoSummary[0].averageEntry !== 50068)
+            throw new Error('LIFO should preserve core lots');
+
+          const fifo = applyTrade(buy, {
+            id:'sell2',date:'2026-10-11',at:'2026-10-11T13:00:00+08:00',
+            product:'TMF',month:'2026-10',side:'sell',lots:1,price:51100,matchPolicy:'fifo'
+          });
+          if (fifo.realized.grossPnlTwd !== 10320) throw new Error('FIFO realized mismatch');
+
+          let oversell = false;
+          try {
+            applyTrade(seed, {
+              id:'bad',date:'2026-10-11',at:'2026-10-11T13:00:00+08:00',
+              product:'TMF',month:'2026-10',side:'sell',lots:3,price:51100,matchPolicy:'lifo'
+            });
+          } catch { oversell = true; }
+          if (!oversell) throw new Error('oversell guard missing');
+
+          console.log('TRADE_CORE_TEST_OK');
+          JS
+
       - uses: actions/setup-python@v5
         with:
           python-version: '3.12'
