@@ -14,6 +14,7 @@
   <script defer src="defense-market.js"></script>
   <script defer src="defense-margin-guide.js"></script>
   <script defer src="defense.js"></script>
+  <script type="module" src="futures-trades.js"></script>
 </head>
 <body>
   <header class="site-header">
@@ -90,7 +91,32 @@
     </section>
     <section id="execution" aria-labelledby="execution-title">
       <div class="section-heading"><h2 id="execution-title"><span>05</span> 調倉／換倉與滑價</h2></div><div id="execution-stats"></div>
-      <details class="card form-card" id="execution-details"><summary>新增交易執行紀錄</summary>
+
+      <details class="card form-card" id="simple-trade-details" open>
+        <summary>快速成交帳本 · 自動已實現損益</summary>
+        <p class="muted">給日常實際買賣使用。買進會加入成本批次；賣出會依你選的配對方式自動計算毛已實現損益，並同步到「200萬計畫 → 已實現損益」。這不取代下方五檔／滑價紀錄，也不會自動下單。</p>
+        <div id="simple-trade-reconcile" class="muted">正在讀取交易帳本...</div>
+        <div id="simple-trade-open-lots" style="margin:12px 0"></div>
+        <form id="simple-trade-form">
+          <div class="form-grid">
+            <label>成交日期<input name="date" type="date" required></label>
+            <label>商品<select name="product"><option value="TX">TXF 大台</option><option value="MTX">MXF 小台</option><option value="TMF">TMF 微台</option></select></label>
+            <label>合約月份<input name="month" type="month" required></label>
+            <label>方向<select name="side"><option value="buy">買進</option><option value="sell">賣出</option></select></label>
+            <label>口數<input name="lots" type="number" min="1" step="1" inputmode="numeric" required></label>
+            <label>成交價<input name="price" type="number" min="0.01" step="0.01" inputmode="decimal" required></label>
+            <label>賣出配對<select name="matchPolicy"><option value="lifo">加碼優先（LIFO，預設）</option><option value="fifo">最早部位優先（FIFO）</option></select><small>只有賣出時使用；符合「加碼單先出」時選 LIFO。</small></label>
+            <label>手續費（選填）<input name="fee" type="number" min="0" step="0.01" inputmode="decimal"></label>
+            <label>交易稅（選填）<input name="tax" type="number" min="0" step="0.01" inputmode="decimal"></label>
+          </div>
+          <label>備註<input name="note" maxlength="300" placeholder="例如：高點減碼／訊號調倉"></label>
+          <p class="muted">目前已實現損益先以「毛損益」入帳；手續費／交易稅會保留在成交紀錄，但不在不知道完整成本時假裝已扣除。成交後若交易帳本口數與正式主帳不同，請到上方「核對帳戶」更新總口數。</p>
+          <button type="submit" class="primary">記錄成交</button>
+        </form>
+        <div style="margin-top:16px"><h3>最近快速成交</h3><div id="simple-trade-list"></div></div>
+      </details>
+
+      <details class="card form-card" id="execution-details"><summary>進階：五檔／滑價交易執行紀錄</summary>
         <p class="muted">換倉優先跨月價差單。價差統一為「遠月－近月」；買價差＝買遠月、賣近月。</p>
         <form id="execution-form">
           <div class="form-grid">

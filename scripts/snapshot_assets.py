@@ -113,6 +113,39 @@ def legacy_cost_groups(rows):
     return groups
 
 
+def trade_ledger_groups(state):
+    groups = {}
+    for row in (state or {}).get("openLots") or []:
+        product = canonical_product(row.get("product"))
+        month = str(row.get("month") or "")
+        lots = as_number(row.get("lots"))
+        entry = positive_number(row.get("entryPrice", row.get("entry_price")))
+        if (
+            not product
+            or len(month) != 7
+            or month[4] != "-"
+            or lots <= 0
+            or entry is None
+        ):
+            continue
+        key = (product, month)
+        group = groups.setdefault(
+            key,
+            {"lots": 0.0, "weighted": 0.0, "weight": 0.0},
+        )
+        group["lots"] += lots
+        group["weighted"] += entry * lots
+        group["weight"] += lots
+
+    for group in groups.values():
+        group["entry_price"] = (
+            group["weighted"] / group["weight"]
+            if group["weight"] > 0
+            else None
+        )
+    return groups
+
+
 def load_futures_master(db, legacy_positions):
     owner = db.collection("strategy4System").document("owner").get()
     owner_uid = (owner.to_dict() or {}).get("uid") if owner.exists else None
@@ -128,12 +161,16 @@ def load_futures_master(db, legacy_positions):
 
     account_doc = base.collection("state").document("account").get()
     market_doc = base.collection("market").document("latest").get()
+    trade_state_doc = base.collection("state").document("tradeLedger").get()
     if not account_doc.exists:
         raise ValueError("0050 變速防守正式帳戶不存在")
 
     account = account_doc.to_dict() or {}
     market = market_doc.to_dict() if market_doc.exists else {}
     market = market or {}
+    trade_state = (
+        trade_state_doc.to_dict() if trade_state_doc.exists else None
+    )
 
     formal = account.get("positions") or []
     formal_counts = {}
@@ -152,6 +189,7 @@ def load_futures_master(db, legacy_positions):
             quote_map[(product, month)] = quote
 
     legacy_groups = legacy_cost_groups(legacy_positions)
+    ledger_groups = trade_ledger_groups(trade_state)
     positions = []
 
     for position in formal:
@@ -168,17 +206,32 @@ def load_futures_master(db, legacy_positions):
                 f"正式期貨主帳缺少 {product} {month} 可用期貨價格"
             )
 
+        ledger = ledger_groups.get((product, month))
         legacy = legacy_groups.get(product)
-        cost_valid = (
-            formal_counts.get(product) == 1
-            and legacy is not None
-            and abs(legacy["lots"] - lots) < 1e-9
-            and positive_number(legacy.get("entry_price")) is not None
-        )
-        if not cost_valid:
-            raise ValueError(
-                "正式期貨主帳與舊成本備份不一致，停止每日淨值快照"
+
+        if trade_state is not None:
+            cost_valid = (
+                ledger is not None
+                and abs(ledger["lots"] - lots) < 1e-9
+                and positive_number(ledger.get("entry_price")) is not None
             )
+            if not cost_valid:
+                raise ValueError(
+                    "期貨交易帳本與正式主帳口數不一致，停止每日淨值快照"
+                )
+            entry_price = ledger["entry_price"]
+        else:
+            cost_valid = (
+                formal_counts.get(product) == 1
+                and legacy is not None
+                and abs(legacy["lots"] - lots) < 1e-9
+                and positive_number(legacy.get("entry_price")) is not None
+            )
+            if not cost_valid:
+                raise ValueError(
+                    "正式期貨主帳與舊成本備份不一致，停止每日淨值快照"
+                )
+            entry_price = legacy["entry_price"]
 
         positions.append(
             {
@@ -186,7 +239,7 @@ def load_futures_master(db, legacy_positions):
                 "type": LEGACY_TYPE[product],
                 "month": month,
                 "lots": lots,
-                "entry_price": legacy["entry_price"],
+                "entry_price": entry_price,
                 "current_price": current_price,
                 "price_source": (
                     (quote or {}).get("source")
@@ -206,6 +259,10 @@ def load_futures_master(db, legacy_positions):
         "account_asof": account.get("asof"),
         "market_updated_at": market.get("updatedAt"),
         "market_date": market.get("date"),
+        "trade_ledger_active": trade_state is not None,
+        "trade_ledger_revision": (
+            trade_state.get("revision") if trade_state is not None else None
+        ),
     }
 
 
