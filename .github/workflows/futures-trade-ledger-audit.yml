@@ -23,6 +23,14 @@ jobs:
         run: |
           node --check futures-trade-core.mjs
           node --check futures-trades.js
+          node --check positions.js
+          python -m py_compile scripts/snapshot_assets.py
+
+      - name: Validate defense.html contains quick trade form
+        run: |
+          grep -q 'id="simple-trade-form"' defense.html
+          grep -q 'src="futures-trades.js"' defense.html
+          echo 'TRADE_FORM_HTML_OK'
 
       - name: Unit test matching rules
         run: |
@@ -142,5 +150,44 @@ jobs:
                   "pnl_twd": x.get("pnl_twd"),
                   "source": x.get("source"),
               }, ensure_ascii=False, separators=(",", ":")))
+          trade_state_doc = base.collection("state").document("tradeLedger").get()
+          trade_state = trade_state_doc.to_dict() if trade_state_doc.exists else None
+
           print("futures_trade_count=" + str(len(trade_docs)))
+          print("trade_ledger_exists=" + str(bool(trade_state)).lower())
+          if trade_state:
+              print("trade_ledger_cutover=" + str(trade_state.get("cutoverDate")))
+              print("trade_ledger_revision=" + str(trade_state.get("revision")))
+              print("trade_ledger_open_lots=" + json.dumps(trade_state.get("openLots") or [], ensure_ascii=False, separators=(",", ":")))
+          PY
+
+      - name: Read-only snapshot dry run with trade ledger
+        env:
+          FIREBASE_KEY: ${{ secrets.FIREBASE_KEY }}
+        run: |
+          python - <<'PY'
+          import importlib.util, pathlib
+
+          p = pathlib.Path("scripts/snapshot_assets.py")
+          spec = importlib.util.spec_from_file_location("snapshot_assets", p)
+          m = importlib.util.module_from_spec(spec)
+          spec.loader.exec_module(m)
+
+          db = m.init_db()
+          market = m.load_json("data/market_data.json")
+          prices = m.load_json("data/stock_prices.json")
+          legacy = m.read_collection(db, "positions")
+          futures = m.load_futures_master(db, legacy)
+          stocks = m.read_collection(db, "stocks")
+          customs = m.read_collection(db, "customAssets")
+          realized = m.read_collection(db, "realizedPnl")
+          snap = m.build_snapshot(market, prices, futures, stocks, customs, realized, m.datetime.now(m.TW_TZ))
+
+          if futures.get("trade_ledger_active") is not True:
+              raise SystemExit("SNAPSHOT_FAIL trade_ledger_not_active")
+          if snap["positions_count"] != 1:
+              raise SystemExit("SNAPSHOT_FAIL position_count")
+          if snap["realized_pnl"] != -3310:
+              raise SystemExit("SNAPSHOT_FAIL realized_pnl")
+          print("SNAPSHOT_TRADE_LEDGER_OK")
           PY
