@@ -1,0 +1,23 @@
+name: Strategy 4 Inventory Source Guard Acceptance
+
+on:
+  push:
+    branches:
+      - fix/strategy4-inventory-source-guard-2026-10-11
+
+permissions:
+  contents: read
+
+jobs:
+  test:
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+      - name: Syntax check
+        run: node --check defense.js
+      - name: Run Node tests
+        run: node --test tests/*.test.cjs
