@@ -315,6 +315,7 @@
     f.elements.brokerOverrideInitial.value = mr.brokerOverride?.initial ?? '';
     f.elements.brokerOverrideMaintenance.value = mr.brokerOverride?.maintenance ?? '';
     f.elements.asof.value = localTime(now()); f.elements.externalFlow.value = '0'; f.elements.acknowledge.checked = false;
+    f.elements.positionSource.value = a.positionSource || 'open_inventory';
     $('position-inputs').replaceChildren();
     (a.positions?.length ? a.positions : [{product: 'TMF', month: market.date.slice(0, 7), lots: 0, mark: null}]).forEach(positionInput);
   }
@@ -343,8 +344,11 @@
   function setupForms() {
     $('account-form').addEventListener('submit', e => { e.preventDefault(); task(async () => {
       const f = e.target, at = now();
+      const positionSource = f.elements.positionSource.value;
+      if (positionSource === 'closed_only')
+        throw new Error('沖銷／已實現損益明細不能用來更新目前口數；請改用留倉／未平倉／庫存畫面或人工確認的實際庫存。');
       const a = {...state.account, asof: isoTime(f.elements.asof.value), equityDate: f.elements.equityDate.value,
-        nextRollDate: f.elements.nextRollDate.value || null};
+        nextRollDate: f.elements.nextRollDate.value || null, positionSource};
       ['equity', 'outside', 'indexAtEquity', 'initialMargin', 'maintenanceMargin'].forEach(k => { a[k] = n(f.elements[k]); });
       const marginSource = f.elements.marginSource.value.trim();
       const marginEffectiveDate = f.elements.marginEffectiveDate.value;
@@ -374,7 +378,8 @@
       }
       const flow = n(f.elements.externalFlow);
       await saveAccount(C.normalizeAccount(a), {kind: flow === 0 ? 'account_update' : 'external_flow', amount: flow,
-        date: C.twDate(a.asof), at: a.asof, recordedAt: at, detail: {equityDate: a.equityDate}});
+        date: C.twDate(a.asof), at: a.asof, recordedAt: at,
+        detail: {equityDate: a.equityDate, positionSource: a.positionSource}});
       $('account-details').open = false;
     }); });
     $('transfer-form').addEventListener('submit', e => { e.preventDefault(); task(async () => {
