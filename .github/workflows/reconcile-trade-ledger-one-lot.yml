@@ -1,0 +1,125 @@
+name: Reconcile Futures Trade Ledger One Lot
+
+on:
+  push:
+    branches:
+      - acceptance/reconcile-trade-ledger-one-lot-2026-10-12
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  reconcile:
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.12'
+
+      - name: Install Firestore SDK
+        run: pip install firebase-admin
+
+      - name: Reconcile trade ledger with strict guards
+        env:
+          FIREBASE_KEY: ${{ secrets.FIREBASE_KEY }}
+        run: |
+          python - <<'PY'
+          import json, os
+          import firebase_admin
+          from firebase_admin import credentials, firestore
+
+          cred = credentials.Certificate(json.loads(os.environ["FIREBASE_KEY"]))
+          firebase_admin.initialize_app(cred)
+          db = firestore.client()
+
+          owner = db.collection("strategy4System").document("owner").get()
+          owner_uid = (owner.to_dict() or {}).get("uid") if owner.exists else None
+          if not owner_uid:
+              raise SystemExit("RECONCILE_ABORT owner_missing")
+
+          base = (
+              db.collection("defenseUsers").document(owner_uid)
+              .collection("strategies").document("0050-defense-v1")
+          )
+
+          account_ref = base.collection("state").document("account")
+          account_doc = account_ref.get()
+          if not account_doc.exists:
+              raise SystemExit("RECONCILE_ABORT account_missing")
+          account = account_doc.to_dict() or {}
+          positions = account.get("positions") or []
+          if len(positions) != 1:
+              raise SystemExit("RECONCILE_ABORT formal_position_count")
+          p = positions[0]
+          if p.get("product") != "TMF" or p.get("month") != "2026-10" or float(p.get("lots") or 0) != 1:
+              raise SystemExit("RECONCILE_ABORT formal_position_mismatch")
+
+          state_ref = base.collection("state").document("tradeLedger")
+          state_doc = state_ref.get()
+          if not state_doc.exists:
+              raise SystemExit("RECONCILE_ABORT trade_ledger_missing")
+          state = state_doc.to_dict() or {}
+
+          expected_old = [{
+              "id": "seed-core-TMF-2026-10",
+              "product": "TMF",
+              "month": "2026-10",
+              "lots": 2,
+              "entryPrice": 50068,
+              "openedAt": "2026-10-05T12:00:00+08:00",
+              "tag": "core",
+          }]
+          if state.get("cutoverDate") != "2026-10-11":
+              raise SystemExit("RECONCILE_ABORT cutover_changed")
+          if int(state.get("revision") or 0) != 0:
+              raise SystemExit("RECONCILE_ABORT revision_changed")
+          if state.get("openLots") != expected_old:
+              raise SystemExit("RECONCILE_ABORT open_lots_changed")
+
+          realized_ref = (
+              db.collection("users").document("me").collection("realizedPnl")
+              .document("tmf-2026-10-08-added-lots-roundtrip")
+          )
+          realized = realized_ref.get()
+          if not realized.exists:
+              raise SystemExit("RECONCILE_ABORT realized_seed_missing")
+          rd = realized.to_dict() or {}
+          if rd.get("pnl_twd") != -3310:
+              raise SystemExit("RECONCILE_ABORT realized_seed_changed")
+
+          corrected_open = [{
+              "id": "cutover-open-TMF-2026-10",
+              "product": "TMF",
+              "month": "2026-10",
+              "lots": 1,
+              "entryPrice": 48666,
+              "openedAt": "2026-10-11T00:00:00+08:00",
+              "tag": "cutover-reconciled",
+              "sequence": 0,
+          }]
+
+          state_ref.set({
+              "schemaVersion": 1,
+              "cutoverDate": "2026-10-11",
+              "revision": 0,
+              "lastTradeDate": "2026-10-11",
+              "openLots": corrected_open,
+              "openingRealizedPnl": -3310,
+              "openingRealizedDoc": "tmf-2026-10-08-added-lots-roundtrip",
+              "seedSource": "reconciled-to-formal-account-and-confirmed-open-cost",
+              "updatedAt": firestore.SERVER_TIMESTAMP,
+          }, merge=True)
+
+          verify = state_ref.get().to_dict() or {}
+          if verify.get("openLots") != corrected_open:
+              raise SystemExit("VERIFY_FAIL open_lots")
+          if verify.get("lastTradeDate") != "2026-10-11":
+              raise SystemExit("VERIFY_FAIL last_trade_date")
+
+          print("RECONCILE_OK")
+          print("formal_position=TMF 2026-10 x1")
+          print("ledger_open_position=TMF 2026-10 x1 @48666")
+          print("cutover_date=2026-10-11")
+          PY
