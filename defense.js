@@ -47,12 +47,22 @@
       if (!r.ok) throw new Error('行情讀取失敗：HTTP ' + r.status);
       return r.json();
     };
-    const [strategy, price, fubon] = await Promise.all([
+    const [strategy, price, fubon, futuresCache] = await Promise.all([
       get('data/strategy_data.json'),
       get('data/market_data.json'),
-      get('data/fubon_market_data.json').catch(() => null)
+      get('data/fubon_market_data.json').catch(() => null),
+      get('data/futures_market.json').catch(() => null)
     ]);
-    return window.DefenseMarket.buildMarket({strategy, price, fubon});
+    const built = window.DefenseMarket.buildMarket({strategy, price, fubon});
+    if (futuresCache?.schema_version === 1 && futuresCache?.date === built.date && Array.isArray(futuresCache.rows)) {
+      built.futures = futuresCache.rows.filter(x => x?.date === built.date);
+      built.futuresUpdatedAt = futuresCache.updated_at || null;
+      built.source += '; TAIFEX official contract settlements';
+    } else {
+      built.futures = [];
+      built.futuresError = '當日逐合約結算價尚未更新';
+    }
+    return built;
   }
   function demoAccount() {
     if (window.DEFENSE_REALISTIC_ACCOUNT) return C.clone(window.DEFENSE_REALISTIC_ACCOUNT);

@@ -64,7 +64,7 @@
 <main>
   <div class="grid-5">
     <div class="card">
-      <div class="label">台指期 現價</div>
+      <div class="label">台指期 估值價</div>
       <div class="value blue" id="price">—</div>
       <div class="sub" id="data-source">0050變速防守正式 Forward</div>
     </div>
@@ -119,7 +119,7 @@
   <div class="card">
     <div class="label">部位明細 · 0050變速防守正式主帳</div>
     <table>
-      <thead><tr><th>月份</th><th>種類</th><th>口數</th><th>成本備份</th><th>期貨價</th><th>損益</th><th>來源</th></tr></thead>
+      <thead><tr><th>月份</th><th>種類</th><th>口數</th><th>成本備份</th><th>期貨估值價</th><th>損益</th><th>來源</th></tr></thead>
       <tbody id="pos-tbody"><tr><td colspan="7">載入中...</td></tr></tbody>
     </table>
   </div>
@@ -197,9 +197,9 @@ async function loadDashboard() {
 
     const single = positions.length === 1 ? positions[0] : null;
     const futuresPrice = single && Number.isFinite(Number(single.current_price)) ? Number(single.current_price) : null;
-    const indexPrice = Number.isFinite(Number(master.market?.index))
-      ? Number(master.market.index)
-      : Number(j.market?.current_price);
+    const indexPrice = Number.isFinite(Number(j.market?.current_price))
+      ? Number(j.market.current_price)
+      : Number(master.market?.index);
 
     const priceEl = document.getElementById('price');
     if (positions.length === 0) priceEl.textContent = '—';
@@ -207,7 +207,7 @@ async function loadDashboard() {
     else priceEl.textContent = positions.length > 1 ? '逐合約' : '待期貨價';
 
     document.getElementById('data-source').textContent = single
-      ? (single.type + ' ' + single.month + ' · ' + single.price_source)
+      ? (single.type + ' ' + single.month + ' · ' + (single.price_date || '日期待核對') + ' · ' + single.price_source)
       : (positions.length > 1 ? '多合約逐筆顯示 · 0050變速防守正式 Forward' : '0050變速防守正式 Forward');
 
     const spreadEl = document.getElementById('spread');
@@ -224,7 +224,7 @@ async function loadDashboard() {
         spreadEl.className = 'value';
       }
     }
-    if (statusEl) statusEl.textContent = single ? (single.month + ' 期貨價 − 加權指數') : '多合約時不顯示單一期現價差';
+    if (statusEl) statusEl.textContent = single ? (single.month + ' 期貨估值價 − 加權指數') : '多合約時不顯示單一期現價差';
 
     // 加權指數均線仍沿用 market_data.json；不把加權指數當期貨價格。
     document.getElementById('ma5').textContent = j.ma_state.ma5 ? j.ma_state.ma5.toLocaleString() : '—';

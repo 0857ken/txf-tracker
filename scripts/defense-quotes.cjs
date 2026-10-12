@@ -74,9 +74,93 @@ function parseFutures(rows, date) {
   if (new Set(values.map(x => x.product + x.month)).size !== values.length) throw new Error('期交所同合約日行情重複');
   return values;
 }
-async function fetchFutures(date, fetcher = fetch) {
+function cleanHtmlCell(value) {
+  return String(value || '')
+    .replace(/<br\s*\/?>/gi, ' ')
+    .replace(/<[^>]+>/g, ' ')
+    .replace(/&nbsp;|&#160;/gi, ' ')
+    .replace(/&amp;/gi, '&')
+    .replace(/&lt;/gi, '<')
+    .replace(/&gt;/gi, '>')
+    .replace(/\s+/g, ' ')
+    .trim();
+}
+
+function parseOfficialFuturesHtml(html, product, date) {
+  C.date(date);
+  if (!['TX', 'MTX', 'TMF'].includes(product)) throw new Error('期交所商品無效');
+  if (typeof html !== 'string' || !html.includes(date.replaceAll('-', '/')))
+    throw new Error('期交所HTML日期不符');
+
+  const rows = [];
+  for (const tr of html.matchAll(/<tr\b[^>]*>([\s\S]*?)<\/tr>/gi)) {
+    const cells = [...tr[1].matchAll(/<td\b[^>]*>([\s\S]*?)<\/td>/gi)].map(m => cleanHtmlCell(m[1]));
+    if (cells.length < 12 || cells[0] !== product) continue;
+    const rawMonth = cells[1].replace(/\s+/g, '');
+    if (!/^\d{6}$/.test(rawMonth)) continue; // 排除週契約。
+    const mark = Number(String(cells[11]).replaceAll(',', ''));
+    if (!C.finite(mark) || mark <= 0) continue;
+    rows.push({
+      product,
+      month: rawMonth.slice(0, 4) + '-' + rawMonth.slice(4),
+      date,
+      mark,
+      markAt: date + 'T13:45:00+08:00',
+      source: 'TAIFEX futDailyMarketExcel 一般時段結算價'
+    });
+  }
+  if (!rows.length) throw new Error('期交所HTML尚無指定日結算價');
+  if (new Set(rows.map(x => x.product + x.month)).size !== rows.length)
+    throw new Error('期交所HTML同合約日行情重複');
+  return rows;
+}
+
+async function officialProduct(product, date, fetcher = fetch) {
+  const queryDate = encodeURIComponent(date.replaceAll('-', '/'));
+  const url = 'https://www.taifex.com.tw/cht/3/futDailyMarketExcel?queryType=2&marketCode=0&dateaddcnt=&commodity_id=' +
+    encodeURIComponent(product) + '&queryDate=' + queryDate;
+  let lastError;
+  for (let attempt = 0; attempt < 3; attempt++) {
+    try {
+      const r = await fetcher(url, {headers: {'User-Agent': 'TXF-Tracker/1.0'}, signal: AbortSignal.timeout(25000)});
+      if (!r.ok) throw new Error('期交所HTML HTTP ' + r.status);
+      if (typeof r.text !== 'function') throw new Error('期交所HTML回應格式錯誤');
+      return parseOfficialFuturesHtml(await r.text(), product, date);
+    } catch (error) {
+      lastError = error;
+      if (attempt < 2) await new Promise(resolve => setTimeout(resolve, 500 * (attempt + 1)));
+    }
+  }
+  throw lastError;
+}
+
+async function fetchFuturesOfficial(date, fetcher = fetch) {
+  const groups = await Promise.all(['TX', 'MTX', 'TMF'].map(product => officialProduct(product, date, fetcher)));
+  const rows = groups.flat();
+  if (new Set(rows.map(x => x.product + x.month)).size !== rows.length)
+    throw new Error('期交所HTML逐合約行情重複');
+  return rows;
+}
+
+async function fetchFuturesOpenApi(date, fetcher = fetch) {
   const r = await fetcher('https://openapi.taifex.com.tw/v1/DailyMarketReportFut', {signal: AbortSignal.timeout(25000)});
-  if (!r.ok) throw new Error('期交所行情HTTP錯誤');
+  if (!r.ok) throw new Error('期交所OpenAPI行情HTTP錯誤');
   return parseFutures(await r.json(), date);
 }
-module.exports = {yahoo, fubonTarget, fetchMarket, parseFutures, fetchFutures};
+
+async function fetchFutures(date, fetcher = fetch) {
+  try {
+    return await fetchFuturesOfficial(date, fetcher);
+  } catch (officialError) {
+    try {
+      return await fetchFuturesOpenApi(date, fetcher);
+    } catch (openApiError) {
+      const error = new Error('期交所逐合約結算價未取得');
+      error.official = officialError?.message || 'unknown';
+      error.openApi = openApiError?.message || 'unknown';
+      throw error;
+    }
+  }
+}
+module.exports = {yahoo, fubonTarget, fetchMarket, parseFutures, parseOfficialFuturesHtml,
+  fetchFuturesOfficial, fetchFuturesOpenApi, fetchFutures};
