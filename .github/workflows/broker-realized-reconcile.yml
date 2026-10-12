@@ -1,0 +1,94 @@
+name: Broker Realized PnL Reconcile Audit
+
+on:
+  push:
+    branches:
+      - acceptance/broker-realized-reconcile-2026-10-12
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  audit:
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.12'
+
+      - name: Install Firestore SDK
+        run: pip install firebase-admin
+
+      - name: Inspect realized PnL, snapshots and trade ledger
+        env:
+          FIREBASE_KEY: ${{ secrets.FIREBASE_KEY }}
+        run: |
+          python - <<'PY'
+          import json, os
+          import firebase_admin
+          from firebase_admin import credentials, firestore
+
+          cred = credentials.Certificate(json.loads(os.environ["FIREBASE_KEY"]))
+          firebase_admin.initialize_app(cred)
+          db = firestore.client()
+
+          realized_docs = list(
+              db.collection("users").document("me").collection("realizedPnl").stream()
+          )
+          realized = []
+          for d in realized_docs:
+              x = d.to_dict() or {}
+              realized.append({
+                  "id": d.id,
+                  "date": x.get("date"),
+                  "type": x.get("type"),
+                  "month": x.get("month"),
+                  "lots": x.get("lots"),
+                  "entry_price": x.get("entry_price"),
+                  "exit_price": x.get("exit_price"),
+                  "pnl_twd": x.get("pnl_twd"),
+                  "source": x.get("source"),
+                  "note": x.get("note"),
+              })
+          realized.sort(key=lambda x: (str(x.get("date") or ""), x["id"]))
+
+          snap_docs = list(
+              db.collection("users").document("me").collection("dailySnapshots").stream()
+          )
+          snaps = []
+          for d in snap_docs:
+              if d.id >= "2026-10-05":
+                  x = d.to_dict() or {}
+                  snaps.append({
+                      "date": d.id,
+                      "net_worth": x.get("net_worth"),
+                      "total_pnl": x.get("total_pnl"),
+                      "realized_pnl": x.get("realized_pnl"),
+                      "unrealized_pnl": x.get("unrealized_pnl"),
+                      "cash": x.get("cash"),
+                      "schema_version": x.get("schema_version"),
+                  })
+          snaps.sort(key=lambda x: x["date"])
+
+          owner = db.collection("strategy4System").document("owner").get()
+          owner_uid = (owner.to_dict() or {}).get("uid") if owner.exists else None
+          if not owner_uid:
+              raise SystemExit("AUDIT_FAIL owner_missing")
+          base = (
+              db.collection("defenseUsers").document(owner_uid)
+              .collection("strategies").document("0050-defense-v1")
+          )
+          trade_state_doc = base.collection("state").document("tradeLedger").get()
+          trade_state = trade_state_doc.to_dict() if trade_state_doc.exists else None
+
+          print("AUDIT_OK")
+          print("realized_count=" + str(len(realized)))
+          for i, row in enumerate(realized):
+              print("REALIZED_" + str(i) + "=" + json.dumps(row, ensure_ascii=False, separators=(",", ":")))
+          print("snapshot_count=" + str(len(snaps)))
+          for i, row in enumerate(snaps):
+              print("SNAPSHOT_" + str(i) + "=" + json.dumps(row, ensure_ascii=False, separators=(",", ":")))
+          print("trade_ledger=" + json.dumps(trade_state, ensure_ascii=False, separators=(",", ":"), default=str))
+          PY
