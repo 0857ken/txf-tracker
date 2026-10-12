@@ -1,0 +1,107 @@
+name: Broker Realized PnL Reconcile Write
+on:
+  push:
+    branches: [acceptance/broker-realized-reconcile-2026-10-12]
+  workflow_dispatch:
+permissions:
+  contents: read
+jobs:
+  reconcile:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.12'
+      - run: pip install firebase-admin
+      - name: Reconcile TMF broker closed PnL
+        env:
+          FIREBASE_KEY: ${{ secrets.FIREBASE_KEY }}
+        run: |
+          python - <<'PY'
+          import json, os
+          import firebase_admin
+          from firebase_admin import credentials, firestore
+
+          rows = [
+            ("broker-tmf-20261005-long-48666-49297","2026-10-05","2026-10-02","long",48666,49297,6310,50,6260),
+            ("broker-tmf-20261005-short-49311-49374","2026-10-05","2026-10-05","short",49311,49374,-630,50,-680),
+            ("broker-tmf-20261005-short-50003-50061","2026-10-05","2026-10-05","short",50003,50061,-580,50,-630),
+            ("broker-tmf-20261005-short-50044-50064","2026-10-05","2026-10-05","short",50044,50064,-200,50,-250),
+            ("broker-tmf-20261008-long-50073-49591","2026-10-08","2026-10-05","long",50073,49591,-4820,50,-4870),
+            ("broker-tmf-20261008-long-50064-49588","2026-10-08","2026-10-05","long",50064,49588,-4760,50,-4810),
+          ]
+          assert sum(r[8] for r in rows) == -4980
+          assert sum(r[8] for r in rows if r[1] == "2026-10-05") == 4700
+          assert sum(r[8] for r in rows if r[1] == "2026-10-08") == -9680
+
+          firebase_admin.initialize_app(credentials.Certificate(json.loads(os.environ["FIREBASE_KEY"])))
+          db = firestore.client()
+          realized = db.collection("users").document("me").collection("realizedPnl")
+          docs = list(realized.stream())
+          ids = sorted(d.id for d in docs)
+          old_id = "tmf-2026-10-08-added-lots-roundtrip"
+          target_ids = sorted(r[0] for r in rows)
+
+          if ids == target_ids:
+              vals = {d.id:(d.to_dict() or {}).get("pnl_twd") for d in docs}
+              if sum(int(v or 0) for v in vals.values()) == -4980:
+                  print("RECONCILE_ALREADY_DONE")
+                  raise SystemExit(0)
+              raise SystemExit("ABORT target_conflict")
+
+          if ids != [old_id]:
+              raise SystemExit("ABORT realized_collection_changed")
+          old = realized.document(old_id).get().to_dict() or {}
+          if old.get("date") != "2026-10-08" or old.get("pnl_twd") != -3310:
+              raise SystemExit("ABORT provisional_changed")
+
+          owner = db.collection("strategy4System").document("owner").get()
+          uid = (owner.to_dict() or {}).get("uid") if owner.exists else None
+          if not uid:
+              raise SystemExit("ABORT owner_missing")
+          state_ref = (db.collection("defenseUsers").document(uid)
+            .collection("strategies").document("0050-defense-v1")
+            .collection("state").document("tradeLedger"))
+          state = state_ref.get().to_dict() or {}
+          lots = state.get("openLots") or []
+          if len(lots) != 1 or lots[0].get("product") != "TMF" or lots[0].get("month") != "2026-10" or float(lots[0].get("lots") or 0) != 1 or float(lots[0].get("entryPrice") or 0) != 48666:
+              raise SystemExit("ABORT open_position_changed")
+          if state.get("openingRealizedPnl") != -3310:
+              raise SystemExit("ABORT opening_realized_changed")
+
+          batch = db.batch()
+          batch.delete(realized.document(old_id))
+          for rid, date, entry_date, direction, entry, exitp, gross, cost, net in rows:
+              batch.create(realized.document(rid), {
+                "date": date, "entry_date": entry_date, "type": "TMF",
+                "product": "TMF", "month": "2026-10", "lots": 1,
+                "direction": direction, "entry_price": float(entry),
+                "exit_price": float(exitp), "gross_pnl_twd": gross,
+                "fee_tax_twd": cost, "pnl_twd": net, "cost_complete": True,
+                "source": "broker-closed-pnl",
+                "note": "富邦沖銷損益回補；選擇權排除",
+                "updated_at": firestore.SERVER_TIMESTAMP
+              })
+          batch.set(state_ref, {
+            "openingRealizedPnl": -4980,
+            "openingRealizedSource": "broker-closed-pnl-2026-10-04-to-2026-10-11",
+            "openingRealizedDocs": target_ids,
+            "updatedAt": firestore.SERVER_TIMESTAMP
+          }, merge=True)
+          batch.commit()
+
+          verify = list(realized.stream())
+          if sorted(d.id for d in verify) != target_ids:
+              raise SystemExit("VERIFY_FAIL ids")
+          total = sum(int((d.to_dict() or {}).get("pnl_twd") or 0) for d in verify)
+          if total != -4980:
+              raise SystemExit("VERIFY_FAIL total")
+
+          print("RECONCILE_OK")
+          print("futures_only=true")
+          print("options_excluded=true")
+          print("realized_2026-10-05=4700")
+          print("realized_2026-10-08=-9680")
+          print("realized_total=-4980")
+          print("open_position_preserved=TMF 2026-10 x1 @48666")
+          PY
