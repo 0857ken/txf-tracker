@@ -91,4 +91,55 @@ jobs:
           for i, row in enumerate(snaps):
               print("SNAPSHOT_" + str(i) + "=" + json.dumps(row, ensure_ascii=False, separators=(",", ":")))
           print("trade_ledger=" + json.dumps(trade_state, ensure_ascii=False, separators=(",", ":"), default=str))
+
+          rev_docs = list(base.collection("accountRevisions").stream())
+          revs = []
+          for d in rev_docs:
+              x = d.to_dict() or {}
+              revs.append({
+                  "id": d.id,
+                  "at": x.get("at"),
+                  "before": x.get("before"),
+                  "after": x.get("after"),
+              })
+          revs.sort(key=lambda x: str(x.get("at") or ""))
+          print("account_revision_count=" + str(len(revs)))
+          for i, row in enumerate(revs):
+              print("ACCOUNT_REV_" + str(i) + "=" + json.dumps(row, ensure_ascii=False, separators=(",", ":"), default=str))
+
+          ds_docs = list(base.collection("dailySnapshots").stream())
+          ds = []
+          for d in ds_docs:
+              if d.id >= "2026-10-05" and d.id <= "2026-10-11":
+                  x = d.to_dict() or {}
+                  ds.append({
+                      "date": d.id,
+                      "positions": x.get("positions"),
+                      "lots": x.get("lots"),
+                      "index": x.get("index"),
+                      "futures": x.get("futures"),
+                      "accountAsOf": x.get("accountAsOf"),
+                      "equity": x.get("equity"),
+                      "outside": x.get("outside"),
+                  })
+          ds.sort(key=lambda x: x["date"])
+          print("defense_snapshot_count=" + str(len(ds)))
+          for i, row in enumerate(ds):
+              print("DEFENSE_SNAPSHOT_" + str(i) + "=" + json.dumps(row, ensure_ascii=False, separators=(",", ":"), default=str))
+
+          full_asset = []
+          for d in snap_docs:
+              if d.id >= "2026-10-05":
+                  x = d.to_dict() or {}
+                  full_asset.append({
+                      "date": d.id,
+                      "futures_margin_used": x.get("futures_margin_used"),
+                      "futures_notional": x.get("futures_notional"),
+                      "market_price": x.get("market_price"),
+                      "futures_prices": x.get("futures_prices"),
+                      "positions_count": x.get("positions_count"),
+                  })
+          full_asset.sort(key=lambda x: x["date"])
+          for i, row in enumerate(full_asset):
+              print("ASSET_FUTURES_" + str(i) + "=" + json.dumps(row, ensure_ascii=False, separators=(",", ":"), default=str))
           PY
