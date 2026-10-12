@@ -68,6 +68,18 @@ jobs:
               console.log('RAW_' + p + '=' + JSON.stringify(xs));
             }
 
+            for (const qd of [date, '2026-10-08']) {
+              const url = 'https://www.taifex.com.tw/cht/3/futDailyMarketExcel?queryType=2&marketCode=0&dateaddcnt=&commodity_id=TMF&queryDate=' + encodeURIComponent(qd.replaceAll('-', '/'));
+              const rr = await fetch(url, {headers:{'User-Agent':'TXF-Tracker/1.0'}});
+              const html = await rr.text();
+              const dateHits = [...html.matchAll(/2026[\/-]10[\/-]\d{2}/g)].map(m => m[0]);
+              const idx = html.indexOf('49345');
+              console.log('OFFICIAL_HTML_' + qd + '_STATUS=' + rr.status);
+              console.log('OFFICIAL_HTML_' + qd + '_DATES=' + [...new Set(dateHits)].slice(0,8).join(','));
+              console.log('OFFICIAL_HTML_' + qd + '_HAS_49345=' + String(idx >= 0));
+              if (idx >= 0) console.log('OFFICIAL_HTML_SNIP=' + html.slice(Math.max(0, idx-500), idx+500).replace(/\s+/g,' '));
+            }
+
             const market = await fetchMarket(new Date().toISOString());
             console.log('FETCH_MARKET_DATE=' + market.date);
             console.log('FETCH_MARKET_FUTURES=' + market.futures.length);
