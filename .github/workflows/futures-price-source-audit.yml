@@ -1,0 +1,98 @@
+name: Futures Price Source Audit
+
+on:
+  push:
+    branches:
+      - acceptance/futures-price-source-2026-10-12
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  audit:
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      - name: Checkout production website code
+        uses: actions/checkout@v4
+        with:
+          ref: gh-pages
+          fetch-depth: 1
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.12'
+
+      - name: Test TAIFEX public contract marks
+        run: |
+          node - <<'JS'
+          const fs = require('node:fs');
+          const {fetchFutures, fetchMarket} = require('./scripts/defense-quotes.cjs');
+          (async () => {
+            const fubon = JSON.parse(fs.readFileSync('data/fubon_market_data.json', 'utf8'));
+            const date = fubon?.quote?.date;
+            console.log('FUBON_DATE=' + date);
+            const rows = await fetchFutures(date);
+            console.log('TAIFEX_ROWS=' + rows.length);
+            const relevant = rows.filter(x => ['TX','MTX','TMF'].includes(x.product));
+            console.log('TAIFEX_PRODUCTS=' + [...new Set(relevant.map(x => x.product))].join(','));
+            for (const p of ['TX','MTX','TMF']) {
+              const xs = relevant.filter(x => x.product === p).sort((a,b) => a.month.localeCompare(b.month));
+              console.log(p + '_ROWS=' + xs.slice(0,4).map(x => x.month + ':' + x.mark).join(','));
+            }
+            const market = await fetchMarket(new Date().toISOString());
+            console.log('FETCH_MARKET_DATE=' + market.date);
+            console.log('FETCH_MARKET_FUTURES=' + market.futures.length);
+            console.log('FETCH_MARKET_ERROR=' + (market.futuresError || 'none'));
+          })().catch(e => { console.error('PUBLIC_AUDIT_FAIL=' + e.message); process.exit(1); });
+          JS
+
+      - name: Install Firestore SDK
+        run: pip install firebase-admin
+
+      - name: Inspect formal market/latest read-only
+        env:
+          FIREBASE_KEY: ${{ secrets.FIREBASE_KEY }}
+        run: |
+          python - <<'PY'
+          import json, os
+          import firebase_admin
+          from firebase_admin import credentials, firestore
+
+          firebase_admin.initialize_app(credentials.Certificate(json.loads(os.environ["FIREBASE_KEY"])))
+          db = firestore.client()
+
+          owner = db.collection("strategy4System").document("owner").get()
+          uid = (owner.to_dict() or {}).get("uid") if owner.exists else None
+          if not uid:
+              raise SystemExit("FIRESTORE_AUDIT_FAIL owner_missing")
+
+          base = (
+              db.collection("defenseUsers").document(uid)
+              .collection("strategies").document("0050-defense-v1")
+          )
+          account = base.collection("state").document("account").get().to_dict() or {}
+          market = base.collection("market").document("latest").get().to_dict() or {}
+
+          positions = account.get("positions") or []
+          futures = market.get("futures") or []
+          print("FORMAL_MARKET_DATE=" + str(market.get("date")))
+          print("FORMAL_FUTURES_ROWS=" + str(len(futures)))
+          print("FORMAL_FUTURES_ERROR=" + str(market.get("futuresError")))
+          print("FORMAL_ACCOUNT_POSITIONS=" + json.dumps([
+              {"product":p.get("product"),"month":p.get("month"),"lots":p.get("lots"),"mark":p.get("mark")}
+              for p in positions
+          ], separators=(",", ":")))
+          quote_map = {(q.get("product"), q.get("month")): q for q in futures}
+          for p in positions:
+              q = quote_map.get((p.get("product"), p.get("month")))
+              if q:
+                  print("FORMAL_MATCH=" + str(p.get("product")) + ":" + str(p.get("month")) + ":" + str(q.get("mark")) + ":" + str(q.get("source")))
+              else:
+                  print("FORMAL_MATCH=MISSING:" + str(p.get("product")) + ":" + str(p.get("month")))
+          PY
