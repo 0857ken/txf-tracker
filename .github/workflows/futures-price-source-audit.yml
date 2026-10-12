@@ -37,14 +37,37 @@ jobs:
             const fubon = JSON.parse(fs.readFileSync('data/fubon_market_data.json', 'utf8'));
             const date = fubon?.quote?.date;
             console.log('FUBON_DATE=' + date);
-            const rows = await fetchFutures(date);
-            console.log('TAIFEX_ROWS=' + rows.length);
-            const relevant = rows.filter(x => ['TX','MTX','TMF'].includes(x.product));
-            console.log('TAIFEX_PRODUCTS=' + [...new Set(relevant.map(x => x.product))].join(','));
-            for (const p of ['TX','MTX','TMF']) {
-              const xs = relevant.filter(x => x.product === p).sort((a,b) => a.month.localeCompare(b.month));
-              console.log(p + '_ROWS=' + xs.slice(0,4).map(x => x.month + ':' + x.mark).join(','));
+            try {
+              const rows = await fetchFutures(date);
+              console.log('TAIFEX_ROWS=' + rows.length);
+              const relevant = rows.filter(x => ['TX','MTX','TMF'].includes(x.product));
+              console.log('TAIFEX_PRODUCTS=' + [...new Set(relevant.map(x => x.product))].join(','));
+              for (const p of ['TX','MTX','TMF']) {
+                const xs = relevant.filter(x => x.product === p).sort((a,b) => a.month.localeCompare(b.month));
+                console.log(p + '_ROWS=' + xs.slice(0,4).map(x => x.month + ':' + x.mark).join(','));
+              }
+            } catch (e) {
+              console.log('FETCH_FUTURES_TARGET_FAIL=' + e.message);
             }
+
+            const rawResponse = await fetch('https://openapi.taifex.com.tw/v1/DailyMarketReportFut');
+            const raw = await rawResponse.json();
+            const rawRelevant = raw.filter(r => ['TX','MTX','TMF'].includes(String(r.Contract || '').trim()));
+            const dates = [...new Set(rawRelevant.map(r => String(r.Date || '')))].sort().slice(-10);
+            console.log('RAW_TAIFEX_DATES=' + dates.join(','));
+            for (const p of ['TX','MTX','TMF']) {
+              const xs = rawRelevant.filter(r => String(r.Contract || '').trim() === p)
+                .slice(0,12)
+                .map(r => ({
+                  Date:r.Date,
+                  Month:r['ContractMonth(Week)'],
+                  Session:r.TradingSession,
+                  Settlement:r.SettlementPrice,
+                  Close:r.Close
+                }));
+              console.log('RAW_' + p + '=' + JSON.stringify(xs));
+            }
+
             const market = await fetchMarket(new Date().toISOString());
             console.log('FETCH_MARKET_DATE=' + market.date);
             console.log('FETCH_MARKET_FUTURES=' + market.futures.length);
