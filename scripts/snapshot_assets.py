@@ -5,9 +5,10 @@
   defenseUsers/{ownerUid}/strategies/0050-defense-v1/state/account
 
 期貨價格：
-  1. 正式 market/latest 的逐合約 mark
-  2. 若當日逐合約行情缺少，回退正式帳戶核對 mark
-  3. 絕不使用加權指數代替期貨價格
+  1. data/futures_market.json 的當日 TAIFEX 正式逐合約結算價
+  2. Firestore market/latest 的同日逐合約 mark
+  3. 只有正式帳戶核對價本身也是同一交易日才可回退
+  4. 絕不使用加權指數或過期 mark 代替期貨價格
 
 users/me/positions 僅保留舊成本資料作唯讀相容。若正式主帳口數與
 舊成本備份無法安全對應，停止快照，避免寫入錯誤淨值。
@@ -50,6 +51,13 @@ LEGACY_TYPE = {"TX": "TXF", "MTX": "MXF", "TMF": "TMF"}
 def load_json(path):
     with open(path, encoding="utf-8") as f:
         return json.load(f)
+
+
+def load_json_optional(path):
+    try:
+        return load_json(path)
+    except FileNotFoundError:
+        return None
 
 
 def as_number(value, default=0.0):
@@ -146,7 +154,12 @@ def trade_ledger_groups(state):
     return groups
 
 
-def load_futures_master(db, legacy_positions):
+def load_futures_master(
+    db,
+    legacy_positions,
+    futures_cache=None,
+    expected_date=None,
+):
     owner = db.collection("strategy4System").document("owner").get()
     owner_uid = (owner.to_dict() or {}).get("uid") if owner.exists else None
     if not owner_uid:
@@ -180,13 +193,49 @@ def load_futures_master(db, legacy_positions):
             raise ValueError("0050 變速防守帳戶含未知期貨商品")
         formal_counts[product] = formal_counts.get(product, 0) + 1
 
+    market_date = str(market.get("date") or "")
+    accepted_date = expected_date or (
+        market_date if len(market_date) == 10 else None
+    )
+
     quote_map = {}
-    for quote in market.get("futures") or []:
-        product = canonical_product(quote.get("product"))
-        month = str(quote.get("month") or "")
-        mark = positive_number(quote.get("mark"))
-        if product and month and mark is not None:
-            quote_map[(product, month)] = quote
+    if (
+        futures_cache
+        and futures_cache.get("schema_version") == 1
+        and futures_cache.get("date") == accepted_date
+    ):
+        for quote in futures_cache.get("rows") or []:
+            product = canonical_product(quote.get("product"))
+            month = str(quote.get("month") or "")
+            mark = positive_number(quote.get("mark"))
+            if (
+                product
+                and month
+                and mark is not None
+                and quote.get("date") == accepted_date
+            ):
+                quote_map[(product, month)] = {
+                    **quote,
+                    "_cache": "futures_market.json",
+                }
+
+    if market_date == accepted_date:
+        for quote in market.get("futures") or []:
+            product = canonical_product(quote.get("product"))
+            month = str(quote.get("month") or "")
+            mark = positive_number(quote.get("mark"))
+            key = (product, month)
+            if (
+                product
+                and month
+                and mark is not None
+                and quote.get("date") == accepted_date
+                and key not in quote_map
+            ):
+                quote_map[key] = {
+                    **quote,
+                    "_cache": "firestore-market-latest",
+                }
 
     legacy_groups = legacy_cost_groups(legacy_positions)
     ledger_groups = trade_ledger_groups(trade_state)
@@ -200,10 +249,24 @@ def load_futures_master(db, legacy_positions):
         quote = quote_map.get((product, month))
         quote_mark = positive_number((quote or {}).get("mark"))
         account_mark = positive_number(position.get("mark"))
-        current_price = quote_mark if quote_mark is not None else account_mark
+        account_date = str(
+            account.get("equityDate")
+            or str(account.get("asof") or "")[:10]
+        )
+        same_day_account_mark = (
+            account_mark
+            if accepted_date and account_date == accepted_date
+            else None
+        )
+        current_price = (
+            quote_mark
+            if quote_mark is not None
+            else same_day_account_mark
+        )
         if current_price is None:
             raise ValueError(
-                f"正式期貨主帳缺少 {product} {month} 可用期貨價格"
+                f"正式期貨主帳缺少 {product} {month} {accepted_date or ''} "
+                "同日逐合約價格；停止每日淨值快照"
             )
 
         ledger = ledger_groups.get((product, month))
@@ -244,7 +307,12 @@ def load_futures_master(db, legacy_positions):
                 "price_source": (
                     (quote or {}).get("source")
                     if quote_mark is not None
-                    else "0050變速防守正式帳戶核對價"
+                    else "0050變速防守正式帳戶同日核對價"
+                ),
+                "price_date": (
+                    (quote or {}).get("date")
+                    if quote_mark is not None
+                    else account_date
                 ),
             }
         )
@@ -257,8 +325,16 @@ def load_futures_master(db, legacy_positions):
         "positions": positions,
         "initial_margin": initial_margin,
         "account_asof": account.get("asof"),
-        "market_updated_at": market.get("updatedAt"),
-        "market_date": market.get("date"),
+        "market_updated_at": (
+            (futures_cache or {}).get("updated_at")
+            if any(
+                (q or {}).get("_cache") == "futures_market.json"
+                for q in quote_map.values()
+            )
+            else market.get("updatedAt")
+        ),
+        "market_date": accepted_date,
+        "expected_price_date": accepted_date,
         "trade_ledger_active": trade_state is not None,
         "trade_ledger_revision": (
             trade_state.get("revision") if trade_state is not None else None
@@ -409,10 +485,40 @@ def main():
     now = datetime.now(TW_TZ)
     market_data = load_json("data/market_data.json")
     stock_prices_data = load_json("data/stock_prices.json")
+    fubon_data = load_json_optional("data/fubon_market_data.json")
+    futures_cache = load_json_optional("data/futures_market.json")
+
+    fubon_quote = (
+        (fubon_data or {}).get("quote")
+        if (fubon_data or {}).get("schema_version") == 1
+        else None
+    )
+    expected_date = (
+        fubon_quote.get("date")
+        if fubon_quote
+        and fubon_quote.get("symbol") == "0050"
+        and fubon_quote.get("isClose") is True
+        and len(str(fubon_quote.get("date") or "")) == 10
+        else None
+    )
+    if expected_date is None:
+        raise ValueError("Fubon 0050正式收盤日期尚不可用")
+
+    benchmark_dates = (market_data.get("trend") or {}).get("dates") or []
+    benchmark_date = benchmark_dates[-1] if benchmark_dates else None
+    if benchmark_date != expected_date:
+        raise ValueError(
+            "0050正式收盤與加權指數日期不同，停止每日淨值快照"
+        )
 
     db = init_db()
     legacy_positions = read_collection(db, "positions")
-    futures_master = load_futures_master(db, legacy_positions)
+    futures_master = load_futures_master(
+        db,
+        legacy_positions,
+        futures_cache=futures_cache,
+        expected_date=expected_date,
+    )
     stocks = read_collection(db, "stocks")
     custom_assets = read_collection(db, "customAssets")
     realized_rows = read_collection(db, "realizedPnl")
