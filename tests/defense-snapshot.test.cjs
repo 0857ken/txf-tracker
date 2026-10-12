@@ -3,7 +3,7 @@ const test = require('node:test'), assert = require('node:assert/strict');
 const {planDaily, persistPlan} = require('../scripts/defense-snapshot.cjs');
 const {yahoo, fetchMarket, fubonTarget} = require('../scripts/defense-quotes.cjs');
 const F = require('./defense-fixtures.cjs');
-const {parseFutures} = require('../scripts/defense-quotes.cjs');
+const {parseFutures, parseOfficialFuturesHtml} = require('../scripts/defense-quotes.cjs');
 const {recordJobFailure} = require('../scripts/defense-snapshot.cjs');
 function fakeDb(account) {
   const data = new Map([['root/state/account', account]]);
@@ -69,6 +69,21 @@ test('official futures parser selects exact day/month/day-session settlement and
   assert.equal(r.length, 1); assert.equal(r[0].mark, 20123); assert.equal(r[0].month, '2026-09');
   assert.throws(() => parseFutures([row, row], '2026-09-16'), /重複/);
   assert.throws(() => parseFutures([row], '2026-09-17'), /尚無/);
+});
+
+test('official TAIFEX HTML parser reads same-day monthly settlement and excludes weekly contracts', () => {
+  const row = cells => '<tr>' + cells.map(x => '<td class="12bk"><div>' + x + '</div></td>').join('') + '</tr>';
+  const monthly = row(['TMF','202610','48948','49593','48908','49316','-41','-0.08%','217150','139518','356668','49345','79461','49309','49319','50264','39800']);
+  const weekly = row(['TMF','202610W2','49000','49100','48900','49050','0','0%','1','2','3','49123','4','49040','49060','49200','48000']);
+  const html = '<html><body><div>日期：2026/10/12</div><table>' + monthly + weekly + '</table></body></html>';
+  const r = parseOfficialFuturesHtml(html, 'TMF', '2026-10-12');
+  assert.equal(r.length, 1);
+  assert.equal(r[0].product, 'TMF');
+  assert.equal(r[0].month, '2026-10');
+  assert.equal(r[0].mark, 49345);
+  assert.match(r[0].source, /TAIFEX/);
+  assert.throws(() => parseOfficialFuturesHtml(html, 'TMF', '2026-10-08'), /日期不符/);
+  assert.throws(() => parseOfficialFuturesHtml('<div>2026\/10\/12</div><table>' + monthly + monthly + '</table>', 'TMF', '2026-10-12'), /重複/);
 });
 test('stale market is observation only; future ledger input cannot become a formal snapshot', () => {
   const p = planDaily({...input(), now: '2026-09-17T07:00:00Z'});
