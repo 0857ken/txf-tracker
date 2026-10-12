@@ -33,8 +33,22 @@ jobs:
           node --check scripts/defense-quotes.cjs
           node --check scripts/fetch_futures_market.cjs
           node --check positions.js
+          node --check defense.js
           python -m py_compile scripts/snapshot_assets.py
           node --test tests/defense-snapshot.test.cjs
+          python - <<'PY'
+          import re, pathlib, subprocess
+          text = pathlib.Path("index.html").read_text(encoding="utf-8")
+          blocks = re.findall(r"<script(?![^>]*\\bsrc=)[^>]*>([\\s\\S]*?)</script>", text, re.I)
+          for i, block in enumerate(blocks):
+              p = pathlib.Path("/tmp") / f"index.{i}.js"
+              p.write_text(block, encoding="utf-8")
+              r = subprocess.run(["node", "--check", str(p)], text=True, capture_output=True)
+              if r.returncode:
+                  print(r.stderr)
+                  raise SystemExit(f"INDEX_SYNTAX_FAIL {i}")
+          print("INDEX_SYNTAX_OK")
+          PY
 
       - name: Fetch same-day official TAIFEX settlements
         run: |
