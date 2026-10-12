@@ -14,10 +14,10 @@ jobs:
     runs-on: ubuntu-latest
     timeout-minutes: 10
     steps:
-      - name: Checkout production website code
+      - name: Checkout proposed futures price branch
         uses: actions/checkout@v4
         with:
-          ref: gh-pages
+          ref: feature/official-futures-market-2026-10-12
           fetch-depth: 1
 
       - uses: actions/setup-node@v4
@@ -28,106 +28,107 @@ jobs:
         with:
           python-version: '3.12'
 
-      - name: Test TAIFEX public contract marks
+      - name: Syntax and unit tests
         run: |
+          node --check scripts/defense-quotes.cjs
+          node --check scripts/fetch_futures_market.cjs
+          node --check positions.js
+          python -m py_compile scripts/snapshot_assets.py
+          node --test tests/defense-snapshot.test.cjs
+
+      - name: Fetch same-day official TAIFEX settlements
+        run: |
+          node scripts/fetch_futures_market.cjs --strict
           node - <<'JS'
           const fs = require('node:fs');
-          const {fetchFutures, fetchMarket} = require('./scripts/defense-quotes.cjs');
-          (async () => {
-            const fubon = JSON.parse(fs.readFileSync('data/fubon_market_data.json', 'utf8'));
-            const date = fubon?.quote?.date;
-            console.log('FUBON_DATE=' + date);
-            try {
-              const rows = await fetchFutures(date);
-              console.log('TAIFEX_ROWS=' + rows.length);
-              const relevant = rows.filter(x => ['TX','MTX','TMF'].includes(x.product));
-              console.log('TAIFEX_PRODUCTS=' + [...new Set(relevant.map(x => x.product))].join(','));
-              for (const p of ['TX','MTX','TMF']) {
-                const xs = relevant.filter(x => x.product === p).sort((a,b) => a.month.localeCompare(b.month));
-                console.log(p + '_ROWS=' + xs.slice(0,4).map(x => x.month + ':' + x.mark).join(','));
-              }
-            } catch (e) {
-              console.log('FETCH_FUTURES_TARGET_FAIL=' + e.message);
-            }
+          const fubon = JSON.parse(fs.readFileSync('data/fubon_market_data.json','utf8'));
+          const fut = JSON.parse(fs.readFileSync('data/futures_market.json','utf8'));
+          if (fut.date !== fubon.quote.date) throw new Error('futures cache date mismatch');
+          for (const p of ['TX','MTX','TMF']) {
+            if (!fut.rows.some(x => x.product === p && x.date === fut.date && Number(x.mark) > 0))
+              throw new Error('missing ' + p);
+          }
+          const held = fut.rows.find(x => x.product === 'TMF' && x.month === '2026-10');
+          if (!held) throw new Error('missing held TMF contract');
+          console.log('CACHE_DATE=' + fut.date);
+          console.log('CACHE_ROWS=' + fut.rows.length);
+          console.log('CACHE_TMF_2026_10=' + held.mark);
+          console.log('CACHE_TMF_SOURCE=' + held.source);
+          JS
 
-            const rawResponse = await fetch('https://openapi.taifex.com.tw/v1/DailyMarketReportFut');
-            const raw = await rawResponse.json();
-            const rawRelevant = raw.filter(r => ['TX','MTX','TMF'].includes(String(r.Contract || '').trim()));
-            const dates = [...new Set(rawRelevant.map(r => String(r.Date || '')))].sort().slice(-10);
-            console.log('RAW_TAIFEX_DATES=' + dates.join(','));
-            for (const p of ['TX','MTX','TMF']) {
-              const xs = rawRelevant.filter(r => String(r.Contract || '').trim() === p)
-                .slice(0,12)
-                .map(r => ({
-                  Date:r.Date,
-                  Month:r['ContractMonth(Week)'],
-                  Session:r.TradingSession,
-                  Settlement:r.SettlementPrice,
-                  Close:r.Close
-                }));
-              console.log('RAW_' + p + '=' + JSON.stringify(xs));
-            }
-
-            for (const qd of [date, '2026-10-08']) {
-              const url = 'https://www.taifex.com.tw/cht/3/futDailyMarketExcel?queryType=2&marketCode=0&dateaddcnt=&commodity_id=TMF&queryDate=' + encodeURIComponent(qd.replaceAll('-', '/'));
-              const rr = await fetch(url, {headers:{'User-Agent':'TXF-Tracker/1.0'}});
-              const html = await rr.text();
-              const dateHits = [...html.matchAll(/2026[\/-]10[\/-]\d{2}/g)].map(m => m[0]);
-              const idx = html.indexOf('49345');
-              console.log('OFFICIAL_HTML_' + qd + '_STATUS=' + rr.status);
-              console.log('OFFICIAL_HTML_' + qd + '_DATES=' + [...new Set(dateHits)].slice(0,8).join(','));
-              console.log('OFFICIAL_HTML_' + qd + '_HAS_49345=' + String(idx >= 0));
-              if (idx >= 0) console.log('OFFICIAL_HTML_SNIP=' + html.slice(Math.max(0, idx-500), idx+500).replace(/\s+/g,' '));
-            }
-
-            const market = await fetchMarket(new Date().toISOString());
-            console.log('FETCH_MARKET_DATE=' + market.date);
-            console.log('FETCH_MARKET_FUTURES=' + market.futures.length);
-            console.log('FETCH_MARKET_ERROR=' + (market.futuresError || 'none'));
-          })().catch(e => { console.error('PUBLIC_AUDIT_FAIL=' + e.message); process.exit(1); });
+      - name: Verify Strategy 4 market adapter uses same-day official futures
+        run: |
+          node - <<'JS'
+          const {fetchMarket} = require('./scripts/defense-quotes.cjs');
+          fetchMarket(new Date().toISOString()).then(m => {
+            if (!m.futures.length) throw new Error('same-day futures missing');
+            if (m.futures.some(x => x.date !== m.date)) throw new Error('stale futures accepted');
+            const held = m.futures.find(x => x.product === 'TMF' && x.month === '2026-10');
+            if (!held) throw new Error('held TMF quote missing');
+            console.log('ADAPTER_DATE=' + m.date);
+            console.log('ADAPTER_FUTURES_ROWS=' + m.futures.length);
+            console.log('ADAPTER_TMF_2026_10=' + held.mark);
+            console.log('ADAPTER_SOURCE=' + held.source);
+          }).catch(e => { console.error(e); process.exit(1); });
           JS
 
       - name: Install Firestore SDK
         run: pip install firebase-admin
 
-      - name: Inspect formal market/latest read-only
+      - name: Read-only NAV dry run with current official futures cache
         env:
           FIREBASE_KEY: ${{ secrets.FIREBASE_KEY }}
         run: |
           python - <<'PY'
-          import json, os
-          import firebase_admin
-          from firebase_admin import credentials, firestore
+          import importlib.util, json, pathlib
 
-          firebase_admin.initialize_app(credentials.Certificate(json.loads(os.environ["FIREBASE_KEY"])))
-          db = firestore.client()
+          p = pathlib.Path("scripts/snapshot_assets.py")
+          spec = importlib.util.spec_from_file_location("snapshot_assets", p)
+          m = importlib.util.module_from_spec(spec)
+          spec.loader.exec_module(m)
 
-          owner = db.collection("strategy4System").document("owner").get()
-          uid = (owner.to_dict() or {}).get("uid") if owner.exists else None
-          if not uid:
-              raise SystemExit("FIRESTORE_AUDIT_FAIL owner_missing")
+          market = m.load_json("data/market_data.json")
+          prices = m.load_json("data/stock_prices.json")
+          fubon = m.load_json("data/fubon_market_data.json")
+          futures_cache = m.load_json("data/futures_market.json")
+          expected = fubon["quote"]["date"]
 
-          base = (
-              db.collection("defenseUsers").document(uid)
-              .collection("strategies").document("0050-defense-v1")
+          db = m.init_db()
+          legacy = m.read_collection(db, "positions")
+          futures = m.load_futures_master(
+              db,
+              legacy,
+              futures_cache=futures_cache,
+              expected_date=expected,
           )
-          account = base.collection("state").document("account").get().to_dict() or {}
-          market = base.collection("market").document("latest").get().to_dict() or {}
+          stocks = m.read_collection(db, "stocks")
+          customs = m.read_collection(db, "customAssets")
+          realized = m.read_collection(db, "realizedPnl")
+          snap = m.build_snapshot(
+              market,
+              prices,
+              futures,
+              stocks,
+              customs,
+              realized,
+              m.datetime.now(m.TW_TZ),
+          )
 
-          positions = account.get("positions") or []
-          futures = market.get("futures") or []
-          print("FORMAL_MARKET_DATE=" + str(market.get("date")))
-          print("FORMAL_FUTURES_ROWS=" + str(len(futures)))
-          print("FORMAL_FUTURES_ERROR=" + str(market.get("futuresError")))
-          print("FORMAL_ACCOUNT_POSITIONS=" + json.dumps([
-              {"product":p.get("product"),"month":p.get("month"),"lots":p.get("lots"),"mark":p.get("mark")}
-              for p in positions
-          ], separators=(",", ":")))
-          quote_map = {(q.get("product"), q.get("month")): q for q in futures}
-          for p in positions:
-              q = quote_map.get((p.get("product"), p.get("month")))
-              if q:
-                  print("FORMAL_MATCH=" + str(p.get("product")) + ":" + str(p.get("month")) + ":" + str(q.get("mark")) + ":" + str(q.get("source")))
-              else:
-                  print("FORMAL_MATCH=MISSING:" + str(p.get("product")) + ":" + str(p.get("month")))
+          held = futures["positions"][0]
+          cache_mark = next(
+              x["mark"] for x in futures_cache["rows"]
+              if x["product"] == held["product"] and x["month"] == held["month"]
+          )
+          if held["current_price"] != cache_mark:
+              raise SystemExit("DRY_RUN_FAIL stale price selected")
+          if futures.get("market_date") != expected:
+              raise SystemExit("DRY_RUN_FAIL date mismatch")
+          if snap["realized_pnl"] != -4980:
+              raise SystemExit("DRY_RUN_FAIL realized PnL mismatch")
+          print("NAV_DRY_RUN_OK")
+          print("NAV_PRICE_DATE=" + str(futures["market_date"]))
+          print("NAV_FUTURES_PRICE=" + str(held["current_price"]))
+          print("NAV_FUTURES_SOURCE=" + str(held["price_source"]))
+          print("NAV_NET_WORTH=" + str(snap["net_worth"]))
+          print("NAV_REALIZED_PNL=" + str(snap["realized_pnl"]))
           PY
