@@ -22,14 +22,25 @@ jobs:
         with:
           python-version: '3.12'
 
+      - name: Setup Node
+        uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+
       - name: 抓取報價並計算均線
         run: python scripts/fetch_market.py
+
+      - name: 抓取 TAIFEX 正式逐合約結算價
+        run: node scripts/fetch_futures_market.cjs
 
       - name: Commit 更新的 JSON
         run: |
           git config user.name "github-actions[bot]"
           git config user.email "github-actions[bot]@users.noreply.github.com"
           git add data/market_data.json
+          if [ -f data/futures_market.json ]; then
+            git add data/futures_market.json
+          fi
           if git diff --staged --quiet; then
             echo "資料無變化,跳過 commit"
           else
