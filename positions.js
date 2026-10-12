@@ -30,6 +30,16 @@ function defenseDoc(uid, group, id) {
   return doc(window.fbDb, 'defenseUsers', uid, 'strategies', STRATEGY_ID, group, id);
 }
 
+async function fetchStaticJson(path) {
+  try {
+    const r = await fetch(path + '?t=' + Date.now(), {cache: 'no-store'});
+    if (!r.ok) return null;
+    return await r.json();
+  } catch {
+    return null;
+  }
+}
+
 function legacyPosCol() {
   return collection(window.fbDb, 'users', 'me', 'positions');
 }
@@ -86,11 +96,13 @@ async function loadMaster() {
   const uid = window.fbUid;
   if (!uid) throw new Error('Firebase 使用者尚未完成初始化');
 
-  const [accountSnap, marketSnap, tradeStateSnap, legacySnap] = await Promise.all([
+  const [accountSnap, marketSnap, tradeStateSnap, legacySnap, futuresCache, fubon] = await Promise.all([
     getDoc(defenseDoc(uid, 'state', 'account')),
     getDoc(defenseDoc(uid, 'market', 'latest')),
     getDoc(defenseDoc(uid, 'state', 'tradeLedger')),
-    getDocs(legacyPosCol())
+    getDocs(legacyPosCol()),
+    fetchStaticJson('data/futures_market.json'),
+    fetchStaticJson('data/fubon_market_data.json')
   ]);
 
   if (!accountSnap.exists()) {
@@ -101,13 +113,37 @@ async function loadMaster() {
   const market = marketSnap.exists() ? (marketSnap.data() || {}) : null;
   const formal = Array.isArray(account.positions) ? account.positions : [];
 
+  const fubonQuote = fubon?.schema_version === 1 ? fubon?.quote : null;
+  const expectedDate = (
+    fubonQuote?.symbol === '0050' &&
+    fubonQuote?.isClose === true &&
+    /^\d{4}-\d{2}-\d{2}$/.test(fubonQuote?.date || '')
+  ) ? fubonQuote.date : null;
+  const marketDate = /^\d{4}-\d{2}-\d{2}$/.test(market?.date || '') ? market.date : null;
+  const acceptedDate = expectedDate || marketDate;
+
   const quotes = new Map();
-  (Array.isArray(market?.futures) ? market.futures : []).forEach(q => {
-    const product = canonicalProduct(q.product);
-    const month = String(q.month || '');
-    const mark = finitePositive(q.mark);
-    if (product && month && mark !== null) quotes.set(product + ':' + month, q);
-  });
+  if (futuresCache?.schema_version === 1 && futuresCache?.date === acceptedDate) {
+    (Array.isArray(futuresCache.rows) ? futuresCache.rows : []).forEach(q => {
+      const product = canonicalProduct(q.product);
+      const month = String(q.month || '');
+      const mark = finitePositive(q.mark);
+      if (product && month && mark !== null && q.date === acceptedDate) {
+        quotes.set(product + ':' + month, {...q, cache: 'futures_market.json'});
+      }
+    });
+  }
+  if (marketDate === acceptedDate) {
+    (Array.isArray(market?.futures) ? market.futures : []).forEach(q => {
+      const product = canonicalProduct(q.product);
+      const month = String(q.month || '');
+      const mark = finitePositive(q.mark);
+      const key = product + ':' + month;
+      if (product && month && mark !== null && q.date === acceptedDate && !quotes.has(key)) {
+        quotes.set(key, {...q, cache: 'firestore-market-latest'});
+      }
+    });
+  }
 
   const tradeState = tradeStateSnap.exists() ? (tradeStateSnap.data() || {}) : null;
   const ledgerGroups = tradeLedgerGroups(tradeState);
@@ -132,6 +168,10 @@ async function loadMaster() {
     const quote = quotes.get(product + ':' + month) || null;
     const quoteMark = finitePositive(quote?.mark);
     const currentPrice = quoteMark ?? accountMark;
+    const accountDate = /^\d{4}-\d{2}-\d{2}$/.test(account.equityDate || '')
+      ? account.equityDate
+      : (typeof account.asof === 'string' ? account.asof.slice(0, 10) : null);
+    const priceFresh = quoteMark !== null && (!acceptedDate || quote?.date === acceptedDate);
 
     const ledger = ledgerGroups[product + ':' + month] || null;
     const legacy = legacyGroups[product] || null;
@@ -164,10 +204,15 @@ async function loadMaster() {
       cost_source: ledgerCostValid ? 'futures-trade-ledger' : (legacyCostValid ? 'legacy-readonly-backup' : 'unavailable'),
       reference_price: accountMark,
       current_price: currentPrice,
+      price_fresh: priceFresh,
+      price_date: quoteMark !== null ? (quote?.date || acceptedDate || null) : accountDate,
+      expected_price_date: acceptedDate,
       price_source: quoteMark !== null
-        ? (quote?.source || '0050變速防守正式逐合約行情')
-        : (accountMark !== null ? '0050變速防守正式帳戶核對價' : 'missing'),
-      price_at: quoteMark !== null ? (quote?.markAt || market?.updatedAt || null) : (account.asof || null),
+        ? (quote?.source || 'TAIFEX正式逐合約結算價')
+        : (accountMark !== null
+          ? ('0050變速防守帳戶核對價' + (acceptedDate && accountDate !== acceptedDate ? '（待當日TAIFEX結算價）' : ''))
+          : 'missing'),
+      price_at: quoteMark !== null ? (quote?.markAt || futuresCache?.updated_at || market?.updatedAt || null) : (account.asof || null),
       date: costValid ? (costRow?.date || account.equityDate || '') : (account.equityDate || ''),
       note: ledgerCostValid ? '期貨成交帳本成本' : (legacyCostValid ? (legacy.note || '舊成本唯讀備份') : '交易帳本與正式主帳待核對'),
       readonly: true
@@ -180,7 +225,10 @@ async function loadMaster() {
     positions,
     source: '0050變速防守正式 Forward',
     strategyId: STRATEGY_ID,
+    expectedPriceDate: acceptedDate,
+    futuresCache,
     costMatched: positions.every(p => p.cost_valid || !p.lots),
+    priceFresh: positions.every(p => !p.lots || p.price_fresh),
     tradeLedger: tradeState
   };
 }
