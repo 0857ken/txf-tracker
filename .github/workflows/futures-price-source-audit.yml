@@ -54,6 +54,7 @@ jobs:
           console.log('CACHE_ROWS=' + fut.rows.length);
           console.log('CACHE_TMF_2026_10=' + held.mark);
           console.log('CACHE_TMF_SOURCE=' + held.source);
+          console.log('FUTURES_JSON=' + JSON.stringify(fut));
           JS
 
       - name: Verify Strategy 4 market adapter uses same-day official futures
