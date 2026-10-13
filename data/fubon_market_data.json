@@ -1,7 +1,7 @@
 {
   "schema_version": 1,
   "source": "Fubon Neo / Fugle Market Data",
-  "collected_at": "2026-10-13 10:35:10",
+  "collected_at": "2026-10-13 11:05:19",
   "quote": {
     "date": "2026-10-13",
     "type": "EQUITY",
@@ -17,32 +17,32 @@
     "highTime": 1791853917610704,
     "lowPrice": 111.9,
     "lowTime": 1791857093281532,
-    "closePrice": 112.25,
-    "closeTime": 1791858909011534,
-    "avgPrice": 112.54,
-    "change": -2.55,
-    "changePercent": -2.22,
+    "closePrice": 112.65,
+    "closeTime": 1791860718884654,
+    "avgPrice": 112.51,
+    "change": -2.15,
+    "changePercent": -1.87,
     "amplitude": 1.13,
-    "lastPrice": 112.25,
+    "lastPrice": 112.65,
     "lastSize": 1,
     "isContinuous": true,
-    "lastUpdated": 1791858909438642,
-    "serial": 10248515,
+    "lastUpdated": 1791860718884654,
+    "serial": 11943798,
     "total": {
-      "tradeValue": 15711381900,
-      "tradeVolume": 139611,
-      "tradeVolumeAtBid": 86669,
-      "tradeVolumeAtAsk": 47667,
-      "transaction": 23323,
-      "time": 1791858909011534
+      "tradeValue": 17558137200,
+      "tradeVolume": 156054,
+      "tradeVolumeAtBid": 92933,
+      "tradeVolumeAtAsk": 57846,
+      "transaction": 26503,
+      "time": 1791860718884654
     },
     "lastTrade": {
-      "bid": 112.2,
-      "ask": 112.25,
-      "price": 112.25,
+      "bid": 112.6,
+      "ask": 112.65,
+      "price": 112.65,
       "size": 1,
-      "time": 1791858909011534,
-      "serial": 10248038
+      "time": 1791860718884654,
+      "serial": 11943798
     }
   }
 }
