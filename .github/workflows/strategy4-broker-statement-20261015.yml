@@ -1,0 +1,33 @@
+name: Strategy 4 Broker Statement Addendum 2026-10-15
+
+on:
+  push:
+    branches:
+      - ops/strategy4-broker-statement-2026-10-15
+    paths:
+      - '.github/workflows/strategy4-broker-statement-20261015.yml'
+      - 'tools/record-strategy4-broker-statement-20261015.cjs'
+
+permissions:
+  contents: read
+
+jobs:
+  record:
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/checkout@v4
+        with:
+          ref: gh-pages
+          path: prod
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+      - name: Check syntax
+        run: node --check tools/record-strategy4-broker-statement-20261015.cjs
+      - run: npm ci --prefix prod/tools/defense-runner --omit=dev --ignore-scripts --no-audit --no-fund
+      - name: Record guarded broker statement without account changes
+        env:
+          FIREBASE_KEY: ${{ secrets.FIREBASE_KEY }}
+        run: node tools/record-strategy4-broker-statement-20261015.cjs
