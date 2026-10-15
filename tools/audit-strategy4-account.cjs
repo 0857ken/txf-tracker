@@ -17,6 +17,20 @@ async function main(){
   const snap=await ref.get();
   if(!snap.exists) throw new Error('ACCOUNT_MISSING');
   const a=snap.data()||{};
+  const root='defenseUsers/'+uid+'/strategies/0050-defense-v1';
+  const events=await db.collection(root+'/events').get();
+  const brokerEvents=events.docs.map(d=>({id:d.id,...d.data()}))
+    .filter(e=>/broker|correction|account_update/i.test(String(e.kind||'')) || /2026-10-1/.test(String(e.date||'')))
+    .sort((x,y)=>String(x.recordedAt||x.at||'').localeCompare(String(y.recordedAt||y.at||'')))
+    .slice(-25)
+    .map(e=>({id:e.id,kind:e.kind,date:e.date,recordedAt:e.recordedAt,
+      accountRevision:e.accountRevision??null,
+      totals:e.detail?.totals??null,
+      netPnl:e.detail?.netPnl??null,
+      brokerQueryFrom:e.detail?.brokerQueryFrom??null,
+      brokerQueryTo:e.detail?.brokerQueryTo??null,
+      beforeLots:e.detail?.beforeLots??null,
+      afterLots:e.detail?.afterLots??null}));
   console.log(JSON.stringify({
     revision:a.revision??null,
     asof:a.asof??null,
@@ -24,7 +38,8 @@ async function main(){
     equity:a.equity??null,
     outside:a.outside??null,
     positions:(a.positions||[]).map(p=>({product:p.product,month:p.month,lots:p.lots,mark:p.mark})),
-    updatedAt:a.updatedAt??null
+    updatedAt:a.updatedAt??null,
+    brokerEvents
   },null,2));
 }
 main().catch(e=>{console.error(e.message);process.exitCode=1;});
