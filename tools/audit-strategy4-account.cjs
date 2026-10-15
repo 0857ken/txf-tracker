@@ -37,6 +37,9 @@ async function main(){
     equityDate:a.equityDate??null,
     equity:a.equity??null,
     outside:a.outside??null,
+    initialMargin:a.initialMargin??null,
+    maintenanceMargin:a.maintenanceMargin??null,
+    marginReference:a.marginReference?{initial:a.marginReference.initial??null,maintenance:a.marginReference.maintenance??null,brokerOverridePresent:!!a.marginReference.brokerOverride}:null,
     positions:(a.positions||[]).map(p=>({product:p.product,month:p.month,lots:p.lots,mark:p.mark})),
     updatedAt:a.updatedAt??null,
     brokerEvents
