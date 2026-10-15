@@ -1,0 +1,1 @@
+Trigger post-write read-only verification for 2026-10-15 broker statement addendum.
