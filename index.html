@@ -45,7 +45,52 @@
   button.red { background: rgba(255, 71, 87, 0.7); color: #fff; }
   button.yellow { background: var(--yellow); color: #000; }
   .chart-wrap { height: 220px; position: relative; }
-@media(max-width:768px){header{flex-wrap:wrap;gap:12px}.nav{flex-wrap:wrap;gap:12px}}
+@media (max-width: 768px) {
+  header { flex-wrap: wrap; gap: 12px; padding: 12px 14px; }
+  .nav { flex-wrap: wrap; gap: 12px; }
+  main { padding: 16px 12px; }
+  .grid-5, .grid-4 { grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 10px; }
+  .grid-5 > .card:last-child { grid-column: 1 / -1; }
+  .grid-2 { grid-template-columns: minmax(0, 1fr); gap: 10px; }
+  .card { min-width: 0; padding: 14px; margin-bottom: 12px; }
+  .value { font-size: clamp(17px, 5vw, 24px); }
+  .sub { overflow-wrap: anywhere; }
+  .chart-wrap { min-width: 0; }
+  /* 手機版每筆期貨部位改為兩欄資訊卡，避免「來源」把整頁撐出螢幕。 */
+  .positions-table, .positions-table tbody { display: block; width: 100%; }
+  .positions-table thead { display: none; }
+  .positions-table tbody tr {
+    display: grid;
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+    gap: 12px;
+    padding: 12px 0;
+    border-bottom: 1px solid var(--border);
+  }
+  .positions-table td {
+    display: block;
+    min-width: 0;
+    padding: 0;
+    border: 0;
+    font-size: 13px;
+    overflow-wrap: anywhere;
+  }
+  .positions-table td::before {
+    display: block;
+    margin-bottom: 4px;
+    color: var(--muted);
+    font-size: 11px;
+  }
+  .positions-table td:nth-child(1)::before { content: '合約月份'; }
+  .positions-table td:nth-child(2)::before { content: '商品'; }
+  .positions-table td:nth-child(3)::before { content: '口數'; }
+  .positions-table td:nth-child(4)::before { content: '成本備份'; }
+  .positions-table td:nth-child(5)::before { content: '期貨估值價'; }
+  .positions-table td:nth-child(6)::before { content: '損益'; }
+  .positions-table td:nth-child(7) { grid-column: 1 / -1; }
+  .positions-table td:nth-child(7)::before { content: '行情來源'; }
+  .positions-table td[colspan] { grid-column: 1 / -1; }
+  .positions-table td[colspan]::before { content: none; }
+}
 </style>
 </head>
 <body>
@@ -118,7 +163,7 @@
 
   <div class="card">
     <div class="label">部位明細 · 0050變速防守正式主帳</div>
-    <table>
+    <table class="positions-table">
       <thead><tr><th>月份</th><th>種類</th><th>口數</th><th>成本備份</th><th>期貨估值價</th><th>損益</th><th>來源</th></tr></thead>
       <tbody id="pos-tbody"><tr><td colspan="7">載入中...</td></tr></tbody>
     </table>
