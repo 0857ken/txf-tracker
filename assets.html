@@ -263,9 +263,15 @@ input { border-radius:10px; }
   </div>
 
   <div class="card">
-    <div class="section-title">⌁ 淨資產走勢 <span class="section-note">每日快照</span></div>
+    <div class="section-title">⌁ 淨資產走勢 vs 大盤 <span class="section-note">每日快照 · 加權指數</span></div>
+    <div id="snapshot-compare-controls" style="display:flex;align-items:center;gap:8px;flex-wrap:wrap;margin-bottom:12px">
+      <button id="snapshot-mode-value" type="button" onclick="setSnapshotCompareMode('value')" aria-pressed="true" style="background:var(--blue)">淨值比較</button>
+      <button id="snapshot-mode-return" type="button" onclick="setSnapshotCompareMode('return')" aria-pressed="false" style="background:var(--bg3)">報酬率比較</button>
+    </div>
+    <div id="snapshot-compare-summary" role="status" style="font-size:12px;color:var(--muted);line-height:1.7;margin-bottom:10px"></div>
     <div id="snapshot-empty" style="height:220px;display:flex;align-items:center;justify-content:center;color:var(--muted);font-size:13px">尚無每日快照資料</div>
-    <div id="snapshot-chart-wrap" style="height:220px;display:none"><canvas id="snapshot-chart"></canvas></div>
+    <div id="snapshot-chart-wrap" style="height:260px;display:none"><canvas id="snapshot-chart"></canvas></div>
+    <div style="font-size:11px;color:var(--muted);line-height:1.6;margin-top:10px">兩條線從第一筆可比較快照同一起點計算；大盤採 ^TWII 收盤價格報酬（不含股息）。如有額外入金或提領，帳戶淨值變動不等同投資報酬。</div>
   </div>
 
   <div class="card">
@@ -831,80 +837,183 @@ async function loadRealized() {
   }
 }
 
-async function loadDailySnapshots() {
+// 只在相同日期配對資產快照與大盤收盤價；舊快照若缺 benchmark_price，才用同日歷史值補充。
+function prepareSnapshotComparison(records, marketData) {
+  const trend = marketData?.trend || {};
+  const historicIndex = new Map();
+  (trend.dates || []).forEach((date, i) => {
+    const price = Number((trend.prices || [])[i]);
+    if (/^\d{4}-\d{2}-\d{2}$/.test(date) && Number.isFinite(price) && price > 0) {
+      historicIndex.set(date, price);
+    }
+  });
+
+  const valid = records
+    .map(r => ({...r, day: String(r.date || r.id || '')}))
+    .filter(r => /^\d{4}-\d{2}-\d{2}$/.test(r.day) && Number.isFinite(Number(r.net_worth)) && Number(r.net_worth) > 0)
+    .sort((a, b) => a.day.localeCompare(b.day))
+    .map(r => {
+      const stored = Number(r.benchmark_price);
+      return {
+        day: r.day,
+        netWorth: Number(r.net_worth),
+        benchmark: Number.isFinite(stored) && stored > 0 ? stored : (historicIndex.get(r.day) ?? null)
+      };
+    });
+
+  const baseIndex = valid.findIndex(r => r.benchmark !== null);
+  if (baseIndex < 0) return {rows: valid, base: null, lastPair: null, pairedCount: 0};
+  const rows = valid.slice(baseIndex);
+  const base = rows[0];
+  const paired = rows.filter(r => r.benchmark !== null);
+  return {rows, base, lastPair: paired[paired.length - 1], pairedCount: paired.length};
+}
+
+let snapshotCompareMode = 'value';
+let snapshotCompareData = null;
+
+function setSnapshotCompareMode(mode) {
+  if (mode !== 'value' && mode !== 'return') return;
+  snapshotCompareMode = mode;
+  renderDailySnapshotChart();
+}
+
+function renderDailySnapshotChart() {
   const emptyEl = document.getElementById('snapshot-empty');
   const wrapEl = document.getElementById('snapshot-chart-wrap');
+  const summaryEl = document.getElementById('snapshot-compare-summary');
+  const valueBtn = document.getElementById('snapshot-mode-value');
+  const returnBtn = document.getElementById('snapshot-mode-return');
+  const comparison = snapshotCompareData;
+  const hasCompare = Boolean(comparison?.base && comparison.pairedCount >= 2);
+  [valueBtn, returnBtn].forEach(btn => { btn.disabled = !hasCompare; });
+  valueBtn.setAttribute('aria-pressed', snapshotCompareMode === 'value' ? 'true' : 'false');
+  returnBtn.setAttribute('aria-pressed', snapshotCompareMode === 'return' ? 'true' : 'false');
+  valueBtn.style.background = snapshotCompareMode === 'value' ? 'var(--blue)' : 'var(--bg3)';
+  returnBtn.style.background = snapshotCompareMode === 'return' ? 'var(--blue)' : 'var(--bg3)';
 
-  try {
-    const records = await window.fetchDailySnapshots();
-    const valid = records.filter(r => Number.isFinite(Number(r.net_worth)));
-
-    if (valid.length === 0) {
-      if (window.dailySnapshotChart) {
-        window.dailySnapshotChart.destroy();
-        window.dailySnapshotChart = null;
-      }
-      emptyEl.textContent = '尚無每日快照資料';
-      emptyEl.style.display = 'flex';
-      wrapEl.style.display = 'none';
-      return;
+  const records = comparison?.rows || [];
+  if (!records.length) {
+    if (window.dailySnapshotChart) {
+      window.dailySnapshotChart.destroy();
+      window.dailySnapshotChart = null;
     }
-
-    emptyEl.style.display = 'none';
-    wrapEl.style.display = 'block';
-
-    const labels = valid.map(r => r.date || r.id);
-    const values = valid.map(r => Number(r.net_worth));
-
-    const ctx = document.getElementById('snapshot-chart').getContext('2d');
-    if (window.dailySnapshotChart) window.dailySnapshotChart.destroy();
-
-    window.dailySnapshotChart = new Chart(ctx, {
-      type: 'line',
-      data: {
-        labels,
-        datasets: [{
-          label: '總資產淨值',
-          data: values,
-          borderColor: '#2196f3',
-          backgroundColor: 'rgba(33, 150, 243, 0.12)',
-          fill: true,
-          tension: 0.25,
-          pointRadius: valid.length > 60 ? 0 : 2,
-          pointHoverRadius: 4
-        }]
-      },
-      options: {
-        responsive: true,
-        maintainAspectRatio: false,
-        plugins: {
-          legend: { labels: { color: '#c8d8e8' } },
-          tooltip: {
-            callbacks: {
-              label: ctx => '淨值：' + Math.round(ctx.raw).toLocaleString() + ' 元'
-            }
-          }
-        },
-        scales: {
-          x: {
-            ticks: { autoSkip: true, maxRotation: 0, color: '#c8d8e8' },
-            grid: { color: '#2c4258' }
-          },
-          y: {
-            ticks: {
-              color: '#c8d8e8',
-              callback: value => Math.round(value).toLocaleString()
-            },
-            grid: { color: '#2c4258' }
-          }
-        }
-      }
-    });
-  } catch (e) {
-    console.error('Daily snapshots error:', e);
-    emptyEl.textContent = '每日快照載入失敗';
+    emptyEl.textContent = '尚無每日快照資料';
     emptyEl.style.display = 'flex';
     wrapEl.style.display = 'none';
+    summaryEl.textContent = '';
+    return;
+  }
+
+  const mode = hasCompare ? snapshotCompareMode : 'value';
+  const base = comparison.base;
+  const toPct = (value, first) => (value / first - 1) * 100;
+  const formatPct = n => (n >= 0 ? '+' : '') + n.toFixed(2) + '%';
+  const formatMoney = n => Math.round(n).toLocaleString('zh-TW') + ' 元';
+  const dates = records.map(r => r.day);
+  const navPoints = records.map(r => mode === 'return' ? toPct(r.netWorth, base.netWorth) : r.netWorth);
+  const indexPoints = hasCompare
+    ? records.map(r => r.benchmark === null ? null :
+      (mode === 'return' ? toPct(r.benchmark, base.benchmark) :
+        base.netWorth * r.benchmark / base.benchmark))
+    : null;
+
+  if (hasCompare) {
+    const paired = comparison.lastPair;
+    const assetReturn = toPct(paired.netWorth, base.netWorth);
+    const indexReturn = toPct(paired.benchmark, base.benchmark);
+    const excess = assetReturn - indexReturn;
+    summaryEl.textContent = '同日起點 ' + base.day + ' → ' + paired.day +
+      '　｜　資產 ' + formatPct(assetReturn) +
+      '　｜　大盤 ' + formatPct(indexReturn) +
+      '　｜　' + (excess >= 0 ? '領先 ' : '落後 ') + Math.abs(excess).toFixed(2) + ' 個百分點';
+  } else {
+    summaryEl.textContent = '大盤比較需至少 2 個同日淨值與指數收盤資料點；目前先顯示原始淨值曲線。';
+  }
+
+  emptyEl.style.display = 'none';
+  wrapEl.style.display = 'block';
+  const datasets = [{
+    label: mode === 'return' ? '我的資產報酬率' : '總資產淨值',
+    data: navPoints,
+    borderColor: '#2196f3',
+    backgroundColor: 'rgba(33, 150, 243, 0.08)',
+    fill: false,
+    tension: 0.25,
+    spanGaps: false,
+    pointRadius: records.length > 60 ? 0 : 2,
+    pointHoverRadius: 4
+  }];
+  if (hasCompare) {
+    datasets.push({
+      label: mode === 'return' ? '加權指數報酬率' : '大盤對照淨值',
+      data: indexPoints,
+      borderColor: '#d4af37',
+      backgroundColor: 'transparent',
+      borderDash: [5, 3],
+      fill: false,
+      tension: 0.25,
+      spanGaps: false,
+      pointRadius: records.length > 60 ? 0 : 2,
+      pointHoverRadius: 4
+    });
+  }
+
+  const ctx = document.getElementById('snapshot-chart').getContext('2d');
+  if (window.dailySnapshotChart) window.dailySnapshotChart.destroy();
+  window.dailySnapshotChart = new Chart(ctx, {
+    type: 'line',
+    data: {labels: dates, datasets},
+    options: {
+      responsive: true,
+      maintainAspectRatio: false,
+      interaction: {mode: 'index', intersect: false},
+      plugins: {
+        legend: {labels: {color: '#c8d8e8', boxWidth: 12}},
+        tooltip: {
+          callbacks: {
+            label: item => item.dataset.label + '：' +
+              (mode === 'return' ? formatPct(item.parsed.y) : formatMoney(item.parsed.y)),
+            afterBody: items => {
+              if (!items.length) return [];
+              const point = records[items[0].dataIndex];
+              const detail = ['實際淨值：' + formatMoney(point.netWorth)];
+              if (point.benchmark !== null) detail.push('大盤指數：' + point.benchmark.toLocaleString('zh-TW'));
+              return detail;
+            }
+          }
+        }
+      },
+      scales: {
+        x: {
+          ticks: {autoSkip: true, maxRotation: 0, color: '#c8d8e8'},
+          grid: {color: '#2c4258'}
+        },
+        y: {
+          ticks: {
+            color: '#c8d8e8',
+            callback: value => mode === 'return' ? Number(value).toFixed(1) + '%' : Math.round(value).toLocaleString('zh-TW')
+          },
+          grid: {color: '#2c4258'}
+        }
+      }
+    }
+  });
+}
+
+async function loadDailySnapshots() {
+  try {
+    const [records, marketData] = await Promise.all([
+      window.fetchDailySnapshots(),
+      window.fetchMarketData()
+    ]);
+    snapshotCompareData = prepareSnapshotComparison(records, marketData);
+    renderDailySnapshotChart();
+  } catch (e) {
+    console.error('Daily snapshots error:', e);
+    document.getElementById('snapshot-empty').textContent = '每日快照載入失敗';
+    document.getElementById('snapshot-empty').style.display = 'flex';
+    document.getElementById('snapshot-chart-wrap').style.display = 'none';
   }
 }
 
