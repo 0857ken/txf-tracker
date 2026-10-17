@@ -864,9 +864,10 @@ function prepareSnapshotComparison(records, marketData) {
   const baseIndex = valid.findIndex(r => r.benchmark !== null);
   if (baseIndex < 0) return {rows: valid, base: null, lastPair: null, pairedCount: 0};
   const rows = valid.slice(baseIndex);
-  const base = rows[0];
   const paired = rows.filter(r => r.benchmark !== null);
-  return {rows, base, lastPair: paired[paired.length - 1], pairedCount: paired.length};
+  // 比較資料不足時，仍須保留所有原始淨值歷史，不截掉起點以前的點。
+  if (paired.length < 2) return {rows: valid, base: null, lastPair: paired[0] || null, pairedCount: paired.length};
+  return {rows, base: rows[0], lastPair: paired[paired.length - 1], pairedCount: paired.length};
 }
 
 let snapshotCompareMode = 'value';
