@@ -34,6 +34,9 @@
   .card { background: var(--bg2); border: 1px solid var(--border); border-radius: 10px; padding: 18px; }
   .label { font-size: 11px; color: var(--muted); letter-spacing: 1px; text-transform: uppercase; margin-bottom: 8px; }
   .value { font-family: var(--mono); font-size: 24px; font-weight: 500; }
+  .benchmark-stat { min-width: 0; background: var(--bg3); border: 1px solid var(--border); border-radius: 8px; padding: 11px; }
+  .benchmark-stat .label { letter-spacing: 0; line-height: 1.5; }
+  .benchmark-stat-value { font-family: var(--mono); font-size: clamp(15px, 2vw, 20px); overflow-wrap: anywhere; font-weight: 600; font-variant-numeric: tabular-nums; }
   .sub { font-size: 12px; color: var(--muted); margin-top: 6px; }
   .green { color: var(--green); } .red { color: var(--red); } .blue { color: var(--blue); }
   .grid-2 { display: grid; grid-template-columns: 1fr 1fr; gap: 14px; margin-bottom: 20px; }
@@ -269,9 +272,16 @@ input { border-radius:10px; }
       <button id="snapshot-mode-return" type="button" onclick="setSnapshotCompareMode('return')" aria-pressed="false" style="background:var(--bg3)">報酬率比較</button>
     </div>
     <div id="snapshot-compare-summary" role="status" style="font-size:12px;color:var(--muted);line-height:1.7;margin-bottom:10px"></div>
+    <div id="snapshot-performance" style="display:none;grid-template-columns:repeat(auto-fit,minmax(138px,1fr));gap:8px;margin-bottom:14px" aria-label="同期績效比較">
+      <div class="benchmark-stat"><div class="label">我的淨值變動</div><div id="benchmark-asset-return" class="benchmark-stat-value"></div></div>
+      <div class="benchmark-stat"><div class="label">大盤價格漲跌</div><div id="benchmark-index-return" class="benchmark-stat-value"></div></div>
+      <div class="benchmark-stat"><div class="label">相對大盤差距</div><div id="benchmark-excess-return" class="benchmark-stat-value"></div></div>
+      <div class="benchmark-stat"><div class="label">資產區間最大回撤</div><div id="benchmark-asset-dd" class="benchmark-stat-value"></div></div>
+      <div class="benchmark-stat"><div class="label">大盤區間最大回撤</div><div id="benchmark-index-dd" class="benchmark-stat-value"></div></div>
+    </div>
     <div id="snapshot-empty" style="height:220px;display:flex;align-items:center;justify-content:center;color:var(--muted);font-size:13px">尚無每日快照資料</div>
     <div id="snapshot-chart-wrap" style="height:260px;display:none"><canvas id="snapshot-chart"></canvas></div>
-    <div style="font-size:11px;color:var(--muted);line-height:1.6;margin-top:10px">兩條線從第一筆可比較快照同一起點計算；大盤採 ^TWII 收盤價格報酬（不含股息）。如有額外入金或提領，帳戶淨值變動不等同投資報酬。</div>
+    <div style="font-size:11px;color:var(--muted);line-height:1.6;margin-top:10px">比較指標僅採相同日期的淨值與 ^TWII 收盤價；大盤不含股息。相對大盤差距＝同期淨值變動率－大盤價格漲跌，並非風險調整 Alpha。最大回撤是這段共同資料的觀察值，非帳戶歷史最大回撤；外部入金、提領及歷史估值修正都可能影響淨值比較。</div>
   </div>
 
   <div class="card">
@@ -870,6 +880,38 @@ function prepareSnapshotComparison(records, marketData) {
   return {rows, base: rows[0], lastPair: paired[paired.length - 1], pairedCount: paired.length};
 }
 
+// 只使用雙方同日可比較的有效樣本計算區間最大回撤，禁止跨缺值日期補價。
+function maxObservedDrawdown(values) {
+  let peak = 0;
+  let worst = 0;
+  for (const value of values) {
+    if (!Number.isFinite(value) || value <= 0) continue;
+    peak = Math.max(peak, value);
+    worst = Math.min(worst, (value / peak - 1) * 100);
+  }
+  return worst;
+}
+
+function getSnapshotPerformance(comparison) {
+  if (!comparison?.base || comparison.pairedCount < 2) return null;
+  const paired = comparison.rows.filter(r => r.benchmark !== null);
+  const first = paired[0];
+  const last = paired[paired.length - 1];
+  const assetChange = (last.netWorth / first.netWorth - 1) * 100;
+  const indexChange = (last.benchmark / first.benchmark - 1) * 100;
+  return {
+    startDate: first.day,
+    endDate: last.day,
+    samples: paired.length,
+    missingDays: comparison.rows.length - paired.length,
+    assetChange,
+    indexChange,
+    excess: assetChange - indexChange,
+    assetMaxDrawdown: maxObservedDrawdown(paired.map(r => r.netWorth)),
+    indexMaxDrawdown: maxObservedDrawdown(paired.map(r => r.benchmark))
+  };
+}
+
 let snapshotCompareMode = 'value';
 let snapshotCompareData = null;
 
@@ -886,7 +928,24 @@ function renderDailySnapshotChart() {
   const valueBtn = document.getElementById('snapshot-mode-value');
   const returnBtn = document.getElementById('snapshot-mode-return');
   const comparison = snapshotCompareData;
-  const hasCompare = Boolean(comparison?.base && comparison.pairedCount >= 2);
+  const performance = getSnapshotPerformance(comparison);
+  const hasCompare = Boolean(performance);
+  const performanceEl = document.getElementById('snapshot-performance');
+  performanceEl.style.display = hasCompare ? 'grid' : 'none';
+  if (performance) {
+    const signPct = x => (x > 0 ? '+' : '') + x.toFixed(2) + '%';
+    const signedPp = x => (x > 0 ? '+' : '') + x.toFixed(2) + ' pp';
+    const put = (id, value, color) => {
+      const el = document.getElementById(id);
+      el.textContent = value;
+      el.style.color = color;
+    };
+    put('benchmark-asset-return', signPct(performance.assetChange), performance.assetChange >= 0 ? 'var(--green)' : 'var(--red)');
+    put('benchmark-index-return', signPct(performance.indexChange), 'var(--gold)');
+    put('benchmark-excess-return', signedPp(performance.excess), performance.excess >= 0 ? 'var(--green)' : 'var(--red)');
+    put('benchmark-asset-dd', signPct(performance.assetMaxDrawdown), performance.assetMaxDrawdown < 0 ? 'var(--red)' : 'var(--text)');
+    put('benchmark-index-dd', signPct(performance.indexMaxDrawdown), 'var(--gold)');
+  }
   [valueBtn, returnBtn].forEach(btn => { btn.disabled = !hasCompare; });
   valueBtn.setAttribute('aria-pressed', snapshotCompareMode === 'value' ? 'true' : 'false');
   returnBtn.setAttribute('aria-pressed', snapshotCompareMode === 'return' ? 'true' : 'false');
@@ -920,14 +979,9 @@ function renderDailySnapshotChart() {
     : null;
 
   if (hasCompare) {
-    const paired = comparison.lastPair;
-    const assetReturn = toPct(paired.netWorth, base.netWorth);
-    const indexReturn = toPct(paired.benchmark, base.benchmark);
-    const excess = assetReturn - indexReturn;
-    summaryEl.textContent = '同日起點 ' + base.day + ' → ' + paired.day +
-      '　｜　資產 ' + formatPct(assetReturn) +
-      '　｜　大盤 ' + formatPct(indexReturn) +
-      '　｜　' + (excess >= 0 ? '領先 ' : '落後 ') + Math.abs(excess).toFixed(2) + ' 個百分點';
+    summaryEl.textContent = '共同資料區間 ' + performance.startDate + ' → ' + performance.endDate +
+      '　｜　配對 ' + performance.samples + ' 筆' +
+      (performance.missingDays ? '（缺少大盤資料 ' + performance.missingDays + ' 筆，未填補）' : '');
   } else {
     summaryEl.textContent = '大盤比較需至少 2 個同日淨值與指數收盤資料點；目前先顯示原始淨值曲線。';
   }
