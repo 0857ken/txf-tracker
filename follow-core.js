@@ -37,13 +37,14 @@
       threshold: number(value.threshold, '篩選門檻'),
       reserve: number(value.reserve, '費用預留'),
       minTrade: number(value.minTrade, '最小調整金額'),
-      mode: value.mode
+      mode: value.mode,
+      budgetSource: value.budgetSource === 'fixed' ? 'fixed' : 'equity'
     };
     if (result.threshold > 100 || result.reserve > result.budget || !['original','normalized'].includes(result.mode)) throw new Error('配置設定超出範圍');
     return result;
   }
   function initialState() {
-    return {version:1, revision:0, snapshot:null, settings:{budget:100000,threshold:5,reserve:500,minTrade:500,mode:'original'},
+    return {version:1, revision:0, snapshot:null, settings:{budget:100000,threshold:5,reserve:500,minTrade:500,mode:'original',budgetSource:'equity'},
       cash:100000, holdings:[], holdingsConfirmed:false, snapshots:[], trades:[], events:[]};
   }
   function holdings(list) {
@@ -62,17 +63,25 @@
     const mine = holdings(state.holdings), total = snap.items.reduce((s,r)=>s+r.shares*r.price,0);
     const eligible = snap.items.filter(r => total > 0 && r.shares*r.price/total*100 > cfg.threshold);
     const selectedValue = eligible.reduce((s,r)=>s+r.shares*r.price,0);
-    const spendable = cfg.budget - cfg.reserve;
     const symbols = [...new Set([...snap.items.map(r=>r.symbol),...mine.map(r=>r.symbol)])];
+    const resolved = new Map(symbols.map(code => {
+      const source=snap.items.find(r=>r.symbol===code), own=mine.find(r=>r.symbol===code), q=quotes[code];
+      const quoteValid=q && Number.isFinite(q.price) && q.price>0 && q.date && (!state.snapshot || q.date.slice(0,10)>=state.snapshot.date);
+      if(quoteValid) return [code,{price:q.price,date:q.date,source:q.source || '排程報價'}];
+      if(source?.price) return [code,{price:source.price,date:state.snapshot?.date || '',source:'庫存快照（歷史試算）'}];
+      if(own?.avgCost) return [code,{price:own.avgCost,date:'',source:'平均成本（暫估）'}];
+      return [code,null];
+    }));
+    const unpricedOwn=mine.filter(r=>r.shares>0 && !resolved.get(r.symbol)).map(r=>r.symbol);
+    const ownMarketValue=mine.reduce((sum,r)=>sum+(resolved.get(r.symbol)?.price || 0)*r.shares,0);
+    const effectiveBudget=cfg.budgetSource==='equity' ? Math.max(0,state.cash+ownMarketValue) : cfg.budget;
+    const spendable=Math.max(0,effectiveBudget-cfg.reserve);
     const rows = symbols.map(code => {
       const source = snap.items.find(r=>r.symbol===code), own=mine.find(r=>r.symbol===code);
       const selected = eligible.some(r=>r.symbol===code);
       const sourceWeight = source && total ? source.shares*source.price/total : 0;
       const weight = !selected ? 0 : cfg.mode === 'normalized' ? source.shares*source.price/selectedValue : sourceWeight;
-      const q = quotes[code];
-      const quoteValid = q && Number.isFinite(q.price) && q.price > 0 && q.date && (!state.snapshot || q.date.slice(0,10) >= state.snapshot.date);
-      const price = quoteValid ? q.price : source?.price || null;
-      const priceDate = quoteValid ? q.date : state.snapshot?.date || '';
+      const priceInfo=resolved.get(code), price=priceInfo?.price || null;
       const targetAmount = spendable*weight;
       const targetShares = price ? Math.floor((targetAmount+1e-8)/price) : null;
       const currentShares = own?.shares || 0;
@@ -80,7 +89,7 @@
       const amount = delta === null ? null : Math.abs(delta)*price;
       const small = amount !== null && amount > 0 && amount < cfg.minTrade && targetShares > 0 && currentShares > 0;
       return {symbol:code,name:source?.name || own?.name || code,market:source?.market || own?.market || 'TW',
-        selected,sourceWeight,weight,price,priceDate,priceSource:quoteValid ? (q.source || '排程報價') : '庫存快照（歷史試算）',
+        selected,sourceWeight,weight,price,priceDate:priceInfo?.date || '',priceSource:priceInfo?.source || '缺少報價',
         targetAmount,targetShares,currentShares,delta,amount,small,
         action:!state.holdingsConfirmed ? '待確認庫存' : delta===null ? '缺價待補' : delta===0 ? '不需調整' : small ? '暫緩小額調整' : delta>0 ? '買進差額' : '賣出差額'};
     }).sort((a,b)=>b.weight-a.weight || a.symbol.localeCompare(b.symbol));
@@ -89,9 +98,11 @@
     const sell=actionable.filter(r=>r.delta<0).reduce((s,r)=>s+r.amount,0);
     const allocated=rows.reduce((s,r)=>s+(r.targetShares===null ? 0 : r.targetShares*r.price),0);
     return {rows,total,selectedCount:eligible.length,selectedWeight:total?selectedValue/total:0,
-      topTwo:rows.slice(0,2).reduce((s,r)=>s+r.weight,0),allocated,targetCash:cfg.budget-allocated,buy,sell,
-      cashAfter:state.cash+sell-buy,shortfall:Math.max(0,buy+cfg.reserve-state.cash-sell)};
+      topTwo:rows.slice(0,2).reduce((s,r)=>s+r.weight,0),allocated,targetCash:effectiveBudget-allocated,buy,sell,
+      cashAfter:state.cash+sell-buy,shortfall:Math.max(0,buy+cfg.reserve-state.cash-sell),
+      effectiveBudget,ownMarketValue,budgetSource:cfg.budgetSource,unpricedOwn};
   }
+
   function applyTrade(state, input) {
     if (!state.holdingsConfirmed) throw new Error('請先確認我的實際庫存與現金');
     const next=clone(state), code=symbol(input.symbol), qty=number(input.shares,'成交股數',1,true);
