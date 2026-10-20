@@ -33,9 +33,9 @@
   }
   function handle(fn) {return async e=>{e?.preventDefault();try{await fn(e);}catch(err){status(err.message,'error');}};}
   function syncBudgetControl() {
-    const dynamic=$('budgetSource').value==='equity';
-    $('budget').disabled=dynamic;
-    $('budget-help').textContent=dynamic?'目前使用現金＋持股市值；此欄只在固定金額模式使用。':'目前以這個固定金額計算配置。';
+    const capital=$('budgetSource').value==='capital';
+    $('budget').disabled=false;
+    $('budget-help').textContent=capital?'這是原始本金；系統會再加上已實現與未實現損益。':'目前直接以這個固定金額計算配置。';
   }
   function fillSettings() {
     for(const [key,value] of Object.entries(state.settings)) $(key).value=value;
@@ -104,7 +104,8 @@
   function renderPlan() {
     const p=C.calculate(state,quotes);
     $('m-budget').textContent=money(p.effectiveBudget);
-    $('m-budget-note').textContent=p.budgetSource==='equity'?`現金 ${money(state.cash)}＋持股市值 ${money(p.ownMarketValue)}`:'使用固定目標金額';
+    const pnl=p.realizedPnl+p.unrealizedPnl;
+    $('m-budget-note').textContent=p.budgetSource==='capital'?`本金 ${money(state.settings.budget)}${pnl>=0?'＋':'−'}總損益 ${money(Math.abs(pnl))}`:'使用固定目標金額';
     $('m-count').textContent=state.snapshot?p.selectedCount+' 檔':'—';
     $('m-coverage').textContent=state.snapshot?'占朋友股票市值 '+pct(p.selectedWeight):'請匯入朋友完整庫存';
     $('m-cash').textContent=state.snapshot?money(p.targetCash):'—';
@@ -127,15 +128,16 @@
       return '<tr>'+cells.map((v,i)=>`<td data-label="${labels[i]}">${v}</td>`).join('')+'</tr>';
     }).join(''):'<tr><td colspan="8">目前沒有符合門檻的股票；目標保留全部現金。</td></tr>';
     const noPrice=shown.some(r=>r.price===null);
-    const valuationWarning=p.unpricedOwn.length?`實際持股 ${p.unpricedOwn.join('、')} 缺少可用價格，整體資金暫時少計。請補報價後再調整。 `:'';
+    const valuationWarning=p.unpricedOwn.length?`實際持股 ${p.unpricedOwn.join('、')} 缺少可用價格，請補報價後再調整。 `:'';
+    const costWarning=p.estimatedCostOwn.length?`實際持股 ${p.estimatedCostOwn.join('、')} 缺少成本，暫按零損益計算。 `:'';
     $('plan-note').textContent=!state.holdingsConfirmed?'請在「我的實際庫存」確認股數與可用現金；確認前只顯示目標試算，不假設你已持有或已空手。':
-      valuationWarning+(noPrice?'部分股票缺價，清單不完整。請補價後核對。 ':'')+
+      valuationWarning+costWarning+(noPrice?'部分股票缺價，清單不完整。請補價後核對。 ':'')+
       `試算買進 ${money(p.buy)} 元／賣出 ${money(p.sell)} 元。可用現金 ${money(state.cash)} 元；全部差額成交後約剩 ${money(p.cashAfter)} 元（未扣實付費稅）。`+
       (p.shortfall>0?` 尚不足 ${money(p.shortfall)} 元（含費用預留），請先調整目標資金或核對現金。`:p.buy>state.cash?' 需先完成賣出並確認資金可用，再安排買進。':'');
     const historical=shown.some(r=>r.priceSource.includes('歷史'));
     const old=shown.some(r=>r.priceDate && (Date.parse(today())-Date.parse(r.priceDate.slice(0,10)))>3*86400000);
     $('quote-note').textContent=(historical?'部分價格來自庫存快照，僅供歷史試算。 ':'')+(old?'部分報價距今超過3日。 ':'')+
-      '每檔價格日期列於表內，非即時報價。動態整體資金會隨可用報價更新；朋友占比仍固定用快照價格，刷新報價不視為朋友買賣。';
+      '每檔價格日期列於表內，非即時報價。配置資金＝原始本金＋已實現損益＋持股未實現損益；可用現金只檢查買進能力。朋友占比仍固定用快照價格。';
   }
   function renderHistory() {
     $('history').innerHTML=state.events.length?state.events.map(e=>`<article><small>${esc(e.at)}</small>${esc(e.message)}</article>`).join(''):'<p class="muted">尚無更新紀錄</p>';
@@ -187,7 +189,7 @@
   }
   $('settings-form').addEventListener('submit',handle(async()=>{
     const next=C.clone(state);next.settings=C.settings(Object.fromEntries(['budget','budgetSource','threshold','mode','reserve','minTrade'].map(k=>[k,$(k).value])));
-    await persist(next,`規則更新：${next.settings.budgetSource==='equity'?'跟隨整體資金':'固定 '+money(next.settings.budget)+' 元'}、門檻 >${next.settings.threshold}%、${next.settings.mode==='original'?'原占比留現金':'入選配滿'}`);
+    await persist(next,`規則更新：${next.settings.budgetSource==='capital'?'本金 '+money(next.settings.budget)+' 元＋損益':'固定 '+money(next.settings.budget)+' 元'}、門檻 >${next.settings.threshold}%、${next.settings.mode==='original'?'原占比留現金':'入選配滿'}`);
   }));
   $('budgetSource').addEventListener('change',syncBudgetControl);
   $('add-friend').addEventListener('click',handle(()=>{renderFriends([...readFriends(),{symbol:'',name:'',shares:0,price:'',market:'TW'}]);dirty=true;}));
