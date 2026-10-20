@@ -3,8 +3,8 @@
 <head>
 <meta charset="UTF-8"><meta name="viewport" content="width=device-width, initial-scale=1">
 <title>跟單配置 · 投資秘書</title>
-<link rel="stylesheet" href="follow.css?v=20261020-equity">
-<script defer src="follow-core.js?v=20261020-equity"></script><script defer src="follow.js?v=20261020-equity"></script>
+<link rel="stylesheet" href="follow.css?v=20261020-capital">
+<script defer src="follow-core.js?v=20261020-capital"></script><script defer src="follow.js?v=20261020-capital"></script>
 <script type="module" src="follow-data.js"></script>
 </head>
 <body>
@@ -13,15 +13,15 @@
 <main>
 <div class="hero"><div><p class="eyebrow">PORTFOLIO MIRROR / 跟單帳本</p><h1>看懂部位，再決定調整。</h1><p class="muted">依朋友完整庫存的市值占比，換算你的目標配置。所有数量以「股」計，1 張＝1,000 股。</p></div><div class="toolbar"><button id="refresh">刷新報價</button><button id="reload">載入雲端</button><button id="export">匯出備份</button></div></div>
 <div id="status" class="notice" role="status" aria-live="polite">正在連接雲端…</div>
-<div class="metrics"><div class="card"><span class="muted">本次配置資金</span><strong id="m-budget">100,000</strong><small id="m-budget-note">現金＋持股市值，隨報價變動</small></div><div class="card"><span class="muted">入選股票</span><strong id="m-count">—</strong><small id="m-coverage">請匯入朋友完整庫存</small></div><div class="card"><span class="muted">目標保留現金</span><strong id="m-cash">—</strong><small>包含費用預留與零股取整餘額</small></div><div class="card"><span class="muted">前兩檔占目標總資金</span><strong id="m-top">—</strong><small>檔數減少，集中程度也可能提高</small></div></div>
+<div class="metrics"><div class="card"><span class="muted">本次配置資金</span><strong id="m-budget">100,000</strong><small id="m-budget-note">本金＋已實現與未實現損益</small></div><div class="card"><span class="muted">入選股票</span><strong id="m-count">—</strong><small id="m-coverage">請匯入朋友完整庫存</small></div><div class="card"><span class="muted">目標保留現金</span><strong id="m-cash">—</strong><small>包含費用預留與零股取整餘額</small></div><div class="card"><span class="muted">前兩檔占目標總資金</span><strong id="m-top">—</strong><small>檔數減少，集中程度也可能提高</small></div></div>
 <section class="card"><h2>配置規則</h2><form id="settings-form" class="form-grid">
-<label>資金計算方式<select id="budgetSource"><option value="equity">跟隨我的整體資金（推薦）</option><option value="fixed">固定金額</option></select></label>
-<label>固定目標金額（元）<input id="budget" type="number" min="1" step="any" value="100000" required><small id="budget-help">此欄只在固定金額模式使用。</small></label>
+<label>資金計算方式<select id="budgetSource"><option value="capital">本金＋損益（推薦）</option><option value="fixed">固定金額</option></select></label>
+<label>原始本金（元）<input id="budget" type="number" min="1" step="any" value="100000" required><small id="budget-help">系統會在本金上加減投資損益。</small></label>
 <label>朋友占比嚴格大於（%）<input id="threshold" type="number" min="0" max="100" step="0.1" value="5" required></label>
 <label>配置方式<select id="mode"><option value="original">原占比＋保留現金</option><option value="normalized">入選股票重新配滿</option></select></label>
 <label>費用預留（元）<input id="reserve" type="number" min="0" value="500" step="any" required></label>
 <label>小額調整暫緩門檻（元）<input id="minTrade" type="number" min="0" value="500" step="any" required></label>
-<button class="primary" type="submit">儲存規則並重算</button></form><p class="hint">跟隨整體資金＝目前可用現金＋所有實際持股的市值；報價更新後會一起重算。先扣費用預留，再分配金額。小額門檻僅暫緩既有部位的微調；新建倉與完全退出仍列出。這是比例試算，並非自動下單。</p></section>
+<button class="primary" type="submit">儲存規則並重算</button></form><p class="hint">本金＋損益＝原始本金＋已實現損益＋目前持股市值減持股成本；報價更新後會一起重算。可用現金只用來檢查買進能力，不會重複加進配置資金。先扣費用預留，再分配金額。小額門檻僅暫緩既有部位的微調；新建倉與完全退出仍列出。這是比例試算，並非自動下單。</p></section>
 <section class="card"><div class="section-head"><div><p class="eyebrow">REBALANCE</p><h2>本次調整清單</h2></div><span id="snapshot-label" class="badge">尚無庫存快照</span></div>
 <div id="allocation-bars" class="bars" aria-label="目標資金比例"></div><p id="plan-note" class="notice">先匯入朋友庫存，再確認你的实际庫存。</p>
 <div class="table-wrap"><table class="responsive"><thead><tr><th>股票</th><th>朋友占比</th><th>我的目標占比</th><th>參考價 / 日期</th><th>目標金額</th><th>目標股數</th><th>實際股數</th><th>調整差額</th></tr></thead><tbody id="plan-body"></tbody></table></div>
