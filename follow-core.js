@@ -38,13 +38,13 @@
       reserve: number(value.reserve, '費用預留'),
       minTrade: number(value.minTrade, '最小調整金額'),
       mode: value.mode,
-      budgetSource: value.budgetSource === 'fixed' ? 'fixed' : 'equity'
+      budgetSource: value.budgetSource === 'fixed' ? 'fixed' : 'capital'
     };
     if (result.threshold > 100 || result.reserve > result.budget || !['original','normalized'].includes(result.mode)) throw new Error('配置設定超出範圍');
     return result;
   }
   function initialState() {
-    return {version:1, revision:0, snapshot:null, settings:{budget:100000,threshold:5,reserve:500,minTrade:500,mode:'original',budgetSource:'equity'},
+    return {version:1, revision:0, snapshot:null, settings:{budget:100000,threshold:5,reserve:500,minTrade:500,mode:'original',budgetSource:'capital'},
       cash:100000, holdings:[], holdingsConfirmed:false, snapshots:[], trades:[], events:[]};
   }
   function holdings(list) {
@@ -73,8 +73,15 @@
       return [code,null];
     }));
     const unpricedOwn=mine.filter(r=>r.shares>0 && !resolved.get(r.symbol)).map(r=>r.symbol);
+    const estimatedCostOwn=mine.filter(r=>r.shares>0 && r.avgCost===null).map(r=>r.symbol);
     const ownMarketValue=mine.reduce((sum,r)=>sum+(resolved.get(r.symbol)?.price || 0)*r.shares,0);
-    const effectiveBudget=cfg.budgetSource==='equity' ? Math.max(0,state.cash+ownMarketValue) : cfg.budget;
+    const ownCostBasis=mine.reduce((sum,r)=>{
+      const fallback=resolved.get(r.symbol)?.price || 0;
+      return sum+(r.avgCost===null ? fallback : r.avgCost)*r.shares;
+    },0);
+    const unrealizedPnl=ownMarketValue-ownCostBasis;
+    const realizedPnl=(state.trades || []).reduce((sum,t)=>sum+(Number.isFinite(t.realized) ? t.realized : 0),0);
+    const effectiveBudget=cfg.budgetSource==='capital' ? Math.max(0,cfg.budget+realizedPnl+unrealizedPnl) : cfg.budget;
     const spendable=Math.max(0,effectiveBudget-cfg.reserve);
     const rows = symbols.map(code => {
       const source = snap.items.find(r=>r.symbol===code), own=mine.find(r=>r.symbol===code);
@@ -100,7 +107,8 @@
     return {rows,total,selectedCount:eligible.length,selectedWeight:total?selectedValue/total:0,
       topTwo:rows.slice(0,2).reduce((s,r)=>s+r.weight,0),allocated,targetCash:effectiveBudget-allocated,buy,sell,
       cashAfter:state.cash+sell-buy,shortfall:Math.max(0,buy+cfg.reserve-state.cash-sell),
-      effectiveBudget,ownMarketValue,budgetSource:cfg.budgetSource,unpricedOwn};
+      effectiveBudget,ownMarketValue,ownCostBasis,unrealizedPnl,realizedPnl,
+      budgetSource:cfg.budgetSource,unpricedOwn,estimatedCostOwn};
   }
 
   function applyTrade(state, input) {
