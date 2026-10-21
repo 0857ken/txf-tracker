@@ -1,0 +1,23 @@
+name: LINE Formal P0 Isolated Tests
+on:
+  push:
+    branches:
+      - acceptance/line-summary-p0-ci-2026-10-21
+permissions:
+  contents: read
+jobs:
+  unit:
+    runs-on: ubuntu-latest
+    timeout-minutes: 8
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: fix/line-formal-futures-p0-2026-10-21
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.12'
+      - name: Syntax of LINE and snapshot scripts
+        run: |
+          python -m py_compile scripts/line_summary.py scripts/snapshot_assets.py
+      - name: Offline unit tests only — no credentials and no LINE network calls
+        run: python -m unittest discover -s tests -p test_line_summary_formal.py -v
