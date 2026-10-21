@@ -9,11 +9,17 @@ LINE 盤後總結推播。
 """
 import json
 import os
+import re
 import sys
 import urllib.request
 
 import firebase_admin
 from firebase_admin import credentials, firestore
+from snapshot_assets import (
+    load_futures_master,
+    read_collection,
+    load_json_optional,
+)
 
 try:
     import strategy_calc
@@ -39,11 +45,36 @@ def get_db():
     return firestore.client()
 
 
-def load_positions():
-    """用 Firebase Admin 讀既有投資秘書部位。"""
+def load_positions(market):
+    """讀正式 0050 Forward 主帳與同日逐合約結算價；舊庫存僅供切換前成本備份。"""
+    fubon = load_json("data/fubon_market_data.json")
+    quote = (fubon or {}).get("quote") or {}
+    expected_date = str(quote.get("date") or "")
+    benchmark_dates = (market.get("trend") or {}).get("dates") or []
+    benchmark_date = benchmark_dates[-1] if benchmark_dates else None
+    if (
+        fubon.get("schema_version") != 1
+        or quote.get("symbol") != "0050"
+        or quote.get("isClose") is not True
+        or not re.fullmatch(r"\d{4}-\d{2}-\d{2}", expected_date)
+        or benchmark_date != expected_date
+    ):
+        raise ValueError("0050正式收盤與加權指數交易日未對齊")
+
     db = get_db()
-    docs = db.collection("users").document("me").collection("positions").stream()
-    return [d.to_dict() for d in docs]
+    legacy = read_collection(db, "positions")
+    master = load_futures_master(
+        db,
+        legacy,
+        futures_cache=load_json_optional("data/futures_market.json"),
+        expected_date=expected_date,
+    )
+    if master.get("market_date") != expected_date:
+        raise ValueError("正式期貨主帳交易日未對齊")
+    for p in master.get("positions") or []:
+        if p.get("price_date") != expected_date:
+            raise ValueError("期貨合約結算價日期未對齊")
+    return master
 
 
 def load_defense_account():
@@ -211,7 +242,8 @@ def defense_lot_lines(status):
     ]
 
 
-def build_message(market, positions):
+def build_message(market, master):
+    """正式帳戶逐合約損益；無效資料只告警，絕不改用 ^TWII 或舊部位。"""
     m = market["market"]
     ma = market["ma_state"]
     adong = market.get("adong_signal", {})
@@ -234,24 +266,45 @@ def build_message(market, positions):
         lines.append(f"訊號:{adong.get('type','')} → {adong.get('action','')}")
     lines.append("")
 
-    if positions:
-        lines.append("💰 我的部位")
-        total = 0
-        for p in positions:
-            mult = CONTRACT_MULT.get(p.get("type"), 10)
-            pnl = round((cur - p["entry_price"]) * mult * p["lots"])
-            total += pnl
-            tname = TYPE_NAME.get(p.get("type"), p.get("type", ""))
-            psign = "+" if pnl >= 0 else ""
-            lines.append(
-                f"  {tname} {p['lots']}口 @{p['entry_price']:,.0f} "
-                f"→ {psign}{pnl:,} 元"
-            )
-        tsign = "+" if total >= 0 else ""
-        lines.append(f"總未實現損益:{tsign}{total:,} 元")
+    if master is None:
+        lines.append("💰 我的期貨部位")
+        lines.append("  ⚠️ 正式主帳／當日逐合約結算價待核對，暫不顯示口數及損益")
     else:
-        lines.append("💰 目前無部位")
-
+        positions = [
+            p for p in (master.get("positions") or [])
+            if float(p.get("lots") or 0) != 0
+        ]
+        if not positions:
+            lines.append("💰 正式主帳目前無期貨部位")
+        else:
+            lines.append("💰 我的期貨部位（0050變速防守正式主帳）")
+            total = 0
+            expected_date = master.get("expected_price_date")
+            for p in positions:
+                product = p.get("product")
+                kind = {"TX": "TXF", "MTX": "MXF", "TMF": "TMF"}.get(product)
+                if not kind or kind not in CONTRACT_MULT:
+                    raise ValueError("正式期貨主帳含未知商品")
+                if not expected_date or p.get("price_date") != expected_date:
+                    raise ValueError("正式逐合約估值日期不一致")
+                entry = float(p["entry_price"])
+                price = float(p["current_price"])
+                lots = float(p["lots"])
+                if not all(map(lambda n: n == n and abs(n) != float("inf"), (entry, price, lots))):
+                    raise ValueError("期貨價格或口數不是有限數字")
+                if entry <= 0 or price <= 0:
+                    raise ValueError("正式逐合約估值缺失")
+                pnl = round((price - entry) * CONTRACT_MULT[kind] * lots)
+                total += pnl
+                tname = TYPE_NAME[kind]
+                month = str(p.get("month") or "")
+                prefix = "+" if pnl >= 0 else ""
+                lines.append(
+                    f"  {tname} {month} {lots:g}口 @{entry:,.0f} "
+                    f"→ {price:,.0f}（{expected_date}）{prefix}{pnl:,}元"
+                )
+            prefix = "+" if total >= 0 else ""
+            lines.append(f"期貨總未實現損益:{prefix}{total:,} 元")
     return "\n".join(lines)
 
 
@@ -273,31 +326,17 @@ def push_line(text):
 def main():
     market = load_market()
     try:
-        positions = load_positions()
+        master = load_positions(market)
+        msg = build_message(market, master)
+    except (ValueError, KeyError, TypeError, OverflowError) as e:
+        print("正式期貨帳務待核對:", type(e).__name__, file=sys.stderr)
+        msg = build_message(market, None)
     except Exception as e:
-        print("讀取部位失敗,改推無部位版:", e, file=sys.stderr)
-        positions = []
-    msg = build_message(market, positions)
+        print("正式主帳讀取失敗:", type(e).__name__, file=sys.stderr)
+        msg = build_message(market, None)
 
-    # 0050 變速防守:每日固定附上概要，不只在訊號變更時提醒。
-    try:
-        strat = load_json("data/strategy_data.json")
-        fubon = load_json("data/fubon_market_data.json")
-        defense = compute_variable_defense(strat, fubon)
-        defense_lines = variable_defense_lines(defense)
-        try:
-            defense_account = load_defense_account()
-            lot_status = defense_lot_status(defense, defense_account)
-            defense_lines[3:3] = defense_lot_lines(lot_status)
-        except Exception as e:
-            print("變速防守口數核對失敗:", e)
-            defense_lines.insert(3, "  口數核對:⚠️ 暫時無法讀取正式 Forward 帳戶")
-        msg += "\n\n" + "\n".join(defense_lines)
-    except Exception as e:
-        print("變速防守概要計算失敗:", e)
-        msg += "\n\n🛡️ 0050 變速防守\n  ⚠️ 概要暫時無法計算"
-
-    # 其他策略訊號:只在有觸發時附加
+    # 策略訊號區塊只在策略實際觸發時附加。
+    # 不再每天固定插入 0050 變速防守概要／理論口數。
     if strategy_calc:
         try:
             strat = strat if 'strat' in locals() else load_json("data/strategy_data.json")
