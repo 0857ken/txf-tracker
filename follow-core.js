@@ -81,7 +81,9 @@
     },0);
     const unrealizedPnl=ownMarketValue-ownCostBasis;
     const realizedPnl=(state.trades || []).reduce((sum,t)=>sum+(Number.isFinite(t.realized) ? t.realized : 0),0);
-    const effectiveBudget=cfg.budgetSource==='capital' ? Math.max(0,cfg.budget+realizedPnl+unrealizedPnl) : cfg.budget;
+    // The live account equity is the only reliable dynamic budget after inventory reconciliations.
+    // Cost basis and trade-derived P/L can be incomplete when the user corrects holdings manually.
+    const effectiveBudget=cfg.budgetSource==='capital' ? Math.max(0,ownMarketValue+state.cash) : cfg.budget;
     const spendable=Math.max(0,effectiveBudget-cfg.reserve);
     const rows = symbols.map(code => {
       const source = snap.items.find(r=>r.symbol===code), own=mine.find(r=>r.symbol===code);
