@@ -1,8 +1,9 @@
 #!/usr/bin/env python3
 """
 LINE 盤後總結推播。
-讀 Firestore 部位 + data/market_data.json,計算損益,broadcast 推播。
-由 GitHub Actions 每天 13:50(台灣時間)執行。
+使用 0050 變速防守正式主帳 + 同交易日期貨合約結算價計算損益。
+加權指數僅用於市場概況，不能作為期貨損益估值價。
+由 GitHub Actions 排程觸發（可能延遲），僅在有策略訊號時附加策略區塊。
 環境變數:
   LINE_TOKEN    — LINE Messaging API channel access token
   FIREBASE_KEY  — Firebase service account JSON(整個字串)
@@ -10,6 +11,7 @@ LINE 盤後總結推播。
 import json
 import os
 import re
+from math import isfinite
 import sys
 import urllib.request
 
@@ -290,7 +292,7 @@ def build_message(market, master):
                 entry = float(p["entry_price"])
                 price = float(p["current_price"])
                 lots = float(p["lots"])
-                if not all(map(lambda n: n == n and abs(n) != float("inf"), (entry, price, lots))):
+                if not all(isfinite(n) for n in (entry, price, lots)):
                     raise ValueError("期貨價格或口數不是有限數字")
                 if entry <= 0 or price <= 0:
                     raise ValueError("正式逐合約估值缺失")
@@ -348,8 +350,8 @@ def main():
                     msg += "\n" + s
         except Exception as e:
             print("策略訊號計算失敗:", e)
-    print("=== 訊息內容 ===")
-    print(msg)
+    # 公開 GitHub Actions 日誌不得直接公開使用者的期貨持倉或損益明細。
+    print("LINE 盤後訊息已建立（內文不寫入公開 Actions 日誌）")
     push_line(msg)
     print("✅ 推播完成")
 
