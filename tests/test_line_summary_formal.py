@@ -1,6 +1,8 @@
 #!/usr/bin/env python3
 """離線驗證 LINE 期貨正式主帳與條件式策略區塊，不呼叫 Firebase／LINE。"""
 import importlib.util
+import io
+from contextlib import redirect_stdout
 import pathlib
 import sys
 import types
@@ -167,6 +169,21 @@ class LineFormalPositionTests(unittest.TestCase):
             summary.main()
         self.assertIn("📈 0050 其他策略訊號", sent[0])
         self.assertIn("🟢 TEST SIGNAL", sent[0])
+
+    def test_public_actions_logs_do_not_expose_private_positions(self):
+        captured = io.StringIO()
+        with mock.patch.object(summary, "load_market", return_value=market()), mock.patch.object(
+            summary, "load_positions", return_value=master([position()])
+        ), mock.patch.object(
+            summary, "strategy_calc", None
+        ), mock.patch.object(
+            summary, "push_line"
+        ), redirect_stdout(captured):
+            summary.main()
+        logs = captured.getvalue()
+        self.assertIn("內文不寫入公開 Actions 日誌", logs)
+        self.assertNotIn("48,666", logs)
+        self.assertNotIn("-13,820", logs)
 
     def test_source_failure_never_sends_false_positions(self):
         sent=[]
