@@ -35,7 +35,7 @@
   function syncBudgetControl() {
     const capital=$('budgetSource').value==='capital';
     $('budget').disabled=false;
-    $('budget-help').textContent=capital?'這是原始本金；系統會再加上已實現與未實現損益。':'目前直接以這個固定金額計算配置。';
+    $('budget-help').textContent=capital?'僅作為績效比較基準；配置資金直接使用「持股市值＋可用現金」。':'目前直接以這個固定金額計算配置。';
   }
   function fillSettings() {
     for(const [key,value] of Object.entries(state.settings)) $(key).value=value;
@@ -104,8 +104,8 @@
   function renderPlan() {
     const p=C.calculate(state,quotes);
     $('m-budget').textContent=money(p.effectiveBudget);
-    const pnl=p.realizedPnl+p.unrealizedPnl;
-    $('m-budget-note').textContent=p.budgetSource==='capital'?`本金 ${money(state.settings.budget)}${pnl>=0?'＋':'−'}總損益 ${money(Math.abs(pnl))}`:'使用固定目標金額';
+    const equityChange=p.effectiveBudget-state.settings.budget;
+    $('m-budget-note').textContent=p.budgetSource==='capital'?`持股市值 ${money(p.ownMarketValue)}＋可用現金 ${money(state.cash)}；較原始本金 ${equityChange>=0?'+':'−'}${money(Math.abs(equityChange))}`:'使用固定配置金額';
     $('m-count').textContent=state.snapshot?p.selectedCount+' 檔':'—';
     $('m-coverage').textContent=state.snapshot?'占朋友股票市值 '+pct(p.selectedWeight):'請匯入朋友完整庫存';
     $('m-cash').textContent=state.snapshot?money(p.targetCash):'—';
