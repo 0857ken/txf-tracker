@@ -1,7 +1,7 @@
 {
   "schema_version": 1,
   "source": "Fubon Neo / Fugle Market Data",
-  "collected_at": "2026-10-22 13:35:30",
+  "collected_at": "2026-10-23 09:05:11",
   "quote": {
     "date": "2026-10-22",
     "type": "EQUITY",
@@ -14,7 +14,7 @@
     "openPrice": 108.95,
     "openTime": 1792630804102775,
     "highPrice": 109.15,
-    "highTime": 1792630813449236,
+    "highTime": 1792630813449224,
     "lowPrice": 106.75,
     "lowTime": 1792646486488456,
     "closePrice": 106.9,
