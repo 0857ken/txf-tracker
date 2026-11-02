@@ -1,111 +1,111 @@
 {
-  "updated_at": "2026-10-30 14:47:09",
+  "updated_at": "2026-11-02 15:12:11",
   "prices": {
     "00685l": {
-      "price": 11.24,
-      "prev_close": 11.78,
-      "change": -0.54,
-      "change_pct": -4.58,
-      "as_of": "2026-10-30 13:30:01"
+      "price": 11.17,
+      "prev_close": 11.75,
+      "change": -0.58,
+      "change_pct": -4.94,
+      "as_of": "2026-11-02 13:30:01"
     },
     "1595": {
-      "price": 72.6,
-      "prev_close": 74.0,
-      "change": -1.4,
-      "change_pct": -1.89,
-      "as_of": "2026-10-30 13:30:10"
+      "price": 71.6,
+      "prev_close": 73.2,
+      "change": -1.6,
+      "change_pct": -2.19,
+      "as_of": "2026-11-02 13:30:09"
     },
     "1727": {
-      "price": 90.5,
-      "prev_close": 93.2,
-      "change": -2.7,
-      "change_pct": -2.9,
-      "as_of": "2026-10-30 13:30:01"
+      "price": 89.5,
+      "prev_close": 91.4,
+      "change": -1.9,
+      "change_pct": -2.08,
+      "as_of": "2026-11-02 13:30:03"
     },
     "1815": {
-      "price": 126.5,
-      "prev_close": 139.0,
-      "change": -12.5,
-      "change_pct": -8.99,
-      "as_of": "2026-10-30 13:30:06"
+      "price": 139.0,
+      "prev_close": 131.0,
+      "change": 8.0,
+      "change_pct": 6.11,
+      "as_of": "2026-11-02 13:30:05"
     },
     "2059": {
-      "price": 9650.0,
-      "prev_close": 9755.0,
-      "change": -105.0,
-      "change_pct": -1.08,
-      "as_of": "2026-10-30 13:30:15"
+      "price": 9420.0,
+      "prev_close": 9810.0,
+      "change": -390.0,
+      "change_pct": -3.98,
+      "as_of": "2026-11-02 13:30:12"
     },
     "2368": {
-      "price": 1020.0,
-      "prev_close": 1115.0,
-      "change": -95.0,
-      "change_pct": -8.52,
-      "as_of": "2026-10-30 13:30:12"
+      "price": 1060.0,
+      "prev_close": 1080.0,
+      "change": -20.0,
+      "change_pct": -1.85,
+      "as_of": "2026-11-02 13:30:19"
     },
     "3305": {
-      "price": 104.0,
-      "prev_close": 105.0,
-      "change": -1.0,
-      "change_pct": -0.95,
-      "as_of": "2026-10-30 13:30:14"
+      "price": 106.5,
+      "prev_close": 103.5,
+      "change": 3.0,
+      "change_pct": 2.9,
+      "as_of": "2026-11-02 13:30:13"
     },
     "3715": {
-      "price": 120.0,
-      "prev_close": 134.5,
-      "change": -14.5,
-      "change_pct": -10.78,
-      "as_of": "2026-10-30 13:30:31"
+      "price": 123.0,
+      "prev_close": 125.5,
+      "change": -2.5,
+      "change_pct": -1.99,
+      "as_of": "2026-11-02 13:30:02"
     },
     "4169": {
       "price": null,
       "error": "HTTP Error 404: Not Found"
     },
     "6213": {
-      "price": 687.0,
-      "prev_close": 777.0,
+      "price": 656.0,
+      "prev_close": 746.0,
       "change": -90.0,
-      "change_pct": -11.58,
-      "as_of": "2026-10-30 13:30:02"
+      "change_pct": -12.06,
+      "as_of": "2026-11-02 13:30:05"
     },
     "6924": {
-      "price": 127.5,
-      "prev_close": 143.5,
-      "change": -16.0,
-      "change_pct": -11.15,
-      "as_of": "2026-10-30 13:30:25"
+      "price": 133.0,
+      "prev_close": 139.5,
+      "change": -6.5,
+      "change_pct": -4.66,
+      "as_of": "2026-11-02 13:30:16"
     },
     "8021": {
       "price": null,
       "error": "HTTP Error 404: Not Found"
     },
     "4927": {
-      "price": 50.1,
-      "prev_close": 53.4,
-      "change": -3.3,
-      "change_pct": -6.18,
-      "as_of": "2026-10-30 13:30:16"
+      "price": 51.3,
+      "prev_close": 51.2,
+      "change": 0.1,
+      "change_pct": 0.2,
+      "as_of": "2026-11-02 13:30:26"
     },
     "3044": {
-      "price": 512.0,
-      "prev_close": 556.0,
-      "change": -44.0,
-      "change_pct": -7.91,
-      "as_of": "2026-10-30 13:30:24"
+      "price": 527.0,
+      "prev_close": 522.0,
+      "change": 5.0,
+      "change_pct": 0.96,
+      "as_of": "2026-11-02 13:30:28"
     },
     "2351": {
-      "price": 183.5,
-      "prev_close": 196.0,
-      "change": -12.5,
-      "change_pct": -6.38,
-      "as_of": "2026-10-30 13:30:10"
+      "price": 179.5,
+      "prev_close": 198.5,
+      "change": -19.0,
+      "change_pct": -9.57,
+      "as_of": "2026-11-02 13:30:05"
     },
     "5439": {
-      "price": 197.0,
-      "prev_close": 219.5,
-      "change": -22.5,
-      "change_pct": -10.25,
-      "as_of": "2026-10-30 13:30:09"
+      "price": 202.5,
+      "prev_close": 214.5,
+      "change": -12.0,
+      "change_pct": -5.59,
+      "as_of": "2026-11-02 13:30:09"
     }
   }
 }
