@@ -1,153 +1,129 @@
 {
   "schema_version": 1,
-  "date": "2026-11-17",
-  "updated_at": "2026-11-17T12:12:35.435Z",
+  "date": "2026-11-18",
+  "updated_at": "2026-11-18T11:20:23.936Z",
   "source": "TAIFEX official same-day contract settlements",
-  "fubon_close_date": "2026-11-17",
-  "fubon_collected_at": "2026-11-17 13:35:27",
+  "fubon_close_date": "2026-11-18",
+  "fubon_collected_at": "2026-11-18 13:35:40",
   "rows": [
     {
       "product": "TX",
-      "month": "2026-11",
-      "date": "2026-11-17",
-      "mark": 40011,
-      "markAt": "2026-11-17T13:45:00+08:00",
-      "source": "TAIFEX futDailyMarketExcel 一般時段結算價"
-    },
-    {
-      "product": "TX",
       "month": "2026-12",
-      "date": "2026-11-17",
-      "mark": 40107,
-      "markAt": "2026-11-17T13:45:00+08:00",
+      "date": "2026-11-18",
+      "mark": 40332,
+      "markAt": "2026-11-18T13:45:00+08:00",
       "source": "TAIFEX futDailyMarketExcel 一般時段結算價"
     },
     {
       "product": "TX",
       "month": "2027-01",
-      "date": "2026-11-17",
-      "mark": 40264,
-      "markAt": "2026-11-17T13:45:00+08:00",
+      "date": "2026-11-18",
+      "mark": 40476,
+      "markAt": "2026-11-18T13:45:00+08:00",
       "source": "TAIFEX futDailyMarketExcel 一般時段結算價"
     },
     {
       "product": "TX",
       "month": "2027-03",
-      "date": "2026-11-17",
-      "mark": 40415,
-      "markAt": "2026-11-17T13:45:00+08:00",
+      "date": "2026-11-18",
+      "mark": 40631,
+      "markAt": "2026-11-18T13:45:00+08:00",
       "source": "TAIFEX futDailyMarketExcel 一般時段結算價"
     },
     {
       "product": "TX",
       "month": "2027-06",
-      "date": "2026-11-17",
-      "mark": 40644,
-      "markAt": "2026-11-17T13:45:00+08:00",
+      "date": "2026-11-18",
+      "mark": 40880,
+      "markAt": "2026-11-18T13:45:00+08:00",
       "source": "TAIFEX futDailyMarketExcel 一般時段結算價"
     },
     {
       "product": "TX",
       "month": "2027-09",
-      "date": "2026-11-17",
-      "mark": 40667,
-      "markAt": "2026-11-17T13:45:00+08:00",
-      "source": "TAIFEX futDailyMarketExcel 一般時段結算價"
-    },
-    {
-      "product": "MTX",
-      "month": "2026-11",
-      "date": "2026-11-17",
-      "mark": 40011,
-      "markAt": "2026-11-17T13:45:00+08:00",
+      "date": "2026-11-18",
+      "mark": 40847,
+      "markAt": "2026-11-18T13:45:00+08:00",
       "source": "TAIFEX futDailyMarketExcel 一般時段結算價"
     },
     {
       "product": "MTX",
       "month": "2026-12",
-      "date": "2026-11-17",
-      "mark": 40107,
-      "markAt": "2026-11-17T13:45:00+08:00",
+      "date": "2026-11-18",
+      "mark": 40332,
+      "markAt": "2026-11-18T13:45:00+08:00",
       "source": "TAIFEX futDailyMarketExcel 一般時段結算價"
     },
     {
       "product": "MTX",
       "month": "2027-01",
-      "date": "2026-11-17",
-      "mark": 40264,
-      "markAt": "2026-11-17T13:45:00+08:00",
+      "date": "2026-11-18",
+      "mark": 40476,
+      "markAt": "2026-11-18T13:45:00+08:00",
       "source": "TAIFEX futDailyMarketExcel 一般時段結算價"
     },
     {
       "product": "MTX",
       "month": "2027-03",
-      "date": "2026-11-17",
-      "mark": 40415,
-      "markAt": "2026-11-17T13:45:00+08:00",
+      "date": "2026-11-18",
+      "mark": 40631,
+      "markAt": "2026-11-18T13:45:00+08:00",
       "source": "TAIFEX futDailyMarketExcel 一般時段結算價"
     },
     {
       "product": "MTX",
       "month": "2027-06",
-      "date": "2026-11-17",
-      "mark": 40644,
-      "markAt": "2026-11-17T13:45:00+08:00",
+      "date": "2026-11-18",
+      "mark": 40880,
+      "markAt": "2026-11-18T13:45:00+08:00",
       "source": "TAIFEX futDailyMarketExcel 一般時段結算價"
     },
     {
       "product": "MTX",
       "month": "2027-09",
-      "date": "2026-11-17",
-      "mark": 40667,
-      "markAt": "2026-11-17T13:45:00+08:00",
-      "source": "TAIFEX futDailyMarketExcel 一般時段結算價"
-    },
-    {
-      "product": "TMF",
-      "month": "2026-11",
-      "date": "2026-11-17",
-      "mark": 40011,
-      "markAt": "2026-11-17T13:45:00+08:00",
+      "date": "2026-11-18",
+      "mark": 40847,
+      "markAt": "2026-11-18T13:45:00+08:00",
       "source": "TAIFEX futDailyMarketExcel 一般時段結算價"
     },
     {
       "product": "TMF",
       "month": "2026-12",
-      "date": "2026-11-17",
-      "mark": 40107,
-      "markAt": "2026-11-17T13:45:00+08:00",
+      "date": "2026-11-18",
+      "mark": 40332,
+      "markAt": "2026-11-18T13:45:00+08:00",
       "source": "TAIFEX futDailyMarketExcel 一般時段結算價"
     },
     {
       "product": "TMF",
       "month": "2027-01",
-      "date": "2026-11-17",
-      "mark": 40264,
-      "markAt": "2026-11-17T13:45:00+08:00",
+      "date": "2026-11-18",
+      "mark": 40476,
+      "markAt": "2026-11-18T13:45:00+08:00",
       "source": "TAIFEX futDailyMarketExcel 一般時段結算價"
     },
     {
       "product": "TMF",
       "month": "2027-03",
-      "date": "2026-11-17",
-      "mark": 40415,
-      "markAt": "2026-11-17T13:45:00+08:00",
+      "date": "2026-11-18",
+      "mark": 40631,
+      "markAt": "2026-11-18T13:45:00+08:00",
       "source": "TAIFEX futDailyMarketExcel 一般時段結算價"
     },
     {
       "product": "TMF",
       "month": "2027-06",
-      "date": "2026-11-17",
-      "mark": 40644,
-      "markAt": "2026-11-17T13:45:00+08:00",
+      "date": "2026-11-18",
+      "mark": 40880,
+      "markAt": "2026-11-18T13:45:00+08:00",
       "source": "TAIFEX futDailyMarketExcel 一般時段結算價"
     },
     {
       "product": "TMF",
       "month": "2027-09",
-      "date": "2026-11-17",
-      "mark": 40667,
-      "markAt": "2026-11-17T13:45:00+08:00",
+      "date": "2026-11-18",
+      "mark": 40847,
+      "markAt": "2026-11-18T13:45:00+08:00",
       "source": "TAIFEX futDailyMarketExcel 一般時段結算價"
     }
   ]
