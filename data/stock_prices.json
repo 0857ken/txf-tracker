@@ -1,100 +1,100 @@
 {
-  "updated_at": "2026-11-25 17:31:17",
+  "updated_at": "2026-11-26 17:09:26",
   "prices": {
     "00685l": {
-      "price": 7.62,
-      "prev_close": 7.95,
-      "change": -0.33,
-      "change_pct": -4.15,
-      "as_of": "2026-11-25 13:30:03"
+      "price": 8.25,
+      "prev_close": 6.8,
+      "change": 1.45,
+      "change_pct": 21.32,
+      "as_of": "2026-11-26 13:30:01"
     },
     "1595": {
-      "price": 45.0,
-      "prev_close": 46.9,
-      "change": -1.9,
-      "change_pct": -4.05,
-      "as_of": "2026-11-25 13:30:11"
+      "price": 49.5,
+      "prev_close": 42.25,
+      "change": 7.25,
+      "change_pct": 17.16,
+      "as_of": "2026-11-26 13:02:39"
     },
     "1815": {
-      "price": 101.5,
-      "prev_close": 110.0,
-      "change": -8.5,
-      "change_pct": -7.73,
-      "as_of": "2026-11-25 13:30:07"
+      "price": 107.5,
+      "prev_close": 99.0,
+      "change": 8.5,
+      "change_pct": 8.59,
+      "as_of": "2026-11-26 13:30:07"
     },
     "2368": {
-      "price": 905.0,
-      "prev_close": 790.0,
-      "change": 115.0,
-      "change_pct": 14.56,
-      "as_of": "2026-11-25 13:30:37"
+      "price": 995.0,
+      "prev_close": 711.0,
+      "change": 284.0,
+      "change_pct": 39.94,
+      "as_of": "2026-11-26 13:30:02"
     },
     "3305": {
-      "price": 88.7,
-      "prev_close": 96.9,
-      "change": -8.2,
-      "change_pct": -8.46,
-      "as_of": "2026-11-25 13:30:13"
+      "price": 97.5,
+      "prev_close": 87.3,
+      "change": 10.2,
+      "change_pct": 11.68,
+      "as_of": "2026-11-26 13:30:34"
     },
     "3715": {
-      "price": 132.0,
-      "prev_close": 126.0,
-      "change": 6.0,
-      "change_pct": 4.76,
-      "as_of": "2026-11-25 13:30:29"
+      "price": 143.5,
+      "prev_close": 113.5,
+      "change": 30.0,
+      "change_pct": 26.43,
+      "as_of": "2026-11-26 13:30:11"
     },
     "6924": {
-      "price": 120.0,
-      "prev_close": 119.0,
-      "change": 1.0,
-      "change_pct": 0.84,
-      "as_of": "2026-11-25 13:30:14"
+      "price": 128.0,
+      "prev_close": 107.5,
+      "change": 20.5,
+      "change_pct": 19.07,
+      "as_of": "2026-11-26 13:30:12"
     },
     "8021": {
-      "price": 244.5,
-      "prev_close": 274.5,
-      "change": -30.0,
-      "change_pct": -10.93,
-      "as_of": "2026-11-25 13:30:05"
+      "price": 261.5,
+      "prev_close": 247.5,
+      "change": 14.0,
+      "change_pct": 5.66,
+      "as_of": "2026-11-26 13:30:15"
     },
     "1727": {
-      "price": 63.2,
-      "prev_close": 64.7,
-      "change": -1.5,
-      "change_pct": -2.32,
-      "as_of": "2026-11-25 13:30:13"
+      "price": 66.2,
+      "prev_close": 58.5,
+      "change": 7.7,
+      "change_pct": 13.16,
+      "as_of": "2026-11-26 13:30:35"
     },
     "2059": {
-      "price": 6505.0,
-      "prev_close": 5940.0,
-      "change": 565.0,
-      "change_pct": 9.51,
-      "as_of": "2026-11-25 13:30:06"
+      "price": 7155.0,
+      "prev_close": 5350.0,
+      "change": 1805.0,
+      "change_pct": 33.74,
+      "as_of": "2026-11-26 13:30:12"
     },
     "4169": {
       "price": null,
       "error": "HTTP Error 404: Not Found"
     },
     "6213": {
-      "price": 390.0,
-      "prev_close": 395.0,
-      "change": -5.0,
-      "change_pct": -1.27,
-      "as_of": "2026-11-25 13:30:20"
+      "price": 429.0,
+      "prev_close": 355.5,
+      "change": 73.5,
+      "change_pct": 20.68,
+      "as_of": "2026-11-26 13:30:03"
     },
     "2351": {
-      "price": 111.0,
-      "prev_close": 116.5,
-      "change": -5.5,
-      "change_pct": -4.72,
-      "as_of": "2026-11-25 13:30:39"
+      "price": 116.5,
+      "prev_close": 105.0,
+      "change": 11.5,
+      "change_pct": 10.95,
+      "as_of": "2026-11-26 13:30:11"
     },
     "5439": {
-      "price": 122.0,
-      "prev_close": 128.5,
-      "change": -6.5,
-      "change_pct": -5.06,
-      "as_of": "2026-11-25 13:30:09"
+      "price": 129.5,
+      "prev_close": 116.5,
+      "change": 13.0,
+      "change_pct": 11.16,
+      "as_of": "2026-11-26 13:30:09"
     }
   }
 }
