@@ -1,100 +1,100 @@
 {
-  "updated_at": "2026-11-26 17:09:26",
+  "updated_at": "2026-11-27 17:25:14",
   "prices": {
     "00685l": {
-      "price": 8.25,
-      "prev_close": 6.8,
-      "change": 1.45,
-      "change_pct": 21.32,
-      "as_of": "2026-11-26 13:30:01"
+      "price": 8.18,
+      "prev_close": 7.18,
+      "change": 1.0,
+      "change_pct": 13.93,
+      "as_of": "2026-11-27 13:30:00"
     },
     "1595": {
-      "price": 49.5,
-      "prev_close": 42.25,
-      "change": 7.25,
-      "change_pct": 17.16,
-      "as_of": "2026-11-26 13:02:39"
+      "price": 50.8,
+      "prev_close": 43.7,
+      "change": 7.1,
+      "change_pct": 16.25,
+      "as_of": "2026-11-27 13:30:11"
     },
     "1815": {
-      "price": 107.5,
-      "prev_close": 99.0,
-      "change": 8.5,
-      "change_pct": 8.59,
-      "as_of": "2026-11-26 13:30:07"
+      "price": 103.5,
+      "prev_close": 102.5,
+      "change": 1.0,
+      "change_pct": 0.98,
+      "as_of": "2026-11-27 13:30:06"
     },
     "2368": {
-      "price": 995.0,
-      "prev_close": 711.0,
-      "change": 284.0,
-      "change_pct": 39.94,
-      "as_of": "2026-11-26 13:30:02"
+      "price": 929.0,
+      "prev_close": 782.0,
+      "change": 147.0,
+      "change_pct": 18.8,
+      "as_of": "2026-11-27 13:30:04"
     },
     "3305": {
-      "price": 97.5,
-      "prev_close": 87.3,
-      "change": 10.2,
-      "change_pct": 11.68,
-      "as_of": "2026-11-26 13:30:34"
+      "price": 96.2,
+      "prev_close": 89.0,
+      "change": 7.2,
+      "change_pct": 8.09,
+      "as_of": "2026-11-27 13:30:11"
     },
     "3715": {
-      "price": 143.5,
-      "prev_close": 113.5,
-      "change": 30.0,
-      "change_pct": 26.43,
-      "as_of": "2026-11-26 13:30:11"
+      "price": 139.5,
+      "prev_close": 124.5,
+      "change": 15.0,
+      "change_pct": 12.05,
+      "as_of": "2026-11-27 13:30:12"
     },
     "6924": {
-      "price": 128.0,
-      "prev_close": 107.5,
-      "change": 20.5,
-      "change_pct": 19.07,
-      "as_of": "2026-11-26 13:30:12"
+      "price": 126.0,
+      "prev_close": 116.0,
+      "change": 10.0,
+      "change_pct": 8.62,
+      "as_of": "2026-11-27 13:08:06"
     },
     "8021": {
-      "price": 261.5,
-      "prev_close": 247.5,
-      "change": 14.0,
-      "change_pct": 5.66,
-      "as_of": "2026-11-26 13:30:15"
+      "price": 257.5,
+      "prev_close": 247.0,
+      "change": 10.5,
+      "change_pct": 4.25,
+      "as_of": "2026-11-27 13:30:26"
     },
     "1727": {
-      "price": 66.2,
-      "prev_close": 58.5,
-      "change": 7.7,
-      "change_pct": 13.16,
-      "as_of": "2026-11-26 13:30:35"
+      "price": 67.5,
+      "prev_close": 59.6,
+      "change": 7.9,
+      "change_pct": 13.26,
+      "as_of": "2026-11-27 13:30:37"
     },
     "2059": {
-      "price": 7155.0,
-      "prev_close": 5350.0,
-      "change": 1805.0,
-      "change_pct": 33.74,
-      "as_of": "2026-11-26 13:30:12"
+      "price": 7025.0,
+      "prev_close": 5640.0,
+      "change": 1385.0,
+      "change_pct": 24.56,
+      "as_of": "2026-11-27 13:30:26"
     },
     "4169": {
       "price": null,
       "error": "HTTP Error 404: Not Found"
     },
     "6213": {
-      "price": 429.0,
-      "prev_close": 355.5,
-      "change": 73.5,
-      "change_pct": 20.68,
-      "as_of": "2026-11-26 13:30:03"
+      "price": 416.0,
+      "prev_close": 391.0,
+      "change": 25.0,
+      "change_pct": 6.39,
+      "as_of": "2026-11-27 13:30:05"
     },
     "2351": {
-      "price": 116.5,
-      "prev_close": 105.0,
-      "change": 11.5,
-      "change_pct": 10.95,
-      "as_of": "2026-11-26 13:30:11"
+      "price": 113.0,
+      "prev_close": 108.0,
+      "change": 5.0,
+      "change_pct": 4.63,
+      "as_of": "2026-11-27 13:30:34"
     },
     "5439": {
-      "price": 129.5,
-      "prev_close": 116.5,
-      "change": 13.0,
-      "change_pct": 11.16,
-      "as_of": "2026-11-26 13:30:09"
+      "price": 127.5,
+      "prev_close": 122.0,
+      "change": 5.5,
+      "change_pct": 4.51,
+      "as_of": "2026-11-27 13:30:09"
     }
   }
 }
